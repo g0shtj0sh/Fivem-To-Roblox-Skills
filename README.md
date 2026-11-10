@@ -65,6 +65,14 @@ le serveur est éteint.
   (clic droit › *Export XML*) et donner ces XML au skill.
 - Optionnel : `ffmpeg` (sons en .ogg), clé API Open Cloud pour uploader les sons automatiquement.
 
+### Avec Roblox Studio connecté (MCP Roblox Studio)
+
+« Convertis ce véhicule » + le zip : Claude convertit, uploade le modèle et les sons en assets
+privés, insère le véhicule dans `Workspace.F2R_ImportTest`, lance le Setup et le vérifie
+(`roblox/Verify.lua` : structure, échelle, roues, articulations, lumières, sons, custom, test de
+conduite en Play), corrige puis rend un rapport court. Mesures et choix :
+[`docs/studio-import-tests.md`](docs/studio-import-tests.md).
+
 ### Utilisation manuelle (sans Claude)
 
 ```bash

@@ -34,3 +34,16 @@ tourne, c'est que les flux trouvés avaient une durée invraisemblable (ils sont
 ou que le véhicule n'a pas de sirène dans le jeu. Pour comprendre un cas précis, lancer la
 commande de diagnostic `audio_chain` : elle montre la chaîne entière, le `.rel` qui a gagné
 et la durée de chaque flux. Voir `references/game-assets.md`.
+
+## Automatisation dans Studio (mesuré le 2026-11-10, voir docs/studio-import-tests.md)
+
+| Symptôme | Cause | Correction |
+|---|---|---|
+| « You must install .NET to run this application » alors que `dotnet` est installé dans `~/.dotnet` | l'exécutable natif de gta-extract ne cherche pas `~/.dotnet` | corrigé : le convertisseur lance `dotnet gta-extract.dll` (et règle `DOTNET_ROOT`) |
+| MeshPart créée par EditableMesh vide après sauvegarde | contenu `Object` non sérialisé | ne pas utiliser EditableMesh pour le véhicule : upload du GLB + `insert_asset` |
+| `loadstring() is not available` | appel côté client en Play | utiliser le module `Verify` (`require(module)(opts)`) ; `loadstring` seulement en Edit / serveur |
+| Correctif du runtime sans effet en Edit | `require` garde la première version de la session | requérir une copie (`module:Clone()`) ; en Play, `require` est neuf |
+| Porte / lumière « ne bouge pas » dans un test | Studio sans focus : `RenderStepped` figé | Verify compte les images et signale « rendu figé » ; relancer le groupe |
+| Véhicule qui flotte après import | hauteur d'insertion conservée | le Setup pose le véhicule au sol (`_G.F2R_NO_GROUND = true` pour l'éviter) |
+| Restaurer une sauvegarde laisse les néons allumés | `Custom.Apply` ne réinitialisait pas les clés absentes | corrigé : néons, xénons, mods, extras, vitres, perfs reviennent à l'origine |
+| Centaines de « Failed to load sound … no permission » | sons d'autres véhicules de la place | sans rapport : lire le rapport de Verify |
