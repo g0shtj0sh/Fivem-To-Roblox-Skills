@@ -19,12 +19,35 @@ local player = Players.LocalPlayer
 local driving = nil -- modèle conduit par le joueur local
 local occupying = nil
 
-for _, m in ipairs(CollectionService:GetTagged(TAG)) do
-	task.spawn(Runtime.Attach, m)
+-- Attache le rendu à un véhicule. Le modèle peut arriver avant ses enfants (réplication,
+-- streaming) : Runtime.Attach renvoie alors nil. On réessaie jusqu'à ce que VehicleRoot et
+-- VehicleConfig soient là (observé le 2026-11-10 : une seule tentative au démarrage laissait un
+-- véhicule sans lumières, portes ni sons).
+local function attach(m)
+	task.spawn(function()
+		local deadline = os.clock() + 30
+		while m.Parent ~= nil and os.clock() < deadline do
+			if Runtime.Get(m) then
+				return
+			end
+			if m.PrimaryPart and m:FindFirstChild("VehicleConfig") and Runtime.Attach(m) then
+				return
+			end
+			task.wait(0.25)
+		end
+		if m.Parent ~= nil then
+			warn("[FiveMVehicles] rendu non attaché à " .. m:GetFullName() .. " (VehicleRoot ou VehicleConfig absent)")
+		end
+	end)
 end
-CollectionService:GetInstanceAddedSignal(TAG):Connect(function(m)
-	task.defer(Runtime.Attach, m)
-end)
+
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+for _, m in ipairs(CollectionService:GetTagged(TAG)) do
+	attach(m)
+end
+CollectionService:GetInstanceAddedSignal(TAG):Connect(attach)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(Runtime.Detach)
 
 local function set(key, value)
