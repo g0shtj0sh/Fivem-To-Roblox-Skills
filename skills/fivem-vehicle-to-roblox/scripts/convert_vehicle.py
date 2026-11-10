@@ -31,7 +31,7 @@ sys.path.insert(0, str(HERE))
 
 from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
-from f2r import cwxml, inventory, meta  # noqa: E402
+from f2r import cwxml, gamelib, inventory, meta  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import build_setup  # noqa: E402
@@ -135,7 +135,8 @@ def find_fragment(inv: inventory.Inventory, name: str):
 
 # ------------------------------------------------------------------ conversion d'un véhicule
 
-def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, args, report: Report) -> dict:
+def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, args, report: Report,
+                game: "gamelib.GameAssets | None" = None) -> dict:
     vinfo = metas["vehicles"].get(name, {"modelName": name})
     variation = metas["carvariations"].get(name, {})
     carcols = metas["carcols"]
@@ -197,6 +198,29 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     sources = dict(inv.dds)
     sources.update({k: v for k, v in inv.images.items() if k not in sources})
     store = TextureStore(sources, out / "textures", report, args.max_texture)
+
+    # Textures réutilisées du jeu de base (vehshare, txdRelationships…) : on les
+    # récupère dans l'installation GTA V du PC avant de construire les matériaux,
+    # pour que le reste du pipeline les traite comme si elles étaient dans le pack.
+    game_tex: dict = {}
+    if game is not None:
+        need = gamelib.collect_missing_textures(vb.parts, store)
+        if need:
+            txds = [t for t in ([vinfo.get("txdName") or name] + list(vinfo.get("dependentTxds") or [])) if t]
+            game_tex = game.fetch_textures(need, vehicle=name, txds=txds,
+                                           max_size=args.max_texture,
+                                           retry=args.retry_gamefiles)
+            if game_tex:
+                for k, v in game_tex.items():
+                    store.sources.setdefault(k.lower(), v)
+                store.cache.clear()
+                store.missing.clear()
+                report.info(f"{len(game_tex)} texture(s) récupérée(s) du jeu de base "
+                            f"(sur {len(need)} manquante(s)).")
+            else:
+                report.info(f"{len(need)} texture(s) absente(s) du pack n'ont pas été "
+                            "retrouvées dans l'installation GTA V.")
+
     lo, hi = vb.bounds()
     paint_default = default_colors(variation)
     glb = GlbWriter()
@@ -223,7 +247,11 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         carriers.append(cname)
     glb_path = out / f"{name}.glb"
     glb.save(glb_path)
-    if store.missing:
+    if store.missing and game is not None:
+        report.warn(f"{len(store.missing)} texture(s) introuvables même dans GTA V : "
+                    + ", ".join(sorted(store.missing)[:25]) + (" …" if len(store.missing) > 25 else "")
+                    + ". Couleur moyenne / unie utilisée à la place.")
+    elif store.missing:
         report.warn(f"{len(store.missing)} texture(s) absente(s) du pack (souvent partagées avec le jeu, ex. vehshare) : "
                     + ", ".join(sorted(store.missing)[:25]) + (" …" if len(store.missing) > 25 else "")
                     + ". Couleur moyenne / unie utilisée à la place.")
@@ -236,6 +264,18 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                 wavs[f"{ax.name}:{s.name}"] = s.wav
     for w in inv.wavs:
         wavs.setdefault(w.stem.lower(), w)
+    # Son vanilla : le pack ne contient pas d'AWC, on va chercher le vrai son du
+    # jeu désigné par audioNameHash (ex. ADDER) plutôt que de le synthétiser.
+    audio_from_game = False
+    if not wavs and game is not None:
+        an = vinfo.get("audioNameHash") or name
+        got = game.fetch_audio(an, retry=args.retry_gamefiles)
+        if got:
+            wavs.update(got)
+            audio_from_game = True
+            report.info(f"Son vanilla « {an} » récupéré du jeu de base "
+                        f"({len(got)} flux : {', '.join(sorted(got))}).")
+
     is_emergency = (any(f in vinfo.get("flags", []) for f in EMERGENCY_FLAGS)
                     or variation.get("sirenSettings", -1) > 0
                     or any(b.name.startswith("siren") for b in vb.skel.bones)
@@ -243,6 +283,8 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     audio = audio_mod.build_audio(out / "sounds", wavs=wavs, audio_name=vinfo.get("audioNameHash") or name,
                                   vclass=vinfo.get("class", ""), is_emergency=is_emergency, report=report,
                                   use_ogg=not args.no_ogg)
+    if audio_from_game:
+        report.info("Les boucles moteur sont découpées dans le vrai son du jeu.")
     if not wavs:
         report.manual(f"Son : le véhicule utilise le son vanilla « {vinfo.get('audioNameHash') or name} » "
                       "(non inclus dans le pack) -> son moteur synthétisé. Pour un vrai son, déposez des .wav "
@@ -263,7 +305,8 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     tris = sum(p.tri_count for p in vb.parts)
     stats = {"name": name, "parts": len(vb.parts), "triangles": tris, "mods": mod_count,
              "liveries": len(carriers), "textures": len([v for v in store.cache.values() if v]),
-             "missing_textures": len(store.missing), "glb": str(glb_path), "glb_mb": round(glb_path.stat().st_size / 1e6, 2)}
+             "missing_textures": len(store.missing), "glb": str(glb_path), "glb_mb": round(glb_path.stat().st_size / 1e6, 2),
+             "game_textures": len(game_tex), "audio_from_game": audio_from_game}
     if tris > 300_000:
         report.warn(f"{tris} triangles : lourd pour Roblox. Essayez --lod med pour un modèle plus léger.")
     return stats
@@ -492,6 +535,12 @@ def main(argv=None) -> int:
     ap.add_argument("--no-door-prompts", action="store_true")
     ap.add_argument("--extractor", help="commande gta-extract (sinon détection / compilation auto)")
     ap.add_argument("--no-build", action="store_true", help="ne pas compiler gta-extract automatiquement")
+    ap.add_argument("--retry-gamefiles", action="store_true",
+                    help="ignorer le cache et re-demander au serveur d'assets les textures / sons du jeu")
+    ap.add_argument("--no-game-server", action="store_true",
+                    help="ne pas chercher le serveur d'assets GTA V (comportement hors ligne)")
+    ap.add_argument("--game-server-url",
+                    help="URL HTTP du serveur d'assets GTA V (sinon : connecteur MCP vibestarter)")
     args = ap.parse_args(argv)
 
     report = Report()
@@ -553,15 +602,28 @@ def main(argv=None) -> int:
               + json.dumps(inv.summary(), indent=2, ensure_ascii=False), file=sys.stderr)
         return 2
 
-    results = []
-    for n in names:
-        report.info(f"=== Conversion de {n} ===")
-        vout = out / n
+    game = None
+    if not args.no_game_server:
+        if args.game_server_url:
+            os.environ["F2R_GAME_SERVER_URL"] = args.game_server_url
         try:
-            results.append(convert_one(n, inv, metas, vout, args, report))
-        except SystemExit as exc:
-            report.warn(f"{n} : {exc}")
-        write_report(vout, n, results[-1] if results and results[-1]["name"] == n else None, report)
+            game = gamelib.GameAssets.discover(report)
+        except Exception as exc:  # noqa: BLE001
+            report.info(f"Serveur d'assets GTA V indisponible ({exc}).")
+
+    results = []
+    try:
+        for n in names:
+            report.info(f"=== Conversion de {n} ===")
+            vout = out / n
+            try:
+                results.append(convert_one(n, inv, metas, vout, args, report, game))
+            except SystemExit as exc:
+                report.warn(f"{n} : {exc}")
+            write_report(vout, n, results[-1] if results and results[-1]["name"] == n else None, report)
+    finally:
+        if game is not None:
+            game.close()
     print(json.dumps({"vehicles": results, "warnings": report.warnings, "manual_steps": report.manual_steps},
                      indent=2, ensure_ascii=False))
     return 0 if results else 1
@@ -575,7 +637,14 @@ def write_report(out: Path, name: str, stats: dict | None, report: Report) -> No
                   f"- Pièces (MeshParts) : **{stats['parts']}** — triangles : **{stats['triangles']}**",
                   f"- Mods de custom : **{stats['mods']}** — livrées : **{stats['liveries']}**",
                   f"- Textures converties (≤ 1024 px) : **{stats['textures']}** — manquantes : {stats['missing_textures']}",
-                  f"- Fichier 3D : `{Path(stats['glb']).name}` ({stats['glb_mb']} Mo)", ""]
+                  f"- Fichier 3D : `{Path(stats['glb']).name}` ({stats['glb_mb']} Mo)"]
+        if stats.get("game_textures"):
+            lines.append(f"- Dont **{stats['game_textures']}** texture(s) reprises du jeu de base "
+                         "(vehshare / txdRelationships) via le serveur d'assets GTA V.")
+        lines.append("- Son moteur : **" + ("vrai son du jeu (AWC vanilla, découpé en boucles)"
+                                            if stats.get("audio_from_game")
+                                            else "son du pack, ou synthèse si absent") + "**")
+        lines.append("")
     lines += ["## Installation dans Roblox Studio", "",
               f"1. **Importer 3D** → `{name}.glb` (options par défaut).",
               "2. Uploader les sons de `sounds/` (Creator Hub ou `python scripts/roblox_upload.py`), "
