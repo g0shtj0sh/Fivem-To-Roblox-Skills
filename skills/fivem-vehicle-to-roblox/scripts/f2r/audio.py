@@ -214,6 +214,30 @@ def cut_sweep_loops(sweep: np.ndarray, sr: int, positions, idle_rpm: float, max_
     return loops
 
 
+def loop_from_file(src: Path, max_seconds: float, report: Report,
+                   label: str) -> tuple[np.ndarray, int] | None:
+    """Prend un .wav du jeu et en fait une boucle exploitable par Roblox.
+
+    Les klaxons et sirenes de GTA sont deja periodiques : on se contente de
+    limiter la duree, de normaliser et de fermer la boucle par un fondu.
+    """
+    try:
+        data, sr = read_wav(src)
+    except Exception as exc:  # noqa: BLE001
+        report.warn(f"Son {label} illisible ({src.name} : {exc}) : synthese utilisee.")
+        return None
+    if len(data) < int(sr * 0.05):
+        report.warn(f"Son {label} trop court ({len(data) / max(sr, 1):.2f} s) : synthese utilisee.")
+        return None
+    seg = data[: int(sr * max_seconds)]
+    peak = float(np.abs(seg).max())
+    if peak < 1e-4:
+        report.warn(f"Son {label} silencieux : synthese utilisee.")
+        return None
+    seg = seg / peak * 0.9
+    return _loopify(seg, min(int(sr * 0.05), max(1, len(seg) // 4))), sr
+
+
 def pick_stream(streams: dict[str, Path], keywords) -> Path | None:
     for kw in keywords:
         for name, p in streams.items():
@@ -236,8 +260,13 @@ def build_audio(out_dir: Path, *, wavs: dict[str, Path], audio_name: str, vclass
     decel = pick_stream(wavs, ["engine_decel", "decel", "exhaust_decel", "revs_off"])
     idle = pick_stream(wavs, ["idle"])
     if accel is None and wavs:
-        # flux nommés par hash : le plus long est généralement le balayage d'accélération
-        accel = max(wavs.values(), key=lambda p: p.stat().st_size)
+        # Flux nommés par hash : le plus long est généralement le balayage
+        # d'accélération. On exclut klaxon, sirènes et clignotants, sinon une
+        # sirène de 6 s se retrouve découpée en boucles « moteur ».
+        cands = [p for k, p in wavs.items()
+                 if not any(x in k.lower() for x in ("horn", "siren", "indicator", "klaxon"))]
+        if cands:
+            accel = max(cands, key=lambda p: p.stat().st_size)
     positions = [0.12, 0.35, 0.6, 0.85]
     if accel is not None:
         try:
@@ -274,18 +303,38 @@ def build_audio(out_dir: Path, *, wavs: dict[str, Path], audio_name: str, vclass
         manifest["Files"]["Idle"] = "engine_idle.wav"
 
     write_wav(out_dir / "engine_start.wav", synth_start(cyl))
-    write_wav(out_dir / "horn.wav", synth_horn())
     write_wav(out_dir / "indicator_on.wav", synth_click(2600))
     write_wav(out_dir / "indicator_off.wav", synth_click(1900))
     manifest["Files"].update({"Start": "engine_start.wav", "Horn": "horn.wav",
                               "IndicatorOn": "indicator_on.wav", "IndicatorOff": "indicator_off.wav"})
-    horn = pick_stream(wavs, ["horn"])
-    if horn is not None:
-        shutil.copy(horn, out_dir / "horn.wav")
+
+    # Klaxon : vrai son du jeu (ou du pack) s'il est la, sinon synthese.
+    horn_src = pick_stream(wavs, ["horn"])
+    horn_loop = loop_from_file(horn_src, 2.5, report, "de klaxon") if horn_src is not None else None
+    if horn_loop is not None:
+        write_wav(out_dir / "horn.wav", horn_loop[0], horn_loop[1])
+        manifest["HornSource"] = f"jeu:{horn_src.stem}"
+        report.info(f"Klaxon : vrai son du jeu ({horn_src.name}).")
+    else:
+        write_wav(out_dir / "horn.wav", synth_horn())
+        manifest["HornSource"] = "synthese"
+
+    # Sirenes : une boucle par tonalite attendue par le runtime (Siren_<kind>).
     if is_emergency:
+        real = []
         for kind in ("wail", "yelp", "priority"):
-            write_wav(out_dir / f"siren_{kind}.wav", synth_siren(kind))
+            src = pick_stream(wavs, [f"siren_{kind}"])
+            loop = loop_from_file(src, 8.0, report, f"de sirene {kind}") if src is not None else None
+            if loop is not None:
+                write_wav(out_dir / f"siren_{kind}.wav", loop[0], loop[1])
+                real.append(kind)
+            else:
+                write_wav(out_dir / f"siren_{kind}.wav", synth_siren(kind))
             manifest["Files"][f"Siren_{kind}"] = f"siren_{kind}.wav"
+        manifest["SirenSource"] = ("jeu:" + ",".join(real)) if real else "synthese"
+        if real:
+            report.info("Sirenes reprises du jeu : " + ", ".join(real)
+                        + ("" if len(real) == 3 else " (les autres sont synthetisees)."))
 
     if use_ogg and shutil.which("ffmpeg"):
         def conv(name):

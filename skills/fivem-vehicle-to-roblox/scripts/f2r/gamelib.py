@@ -37,6 +37,9 @@ from pathlib import Path
 from .util import Report
 
 MARKER_TOOL = "gta_prepare_textures"      # outil qui identifie notre serveur
+# Version du schema du cache audio : a incrementer quand les noms de fichiers
+# renvoyes par le serveur changent, pour invalider les anciens caches.
+AUDIO_CACHE_VERSION = "v2"
 CALL_TIMEOUT = float(os.environ.get("F2R_GAME_TIMEOUT") or 240)
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -459,7 +462,7 @@ class GameAssets:
         audio_name = (audio_name or "").strip()
         if not audio_name:
             return {}
-        cdir = _cache_dir(f"audio/{audio_name.lower()}")
+        cdir = _cache_dir(f"audio/{AUDIO_CACHE_VERSION}/{audio_name.lower()}")
         done = cdir / ".complete"
         if done.is_file() and not retry:
             return {p.stem: p for p in sorted(cdir.glob("*.wav"))}

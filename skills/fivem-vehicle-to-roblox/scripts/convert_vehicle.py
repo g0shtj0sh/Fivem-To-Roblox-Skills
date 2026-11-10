@@ -306,7 +306,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     stats = {"name": name, "parts": len(vb.parts), "triangles": tris, "mods": mod_count,
              "liveries": len(carriers), "textures": len([v for v in store.cache.values() if v]),
              "missing_textures": len(store.missing), "glb": str(glb_path), "glb_mb": round(glb_path.stat().st_size / 1e6, 2),
-             "game_textures": len(game_tex), "audio_from_game": audio_from_game}
+             "game_textures": len(game_tex), "audio_from_game": audio_from_game,
+             "horn_source": audio.get("HornSource", "synthese"),
+             "siren_source": audio.get("SirenSource")}
     if tris > 300_000:
         report.warn(f"{tris} triangles : lourd pour Roblox. Essayez --lod med pour un modèle plus léger.")
     return stats
@@ -644,6 +646,12 @@ def write_report(out: Path, name: str, stats: dict | None, report: Report) -> No
         lines.append("- Son moteur : **" + ("vrai son du jeu (AWC vanilla, découpé en boucles)"
                                             if stats.get("audio_from_game")
                                             else "son du pack, ou synthèse si absent") + "**")
+        horn = stats.get("horn_source") or "synthese"
+        lines.append("- Klaxon : **" + ("vrai son du jeu" if horn.startswith("jeu") else "synthétisé") + "**")
+        if stats.get("siren_source"):
+            sir = stats["siren_source"]
+            lines.append("- Sirènes : **" + (("reprises du jeu (" + sir[4:] + ")")
+                                             if sir.startswith("jeu:") else "synthétisées") + "**")
         lines.append("")
     lines += ["## Installation dans Roblox Studio", "",
               f"1. **Importer 3D** → `{name}.glb` (options par défaut).",
