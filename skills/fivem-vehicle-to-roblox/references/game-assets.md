@@ -131,7 +131,8 @@ Validé sur GTA V **Enhanced** 1.0.1158.16 avec un véhicule FiveM réel
   long étant retenu ; 0,10 à 1,19 s à 32 kHz) ;
 * ✅ **sirènes** : les trois tonalités (`wail`, `yelp`, `priority`) sont livrées pour
   POLICE, POLICE2, SHERIFF, AMBULANCE, FIRETRUK et POLIGNUS (DLC 2026) ;
-* ⚠️ le partage **yelp / priority** repose sur la durée (voir plus bas) ;
+* ✅ le classement wail / yelp / priority vient des **emplacements nommés du
+  `Dat54SoundSet`** du jeu, pas d'une heuristique (voir plus bas) ;
 * ⚠️ véhicules sans moteur granulaire : boucles bas/haut régime au lieu d'un balayage ;
 * ❌ textures propres au mod (badges, emblèmes, compteurs du véhicule) : elles ne sont pas
   dans le jeu de base, rien à récupérer ;
@@ -139,21 +140,51 @@ Validé sur GTA V **Enhanced** 1.0.1158.16 avec un véhicule FiveM réel
 
 ## Comment les sirènes sont classées
 
-Le runtime Roblox attend `Sounds.Siren_wail`, `Siren_yelp` et `Siren_priority`. Mais les flux
-de sirène du jeu n'ont presque jamais de nom connu (hash seul), donc impossible de se fier au
-nom. On utilise la durée, qui les sépare nettement :
+Le runtime Roblox attend `Sounds.Siren_wail`, `Siren_yelp` et `Siren_priority`. La bonne
+source n'est ni le nom du flux (presque toujours un hash inconnu) ni sa durée, mais le
+**`Dat54SoundSet`** vers lequel pointe `SirenSounds` : chacune de ses entrées est un
+`Dat54SoundSetItem` qui porte un **`ScriptName`**, c'est-à-dire l'emplacement nommé dans
+lequel le jeu lui-même range ce son.
 
-| Tonalité | Durée observée | Règle |
+Piège : `CodeWalker` recopie bien ces entrées dans `SoundSets[]`, mais il remplit aussi
+`ChildSoundsHashes` avec les seuls enfants. Un parcours générique passe donc par
+`ChildSoundsHashes` et **perd le `ScriptName`** — le seul libellé fiable de toute la chaîne.
+Il faut lire `SoundSets[]` explicitement. Et chaque emplacement doit être résolu avec son
+propre jeu de « déjà vu » : plusieurs emplacements partagent des sous-arbres, et un ensemble
+partagé masque les feuilles des emplacements suivants.
+
+Les neuf emplacements sont **identiques pour tous les véhicules d'urgence** (vérifié sur
+POLICE, POLICE2, SHERIFF, AMBULANCE, FIRETRUK et POLIGNUS du DLC 2026) ; seuls les sons
+enfants changent. Quatre noms ont pu être retrouvés par hash Jenkins, deux autres par
+composition, deux restent identifiés par leur hash :
+
+| Emplacement | Hash | Contenu observé |
 |---|---|---|
-| `wail` | ~6,3 s | le plus long, et au moins 1,5 s |
-| `yelp` | 0,35 s (POLICE) à 6,3 s (FIRETRUK) | le plus long des restants |
-| `priority` | ~0,29 s | le suivant |
+| `Main` | 1305684053 | **la sirène propre au véhicule** : 6,34 s (POLICE), 3,77 s (AMBULANCE), 6,33 s (FIRETRUK), 4,55 s (POLIGNUS) |
+| `Fast` | 1689781374 | tonalité rapide du véhicule : 0,29–0,35 s |
+| `Slow` | 3303937151 | variante lente, sert de repli |
+| `Warning` | 3911129148 | hi-lo court, identique partout : 0,29 s |
+| `Horn` | 1043621919 | bip de sirène (0,08 s), **pas** le klaxon du véhicule |
+| `Horn_Fast` / `Horn_Slow` | 3410657623 / 3642518543 | combinaisons génériques |
+| `Blip` | — | bip court |
+| `Shared` | 1410818973 | identique pour tous les véhicules |
 
-Un nom explicite (`WAIL`, `YELP`, `HILO`…) a toujours la priorité sur cette heuristique.
-Un flux hors bornes plausibles (klaxon 0,08–5 s, sirène 0,2–20 s) est écarté et la synthèse
-reprend la main : mieux vaut une sirène synthétique correcte qu'un bruit de 20 ms.
-Conséquence assumée : pour un véhicule à deux boucles courtes, lequel est le « yelp » et
-lequel le « hi-lo » n'est pas garanti.
+Correspondance appliquée, par ordre de préférence :
+
+| Tonalité Roblox | Emplacement | Repli |
+|---|---|---|
+| `wail` | `Main` | `Slow` |
+| `yelp` | `Fast` | `Slow` |
+| `priority` | `Warning` | `Horn_Fast` |
+
+Chaque candidat doit en plus tenir dans une fenêtre de durée plausible (`wail` ≥ 1,5 s ;
+`yelp` et `priority` entre 0,15 et 2,5 s) et ne pas reprendre un flux déjà attribué. Si un
+emplacement est vide ou invraisemblable, on retombe sur l'ordre des durées, puis sur la
+synthèse. Un flux hors bornes (klaxon 0,08–5 s, sirène 0,2–20 s) est écarté : mieux vaut une
+sirène synthétique correcte qu'un bruit de 20 ms.
+
+Résultat : les six véhicules d'urgence testés obtiennent leurs trois tonalités, et chacun
+reçoit **sa** sirène, pas une sirène générique.
 
 ## Vérifier sans lancer GTA V
 

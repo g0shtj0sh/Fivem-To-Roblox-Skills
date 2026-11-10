@@ -134,12 +134,16 @@ Exemple : `{"cmd":"audio_chain","audioName":"POLICE","out":"C:/tmp/pol","props":
 
 ## Limites connues
 
-* **Le classement yelp / priority est une heuristique.** Les flux de sirène n'ont presque
-  jamais de nom connu : on se sert de la durée, qui sépare bien le `wail` (longue
-  montée-descente, ~6 s) des deux boucles courtes (~0,3 s). Lequel des deux courts est le
-  « yelp » et lequel le « hi-lo » n'est pas déterminable de façon sûre ; le plus long des
-  deux devient le yelp. Si un flux est jugé invraisemblable (klaxon hors 0,08–5 s, sirène
-  hors 0,2–20 s), il est écarté et la synthèse reprend la main.
+* **Le classement des sirènes vient du jeu**, pas d'une heuristique : `SirenSounds` pointe
+  sur un `Dat54SoundSet` dont chaque entrée porte un `ScriptName`, c'est-à-dire un
+  emplacement nommé (`Main`, `Fast`, `Slow`, `Warning`, `Horn`…). Ces emplacements sont les
+  mêmes pour tous les véhicules d'urgence. On en tire `wail` ← `Main`, `yelp` ← `Fast`,
+  `priority` ← `Warning`, avec des replis déclarés. Deux emplacements sur neuf n'ont pas pu
+  être nommés et sont référencés par leur hash ; ils ne servent pas à la correspondance.
+  Reste un repli par durée si un emplacement est vide ou invraisemblable, et un flux hors
+  bornes (klaxon 0,08–5 s, sirène 0,2–20 s) est écarté au profit de la synthèse.
+* L'emplacement `Horn` du jeu de sirènes est un bip de 0,08 s, **pas** un klaxon : le klaxon
+  du véhicule vient de `HornSounds`, pas de là.
 * **Véhicules sans moteur granulaire** (camions, modèles anciens : `GranularEngine = 0`) :
   le son vient de `Dat151VehicleEngineAudioSettings`, c'est-à-dire des boucles bas et haut
   régime, pas d'un balayage d'accélération. Les boucles produites sont donc moins nuancées
