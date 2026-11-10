@@ -4,3 +4,15 @@ roblox_out/
 out/
 _work/
 .pytest_cache/
+
+# Ressources extraites de GTA V : ne JAMAIS les commiter (contenu Rockstar)
+*.dds
+*.ytd
+*.yft
+*.ydr
+*.ydd
+*.awc
+*.rpf
+*.bgra
+bundles/
+.cache/
