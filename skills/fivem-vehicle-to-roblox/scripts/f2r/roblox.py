@@ -136,7 +136,7 @@ def split_for_execute_luau(source: str, key: str, max_bytes: int = 20000) -> lis
     out = []
     n = len(chunks)
     for i, c in enumerate(chunks, 1):
-        head = (f"_G.F2R_BUF = _G.F2R_BUF or {{}}\n"
+        head = ("_G.F2R_BUF = _G.F2R_BUF or {}\n"
                 + (f"_G.F2R_BUF[{lua_string(key)}] = {{}}\n" if i == 1 else "")
                 + f"table.insert(_G.F2R_BUF[{lua_string(key)}], {long_string(c)})\n")
         if i < n:
