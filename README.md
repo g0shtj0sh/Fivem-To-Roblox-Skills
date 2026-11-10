@@ -18,6 +18,7 @@ où tout fonctionne, sauf la physique (gérée par ton propre moteur) :
 | Contrôles | clavier / manette / mobile façon GTA, exposés à ton moteur physique (`VehicleInput.Controls`) |
 | Custom | mods des kits carcols (spoiler, pare-chocs…), 6 couches de peinture, livrées, extras, teinte, néons, plaque, niveaux de perf ; sauvegarde/restauration |
 | Données | `handling.meta`, `vehicles.meta`, `carvariations.meta`, `carcols.meta` exportés pour ton moteur |
+| Jeu de base | textures partagées (`vehshare`, `txdRelationships`) et **vrai son moteur** du véhicule vanilla (`audioNameHash`) récupérés dans ton installation GTA V — voir ci-dessous |
 
 Voir [`skills/fivem-vehicle-to-roblox/SKILL.md`](skills/fivem-vehicle-to-roblox/SKILL.md) et les
 références dans `skills/fivem-vehicle-to-roblox/references/`.
@@ -29,6 +30,30 @@ références dans `skills/fivem-vehicle-to-roblox/references/`.
 - **Claude Code** : copier le dossier dans `~/.claude/skills/` (ou `.claude/skills/` d'un projet).
 
 Ensuite : « Convertis ce véhicule pour Roblox » + le zip.
+
+### Ressources du jeu de base (optionnel mais recommandé)
+
+Beaucoup de véhicules payants réutilisent des ressources du jeu sans les inclure : textures
+partagées (`vehshare.ytd`, `vehicle_generic_*`) et son moteur « vanilla » désigné par
+`audioNameHash`. Par défaut le skill met une couleur unie et synthétise le moteur.
+
+Pour obtenir **la texture exacte et le vrai son**, lance sur le PC où GTA V est installé :
+
+```bat
+skills\fivem-vehicle-to-roblox\tools\gta-asset-server\start-server.bat
+```
+
+puis déclare-le une seule fois dans vibestarter : *Paramètres › My MCP servers* → serveur
+HTTP `http://127.0.0.1:27300/mcp`. Les conversions suivantes s'en servent automatiquement
+(avec cache local et contrôle SHA-256), et retombent proprement sur l'ancien comportement si
+le serveur est éteint.
+
+- GTA V **Enhanced** (gen9) et **Legacy** sont tous deux gérés, détection automatique
+  (Steam / Epic / Rockstar Launcher).
+- GTA V est ouvert en **lecture seule** ; le serveur n'écoute que sur `127.0.0.1`.
+- Détails : [`tools/gta-asset-server/README.md`](skills/fivem-vehicle-to-roblox/tools/gta-asset-server/README.md),
+  [`references/game-assets.md`](skills/fivem-vehicle-to-roblox/references/game-assets.md),
+  et [`docs/transport-tests.md`](docs/transport-tests.md) pour le choix du canal.
 
 ### Pré-requis
 
@@ -48,6 +73,11 @@ python scripts/convert_vehicle.py ~/Downloads/ma_voiture.zip -o ./out
 #          Modèle > Exécuter un script -> out/<nom>/<nom>_Setup.lua
 ```
 
-Test : `python skills/fivem-vehicle-to-roblox/tests/test_pipeline.py` (véhicule synthétique, sans contenu Rockstar).
+Tests (aucun contenu Rockstar requis) :
+
+```bash
+python skills/fivem-vehicle-to-roblox/tests/test_pipeline.py   # véhicule synthétique de bout en bout
+python skills/fivem-vehicle-to-roblox/tests/test_gamelib.py    # récupération des ressources du jeu (faux serveur)
+```
 
 > Vérifie la licence du mod avant de publier un véhicule sur Roblox. GTA V est une marque de Rockstar Games.

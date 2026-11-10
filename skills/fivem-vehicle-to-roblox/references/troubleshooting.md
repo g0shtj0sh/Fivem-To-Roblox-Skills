@@ -16,3 +16,17 @@
 | Moteur trop « synthétique » | son vanilla non fourni | placer des boucles .wav (ralenti / régimes) dans le zip et relancer |
 | Trop de pièces / lag | modèle très détaillé | `--lod med`, ou `--max-tris` plus grand n'aide pas (limite Roblox) |
 | Mod visible en permanence | `Mod_<Slot>` ≠ 0 ou Refresh non appelé | `Custom.SetMod(car, slot, 0)` côté serveur |
+
+## Ressources du jeu de base (textures partagées, son vanilla)
+
+| Symptôme | Cause | Correctif |
+|---|---|---|
+| `report.md` : « N texture(s) absente(s) du pack (souvent partagées avec le jeu…) » | le serveur d'assets GTA V n'était pas joignable | lancer `tools/gta-asset-server/start-server.bat` sur le PC et le déclarer dans vibestarter (*My MCP servers* → `http://127.0.0.1:27300/mcp`), puis relancer |
+| « N texture(s) introuvables même dans GTA V » | textures propres au mod (badges, emblèmes, compteurs) absentes du zip, ou cibles de rendu `script_rt_*` créées à l'exécution | normal : couleur moyenne utilisée. Demander les `.ytd` manquants à l'auteur du mod si le visuel compte |
+| « Son moteur synthétisé » alors que le serveur tourne | `audioNameHash` inconnu du jeu (son custom d'un autre mod) | fournir des `.wav` de boucles moteur dans le zip |
+| Textures/son figés après une mise à jour du jeu | cache local | relancer avec `--retry-gamefiles` |
+| Le serveur tourne mais la VM ne le voit pas | connecteur MCP absent, ou serveur démarré après la VM | vérifier *My MCP servers* ; `curl http://127.0.0.1:27300/health` sur le PC |
+| Conversion hors ligne volontaire | — | `--no-game-server` |
+
+Le klaxon et la sirène restent synthétisés même avec le serveur : voir la section
+« Limites connues » de `tools/gta-asset-server/README.md`.

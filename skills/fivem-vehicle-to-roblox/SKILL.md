@@ -14,6 +14,8 @@ que l'utilisateur gère avec son propre moteur.
 ```
 zip ──► extraction sûre ──► gta-extract (CodeWalker.Core) : .yft/.ytd/.awc/.rpf ──► XML + .dds + .wav
     ──► lecture des .meta (vehicles / carcols / carvariations / handling)
+    ──► ressources du JEU DE BASE manquantes (vehshare, txdRelationships, son vanilla)
+        récupérées dans l'installation GTA V du PC via le serveur d'assets
     ──► assemblage (squelette, pièces ≤ 19k triangles, roues ×4, lumières par ID, mods, livrées, extras)
     ──► textures PNG ≤ 1024 px (normal maps converties DirectX → OpenGL)
     ──► <nom>.glb + sons + <nom>_Setup.lua (installe tout dans Studio) + report.md
@@ -28,7 +30,9 @@ zip ──► extraction sûre ──► gta-extract (CodeWalker.Core) : .yft/.y
    ```
    Options utiles : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (modèle trop lourd),
    `--studs-per-meter 3.571` (échelle ; 1 stud = 0,28 m par défaut), `--max-texture 1024`,
-   `--plate "TEXTE"`, `--sound-ids sounds/sound_ids.json` (après upload des sons).
+   `--plate "TEXTE"`, `--sound-ids sounds/sound_ids.json` (après upload des sons),
+   `--retry-gamefiles` (ignorer le cache des ressources du jeu),
+   `--no-game-server` (ne pas chercher le serveur d'assets), `--game-server-url <URL>`.
 3. **Si le script sort avec le code 2** (ressources binaires, pas d'extracteur) :
    - Si `dotnet` (SDK 8+) est installable : l'installer puis relancer — le script compile
      automatiquement `tools/gta-extract` (clone CodeWalker.Core, MIT). Sous Windows : `tools/gta-extract/build.ps1`.
@@ -36,11 +40,22 @@ zip ──► extraction sûre ──► gta-extract (CodeWalker.Core) : .yft/.y
      (RPF Explorer), clic droit › **Export XML**, zipper le résultat (XML + dossiers de .dds/.wav + les .meta)
      et te le renvoyer. Le pipeline accepte directement ces XML.
    - Un `dlc.rpf` chiffré (NG) ne peut pas être lu : demander de l'extraire avec OpenIV.
+3bis. **Ressources du jeu de base** : si le rapport signale des textures manquantes
+   (`vehshare`, `vehicle_generic_*`) ou un son vanilla, c'est que le **serveur d'assets
+   GTA V** n'était pas joignable. Proposer à l'utilisateur de le lancer sur son PC :
+   `skills/fivem-vehicle-to-roblox/tools/gta-asset-server/start-server.bat`, puis de le
+   déclarer une fois dans vibestarter (*Paramètres › My MCP servers*, serveur HTTP
+   `http://127.0.0.1:27300/mcp`). Relancer ensuite la conversion : les vraies textures et le
+   vrai son moteur sont alors utilisés automatiquement. Détails :
+   `tools/gta-asset-server/README.md`.
+
 4. **Lire `<sortie>/<nom>/report.md`** et agir sur les avertissements :
    - triangles > 300 000 → relancer avec `--lod med` ;
-   - textures manquantes (vehshare…) → normal, couleur unie utilisée ; le signaler ;
+   - textures manquantes (vehshare…) → avec le serveur d'assets elles sont reprises du jeu ;
+     sans lui, couleur unie utilisée : le signaler et proposer de lancer le serveur ;
    - mod introuvable / géométrie recalée → le signaler ;
-   - son vanilla (audioNameHash) → son synthétisé ; proposer de fournir des .wav.
+   - son vanilla (audioNameHash) → avec le serveur d'assets, le vrai son du jeu est découpé
+     en boucles ; sans lui, son synthétisé : proposer de lancer le serveur ou de fournir des .wav.
 5. **Sons** : proposer l'upload automatique si l'utilisateur fournit une clé Open Cloud
    (`ROBLOX_API_KEY` en variable d'environnement, jamais dans un fichier) :
    `python scripts/roblox_upload.py <sortie>/<nom>/sounds --user-id <id>` puis relancer la
@@ -67,6 +82,9 @@ zip ──► extraction sûre ──► gta-extract (CodeWalker.Core) : .yft/.y
 - `references/gta-format.md` — os, IDs de lumières, couches de peinture, shaders, metas, roues, mods, livrées.
 - `references/roblox-integration.md` — hiérarchie produite, attributs, API Input/Runtime/Customization, branchement physique.
 - `references/troubleshooting.md` — problèmes fréquents et corrections.
+- `references/game-assets.md` — récupération des textures/sons du jeu de base (comment ça marche).
+- `tools/gta-asset-server/README.md` — serveur d'assets à lancer sur le PC.
+- `docs/transport-tests.md` — pourquoi le canal MCP a été retenu (mesures).
 
 ## Règles
 
