@@ -18,7 +18,7 @@ où tout fonctionne, sauf la physique (gérée par ton propre moteur) :
 | Contrôles | clavier / manette / mobile façon GTA, exposés à ton moteur physique (`VehicleInput.Controls`) |
 | Custom | mods des kits carcols (spoiler, pare-chocs…), 6 couches de peinture, livrées, extras, teinte, néons, plaque, niveaux de perf ; sauvegarde/restauration |
 | Données | `handling.meta`, `vehicles.meta`, `carvariations.meta`, `carcols.meta` exportés pour ton moteur |
-| Jeu de base | textures partagées (`vehshare`, `txdRelationships`) et **vrai son moteur** du véhicule vanilla (`audioNameHash`) récupérés dans ton installation GTA V — voir ci-dessous |
+| Jeu de base | textures partagées (`vehshare`, `txdRelationships`) et **vrais sons** du véhicule vanilla (`audioNameHash`) — moteur, klaxon et sirènes wail/yelp/priority — récupérés dans ton installation GTA V, voir ci-dessous |
 
 Voir [`skills/fivem-vehicle-to-roblox/SKILL.md`](skills/fivem-vehicle-to-roblox/SKILL.md) et les
 références dans `skills/fivem-vehicle-to-roblox/references/`.
@@ -34,8 +34,9 @@ Ensuite : « Convertis ce véhicule pour Roblox » + le zip.
 ### Ressources du jeu de base (optionnel mais recommandé)
 
 Beaucoup de véhicules payants réutilisent des ressources du jeu sans les inclure : textures
-partagées (`vehshare.ytd`, `vehicle_generic_*`) et son moteur « vanilla » désigné par
-`audioNameHash`. Par défaut le skill met une couleur unie et synthétise le moteur.
+partagées (`vehshare.ytd`, `vehicle_generic_*`) et sons « vanilla » désignés par
+`audioNameHash` (moteur, klaxon, sirènes). Par défaut le skill met une couleur unie et
+synthétise les sons.
 
 Pour obtenir **la texture exacte et le vrai son**, lance sur le PC où GTA V est installé :
 

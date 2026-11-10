@@ -47,10 +47,13 @@ Les mesures et les options écartées sont dans [`docs/transport-tests.md`](../.
 4. Les PNG arrivent par morceaux de 6 Mo, vérifiés au **SHA-256**, et sont injectés dans les
    sources de `TextureStore`. Le reste du pipeline les traite comme s'ils venaient du zip —
    y compris la détection des livrées (`store.siblings`).
-5. Si le pack n'a aucun `.awc`, `gta_prepare_audio` suit `audioNameHash` et renvoie six
-   `.wav` : `engine_accel`, `engine_decel`, `engine_idle`, `exhaust_accel`, `exhaust_decel`,
-   `exhaust_idle`. Ces noms sont exactement ceux que `pick_stream()` de `f2r/audio.py`
-   reconnaît : la découpe en boucles par régime se fait ensuite sans changement.
+5. Si le pack n'a aucun `.awc`, `gta_prepare_audio` suit `audioNameHash` et renvoie les
+   `.wav` du jeu : `engine_accel`, `engine_decel`, `engine_idle`, `exhaust_accel`,
+   `exhaust_decel`, `exhaust_idle`, plus `horn` et, pour un véhicule d'urgence,
+   `siren_wail`, `siren_yelp`, `siren_priority`. Ces noms sont exactement ceux que
+   `pick_stream()` de `f2r/audio.py` reconnaît et ceux que le runtime Roblox cherche
+   (`Sounds.Horn`, `Sounds.Siren_<kind>`) : la découpe en boucles par régime et le branchement
+   des sirènes se font ensuite sans changement.
 
 ## Chaîne audio dans les fichiers du jeu
 
@@ -63,13 +66,39 @@ audioNameHash
        │         └─ ExhaustAccel ┴─ Dat54GranularSound     sounds.dat54.rel
        │                              └─ Channel0..5 : ContainerName + FileName
        │                                   └─ x64/audio/sfx/<conteneur>.rpf/<nom>.awc
-       └─ HornSounds, SirenSounds, StartupRevs
+       ├─ Engine  (si GranularEngine = 0 : camions, modèles anciens)
+       │    └─ Dat151VehicleEngineAudioSettings
+       │         └─ LowEngineLoop / HighEngineLoop / RevsOffLoop / Low+HighExhaustLoop
+       ├─ HornSounds
+       │    └─ Dat54SoundHashList → MultitrackSound → WrapperSound → Dat54SimpleSound
+       └─ SirenSounds
+            └─ Dat54SoundSet → RandomizedSound → VariableBlockSound → EnvelopeSound
+                 → ParameterTransformSound → WrapperSound → Dat54SimpleSound
 ```
 
-Détail qui coûte du temps si on l'ignore : le `ContainerName` du dat54 vaut par exemple
-`streamed_vehicles_granular/supercar_4_eur_v8`, alors que le chemin réel dans les RPF est
-`x64/audio/sfx/streamed_vehicles_granular.rpf/supercar_4_eur_v8.awc`. Le segment `.rpf`
-**ne fait pas partie du hash** : il faut le retirer avant de calculer le hash Jenkins.
+Les types intermédiaires sont nombreux et n'ont aucune interface commune : le parcours suit
+donc, par réflexion, tous les tableaux `MetaHash[]` (`ChildSoundsHashes`, `SoundHashes`…) et
+tout champ `MetaHash` qui désigne lui-même un son connu, jusqu'aux `Dat54SimpleSound` qui
+portent le couple `ContainerName` + `FileName`.
+
+### Trois pièges qui coûtent cher
+
+**Le `.rpf` ne fait pas partie du hash du conteneur.** Le `ContainerName` du dat54 vaut par
+exemple `streamed_vehicles_granular/supercar_4_eur_v8`, alors que le chemin réel est
+`x64/audio/sfx/streamed_vehicles_granular.rpf/supercar_4_eur_v8.awc` : il faut retirer les
+segments d'archive avant de calculer le hash Jenkins.
+
+**Les identifiants de flux AWC ne font que 29 bits.** `AwcStreamInfo.Read` applique
+`Id = RawVal & 0x1FFFFFFF` (les 3 bits hauts comptent les morceaux), alors que le `FileName`
+d'un dat54 est un hash 32 bits. Sans masquage, tout flux dont le nom n'est pas dans la table
+de chaînes reste introuvable — c'est le cas de presque tous les klaxons et sirènes, et c'était
+la vraie cause de leur échec. Le fichier exporté par CodeWalker porte le nom
+`0x` + identifiant **masqué**.
+
+**Les `.rel` doivent être chargés dans l'ordre des DLC.** Sinon une version ancienne d'une
+entrée peut gagner. On délègue à `GameFileCache` de CodeWalker, qui lit `dlclist.xml`, trie
+les `setup2.xml` par `order` et charge dans cet ordre. Mesure : 177 813 → 35 582 entrées
+dat151 (les doublons sont correctement arbitrés au lieu d'être empilés).
 
 ## Cache et reprise
 
@@ -98,13 +127,44 @@ Validé sur GTA V **Enhanced** 1.0.1158.16 avec un véhicule FiveM réel
 * ✅ textures de `vehshare*.ytd` et des dictionnaires de véhicules, y compris les formats que
   Pillow refuse (A8, L8…) grâce à un décodage de repli par CodeWalker ;
 * ✅ moteur et échappement (accélération, décélération, ralenti) ;
-* ❌ **klaxon et sirène** : la chaîne est suivie jusqu'aux sons feuilles, mais les `.rel` de
-  tous les DLC sont chargés sans respecter leur ordre de priorité (défaut connu de
-  `GameFileCache` dans CodeWalker) et les flux obtenus ne pointent pas toujours sur le bon
-  AWC. Le pipeline garde donc son klaxon et ses sirènes synthétisés ;
+* ✅ **klaxon** : résolu pour les 9 véhicules testés (4 à 8 flux candidats chacun, le plus
+  long étant retenu ; 0,10 à 1,19 s à 32 kHz) ;
+* ✅ **sirènes** : les trois tonalités (`wail`, `yelp`, `priority`) sont livrées pour
+  POLICE, POLICE2, SHERIFF, AMBULANCE, FIRETRUK et POLIGNUS (DLC 2026) ;
+* ⚠️ le partage **yelp / priority** repose sur la durée (voir plus bas) ;
+* ⚠️ véhicules sans moteur granulaire : boucles bas/haut régime au lieu d'un balayage ;
 * ❌ textures propres au mod (badges, emblèmes, compteurs du véhicule) : elles ne sont pas
   dans le jeu de base, rien à récupérer ;
 * ❌ `script_rt_*` : cibles de rendu créées à l'exécution, pas des textures stockées.
+
+## Comment les sirènes sont classées
+
+Le runtime Roblox attend `Sounds.Siren_wail`, `Siren_yelp` et `Siren_priority`. Mais les flux
+de sirène du jeu n'ont presque jamais de nom connu (hash seul), donc impossible de se fier au
+nom. On utilise la durée, qui les sépare nettement :
+
+| Tonalité | Durée observée | Règle |
+|---|---|---|
+| `wail` | ~6,3 s | le plus long, et au moins 1,5 s |
+| `yelp` | 0,35 s (POLICE) à 6,3 s (FIRETRUK) | le plus long des restants |
+| `priority` | ~0,29 s | le suivant |
+
+Un nom explicite (`WAIL`, `YELP`, `HILO`…) a toujours la priorité sur cette heuristique.
+Un flux hors bornes plausibles (klaxon 0,08–5 s, sirène 0,2–20 s) est écarté et la synthèse
+reprend la main : mieux vaut une sirène synthétique correcte qu'un bruit de 20 ms.
+Conséquence assumée : pour un véhicule à deux boucles courtes, lequel est le « yelp » et
+lequel le « hi-lo » n'est pas garanti.
+
+## Vérifier sans lancer GTA V
+
+```bash
+# chaine complete + sources .rel gagnantes + durees des .wav
+echo '{"cmd":"audio_chain","audioName":"POLICE","out":"/tmp/pol","props":true}' \
+  | tools/gta-extract/bin/gta-extract game-serve -g "<dossier GTA>" --gen9
+```
+
+Autres commandes : `dlc_order`, `list_car_audio`, `find_stream`, `scan_stream`,
+`list_awc_streams`. Détails dans `tools/gta-asset-server/README.md`.
 
 > Les ressources extraites appartiennent à Rockstar Games. Elles servent à ta conversion
 > locale ; ne les commite pas et ne les redistribue pas.

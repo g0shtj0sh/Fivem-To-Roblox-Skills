@@ -152,8 +152,11 @@ CARBONIZZARE`) :
 | Lot | Contenu | Taille | Morceaux de 6 Mo |
 |---|---|---|---|
 | Textures | 7 PNG reprises du jeu | **≈ 3,0 Mo** | 1 par fichier |
-| Son vanilla | 6 wav (engine/exhaust × accel/decel/idle) | **2,75 Mo** | 1 par fichier |
+| Son vanilla | 6 wav moteur/échappement + klaxon | **≈ 2,8 Mo** | 1 par fichier |
 | **Total** | | **≈ 5,8 Mo** | |
+
+Pour un véhicule d'urgence, les trois sirènes ajoutent environ **0,45 Mo** (wail ~6,3 s =
+396 Ko, yelp et priority ~20 Ko chacun), soit toujours moins d'un morceau.
 
 À 0,75 Mo/s cela représente **≈ 8 s** de transfert par véhicule, une seule fois (le cache
 `~/.cache/fivem2roblox/` évite de le refaire). Sur la boucle locale du PC, le même transfert

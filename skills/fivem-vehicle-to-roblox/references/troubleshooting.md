@@ -28,5 +28,9 @@
 | Le serveur tourne mais la VM ne le voit pas | connecteur MCP absent, ou serveur démarré après la VM | vérifier *My MCP servers* ; `curl http://127.0.0.1:27300/health` sur le PC |
 | Conversion hors ligne volontaire | — | `--no-game-server` |
 
-Le klaxon et la sirène restent synthétisés même avec le serveur : voir la section
-« Limites connues » de `tools/gta-asset-server/README.md`.
+Avec le serveur, le klaxon et les trois tonalités de sirène viennent aussi du jeu. Si le
+rapport indique « Klaxon : synthétisé » ou « Sirènes : synthétisées » alors que le serveur
+tourne, c'est que les flux trouvés avaient une durée invraisemblable (ils sont alors écartés)
+ou que le véhicule n'a pas de sirène dans le jeu. Pour comprendre un cas précis, lancer la
+commande de diagnostic `audio_chain` : elle montre la chaîne entière, le `.rel` qui a gagné
+et la durée de chaque flux. Voir `references/game-assets.md`.

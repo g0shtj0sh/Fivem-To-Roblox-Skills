@@ -14,8 +14,8 @@ que l'utilisateur gère avec son propre moteur.
 ```
 zip ──► extraction sûre ──► gta-extract (CodeWalker.Core) : .yft/.ytd/.awc/.rpf ──► XML + .dds + .wav
     ──► lecture des .meta (vehicles / carcols / carvariations / handling)
-    ──► ressources du JEU DE BASE manquantes (vehshare, txdRelationships, son vanilla)
-        récupérées dans l'installation GTA V du PC via le serveur d'assets
+    ──► ressources du JEU DE BASE manquantes (vehshare, txdRelationships, son vanilla :
+        moteur + klaxon + sirènes) récupérées dans l'installation GTA V du PC
     ──► assemblage (squelette, pièces ≤ 19k triangles, roues ×4, lumières par ID, mods, livrées, extras)
     ──► textures PNG ≤ 1024 px (normal maps converties DirectX → OpenGL)
     ──► <nom>.glb + sons + <nom>_Setup.lua (installe tout dans Studio) + report.md
@@ -55,7 +55,8 @@ zip ──► extraction sûre ──► gta-extract (CodeWalker.Core) : .yft/.y
      sans lui, couleur unie utilisée : le signaler et proposer de lancer le serveur ;
    - mod introuvable / géométrie recalée → le signaler ;
    - son vanilla (audioNameHash) → avec le serveur d'assets, le vrai son du jeu est découpé
-     en boucles ; sans lui, son synthétisé : proposer de lancer le serveur ou de fournir des .wav.
+     en boucles, klaxon et sirènes (wail/yelp/priority) inclus ; sans lui, son synthétisé :
+     proposer de lancer le serveur ou de fournir des .wav.
 5. **Sons** : proposer l'upload automatique si l'utilisateur fournit une clé Open Cloud
    (`ROBLOX_API_KEY` en variable d'environnement, jamais dans un fichier) :
    `python scripts/roblox_upload.py <sortie>/<nom>/sounds --user-id <id>` puis relancer la

@@ -52,7 +52,7 @@ curl http://127.0.0.1:27300/health
 | `gta_status` | dossier du jeu, nombre d'entrées RPF, taille des morceaux |
 | `gta_find_textures` | dit lesquelles existent, sans rien transférer |
 | `gta_prepare_textures` | extrait → PNG ≤ 1024 px (puissance de 2, alpha conservé) → manifeste |
-| `gta_prepare_audio` | suit `audioNameHash` → dat151 → dat54 → AWC → `.wav` |
+| `gta_prepare_audio` | suit `audioNameHash` → dat151 → dat54 → AWC → `.wav` : moteur, klaxon, sirènes |
 | `gta_chunk` | un morceau d'un fichier du lot, en base64 |
 | `gta_build_index` | index complet des textures véhicules (~30 s, optionnel) |
 
@@ -72,11 +72,37 @@ audioNameHash (ex. CARBONIZZARE)
        │                                    └─ x64/audio/sfx/<conteneur>.rpf/<nom>.awc
        │                                         └─ engine_accel.wav, engine_decel.wav,
        │                                            engine_idle.wav, exhaust_*.wav
-       └─ HornSounds / SirenSounds (voir limites)
+       ├─ Engine (véhicules sans moteur granulaire : camions, anciens modèles)
+       │    └─ Dat151VehicleEngineAudioSettings
+       │         └─ LowEngineLoop / HighEngineLoop / RevsOffLoop / LowExhaustLoop…
+       ├─ HornSounds   ─┐  Dat54SoundHashList → MultitrackSound → WrapperSound
+       └─ SirenSounds  ─┘  Dat54SoundSet → Randomized → VariableBlock → Envelope
+                           → ParameterTransform → WrapperSound → Dat54SimpleSound
+                                └─ ContainerName + FileName → .awc → .wav
 ```
 
 Les six flux moteur/échappement sont exactement ceux que `scripts/f2r/audio.py` sait
-découper en boucles (`pick_stream` cherche `engine_accel`, `decel`, `idle`…).
+découper en boucles (`pick_stream` cherche `engine_accel`, `decel`, `idle`…), et le klaxon
+comme les sirènes sortent sous les noms attendus par le runtime Roblox : `horn`,
+`siren_wail`, `siren_yelp`, `siren_priority`.
+
+### Deux détails sans lesquels rien ne marche
+
+**1. Ordre des DLC.** Les `.rel` audio existent en plusieurs versions (base, `update.rpf`,
+puis chaque DLC). Les charger à plat fait gagner une version arbitraire. Le serveur passe
+donc par `GameFileCache` de CodeWalker, qui lit `update/update.rpf/common/data/dlclist.xml`,
+trie les `setup2.xml` par leur attribut `order`, et charge les `.rel` dans cet ordre : la
+version la plus prioritaire écrase les précédentes. Effet mesuré : **177 813 → 35 582**
+entrées dat151, et un véhicule du DLC 2026 (`polignus`) résolu depuis
+`dlcpacks/mp2026_01/.../dlc26-1_game.dat151.rel` et non depuis une vieille version.
+`gta-extract game-serve` expose `dlc_order` pour vérifier la liste (103 paquets ici).
+
+**2. Les identifiants de flux AWC ne font que 29 bits.** `AwcStreamInfo.Read` fait
+`Id = RawVal & 0x1FFFFFFF`, les 3 bits hauts servant au nombre de morceaux, alors que le
+`FileName` d'un dat54 est un hash sur 32 bits. Comparer les deux directement échoue pour
+tout flux dont le nom n'est pas dans la table de chaînes — c'est-à-dire presque tous les
+klaxons et sirènes. Il faut masquer le hash avant la comparaison, et le fichier exporté par
+CodeWalker s'appelle alors `0x` + l'identifiant **masqué** en hexadécimal.
 
 ## Sécurité
 
@@ -90,14 +116,34 @@ découper en boucles (`pick_stream` cherche `engine_accel`, `decel`, `idle`…).
 * Rien de ce qui est extrait du jeu ne doit être commité ni redistribué : ce sont des
   ressources Rockstar, destinées à ton usage.
 
+## Diagnostic
+
+`gta-extract game-serve` répond aussi à des commandes faites pour comprendre un cas qui
+coince, sans lancer le jeu :
+
+| Commande | Ce qu'elle montre |
+|---|---|
+| `audio_chain` | la chaîne complète d'un `audioNameHash`, maillon par maillon, avec le `.rel` qui a gagné, et (si `out` est fourni) le `.wav` et la durée de chaque feuille |
+| `dlc_order` | la liste ordonnée des DLC telle que le jeu la voit |
+| `list_car_audio` | quels véhicules sont définis par quel `.rel` (filtrable) |
+| `find_stream` | pour un conteneur : tous les AWC candidats, et lequel contient le flux |
+| `scan_stream` | balaye les AWC à la recherche d'un identifiant de flux |
+| `list_awc_streams` | les identifiants de flux d'un AWC donné |
+
+Exemple : `{"cmd":"audio_chain","audioName":"POLICE","out":"C:/tmp/pol","props":true}`.
+
 ## Limites connues
 
-* **Klaxon et sirène ne sont pas fiables.** La chaîne est bien suivie jusqu'aux sons
-  feuilles, mais les `.rel` de tous les DLC sont chargés sans respecter l'ordre de priorité
-  des DLC (défaut documenté dans `GameFileCache` de CodeWalker : *« DLC orders won't be
-  correct so likely will select wrong versions of things »*), et les flux obtenus ne
-  correspondent pas toujours au bon AWC. Le pipeline garde donc son klaxon et ses sirènes
-  synthétisés, qui fonctionnent. Le **moteur**, lui, est validé.
+* **Le classement yelp / priority est une heuristique.** Les flux de sirène n'ont presque
+  jamais de nom connu : on se sert de la durée, qui sépare bien le `wail` (longue
+  montée-descente, ~6 s) des deux boucles courtes (~0,3 s). Lequel des deux courts est le
+  « yelp » et lequel le « hi-lo » n'est pas déterminable de façon sûre ; le plus long des
+  deux devient le yelp. Si un flux est jugé invraisemblable (klaxon hors 0,08–5 s, sirène
+  hors 0,2–20 s), il est écarté et la synthèse reprend la main.
+* **Véhicules sans moteur granulaire** (camions, modèles anciens : `GranularEngine = 0`) :
+  le son vient de `Dat151VehicleEngineAudioSettings`, c'est-à-dire des boucles bas et haut
+  régime, pas d'un balayage d'accélération. Les boucles produites sont donc moins nuancées
+  que pour un véhicule granulaire. Le manifeste indique `engine_kind: "loops"`.
 * Les textures purement « mod » (badges, emblèmes, compteurs propres au véhicule) absentes
   du zip ne sont pas dans le jeu de base : elles resteront manquantes, c'est normal.
 * `script_rt_*` sont des cibles de rendu créées à l'exécution par le jeu : elles n'existent

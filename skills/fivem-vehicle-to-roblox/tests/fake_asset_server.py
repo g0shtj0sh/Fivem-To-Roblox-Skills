@@ -85,8 +85,30 @@ class FakeService:
         "plate01": (64, 32),
         "grosse_texture": (512, 512),
     }
-    AUDIO = {"adder": ["engine_accel", "engine_decel", "engine_idle",
-                       "exhaust_accel", "exhaust_decel", "exhaust_idle"]}
+    # {audioName: {nom de fichier: duree en secondes}} — les durees imitent
+    # celles du vrai jeu : klaxon court, wail long, yelp / priority courts.
+    AUDIO = {
+        "adder": {
+        "engine_accel": 0.40, "engine_decel": 0.45, "engine_idle": 0.30,
+        "exhaust_accel": 0.40, "exhaust_decel": 0.45, "exhaust_idle": 0.30,
+            "horn": 0.30,
+        },
+        "police": {
+        "engine_accel": 0.40, "engine_decel": 0.45, "engine_idle": 0.30,
+        "exhaust_accel": 0.40, "exhaust_decel": 0.45, "exhaust_idle": 0.30,
+            "horn": 0.35,
+            "siren_wail": 6.30, "siren_yelp": 0.35, "siren_priority": 0.30,
+        },
+        "firetruk": {            # pas de moteur granulaire : seulement des boucles
+            "horn": 1.20,
+            "siren_wail": 6.30, "siren_yelp": 6.25, "siren_priority": 0.35,
+        },
+        "brokensiren": {         # sirene trop courte : doit etre refusee
+        "engine_accel": 0.40, "engine_decel": 0.45, "engine_idle": 0.30,
+        "exhaust_accel": 0.40, "exhaust_decel": 0.45, "exhaust_idle": 0.30,
+            "horn": 0.02, "siren_wail": 0.02,
+        },
+    }
 
     def __init__(self, root: Path, chunk_bytes: int, corrupt: set[str],
                  missing: set[str], fail_tool: set[str]):
@@ -160,12 +182,17 @@ class FakeService:
             bundle = self.root / ("aud-" + an)
             bundle.mkdir(parents=True, exist_ok=True)
             entries = []
-            for s in self.AUDIO[an]:
-                f = bundle / (s + ".wav")
-                _wav(f)
-                entries.append({"name": s, "file": f.name, "role": "engine"})
+            for name, secs in self.AUDIO[an].items():
+                role = ("siren" if name.startswith("siren")
+                        else "horn" if name == "horn"
+                        else "exhaust" if name.startswith("exhaust") else "engine")
+                f = bundle / (name + ".wav")
+                _wav(f, secs)
+                entries.append({"name": name, "file": f.name, "role": role,
+                                "seconds": round(secs, 2)})
             return self._manifest(bundle, entries,
                                   {"kind": "audio", "status": "ok", "audio_name": an,
+                                   "engine_kind": "granular" if an != "firetruk" else "loops",
                                    "containers": [], "unresolved": []})
         if name == "gta_chunk":
             b = a.get("bundle") or ""

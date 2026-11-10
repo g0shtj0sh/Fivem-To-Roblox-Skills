@@ -132,6 +132,7 @@ def test_audio_fetch():
         got = g.fetch_audio("ADDER")
         assert "engine_accel" in got and "engine_idle" in got, got
         assert all(p.is_file() and p.read_bytes()[:4] == b"RIFF" for p in got.values())
+        assert "horn" in got, got
 
         # audio.py doit savoir y reconnaître l'accélération et le ralenti
         from f2r.audio import pick_stream
@@ -223,9 +224,117 @@ def test_collect_missing_textures():
     print("OK test_collect_missing_textures")
 
 
+
+def _wav_seconds(path: Path) -> float:
+    import contextlib
+    import wave
+    try:
+        with contextlib.closing(wave.open(str(path), "rb")) as w:
+            return w.getnframes() / w.getframerate()
+    except Exception:
+        return 0.0
+
+
+def test_horn_and_sirens_from_game():
+    """Klaxon et trois tonalites de sirene arrivent du jeu et sont branches."""
+    with tempfile.TemporaryDirectory() as tmp, HttpFake() as srv:
+        os.environ["F2R_CACHE_DIR"] = tmp
+        rep = Report()
+        g = connect(srv.url, rep)
+        got = g.fetch_audio("POLICE")
+        assert "horn" in got, got
+        for kind in ("wail", "yelp", "priority"):
+            assert f"siren_{kind}" in got, (kind, list(got))
+
+        # durees plausibles : klaxon court, wail long
+        assert 0.08 <= _wav_seconds(got["horn"]) <= 5.0
+        assert _wav_seconds(got["siren_wail"]) > 1.5
+        assert 0.2 <= _wav_seconds(got["siren_yelp"]) <= 20.0
+
+        from f2r.audio import build_audio
+        out = Path(tmp) / "police"
+        man = build_audio(out, wavs=dict(got), audio_name="POLICE", vclass="VC_EMERGENCY",
+                          is_emergency=True, report=rep, use_ogg=False)
+        assert man["HornSource"].startswith("jeu:"), man["HornSource"]
+        assert man["SirenSource"] == "jeu:wail,yelp,priority", man["SirenSource"]
+        for key in ("Horn", "Siren_wail", "Siren_yelp", "Siren_priority"):
+            f = man["Files"].get(key)
+            assert f and (out / f).is_file(), key
+        # le moteur vient bien du moteur, pas d'une sirene
+        assert "siren" not in man["Source"], man["Source"]
+        g.close()
+    print("OK test_horn_and_sirens_from_game")
+
+
+def test_engine_never_taken_from_siren():
+    """Sans flux moteur (camion), une sirene ne doit pas servir de balayage moteur."""
+    with tempfile.TemporaryDirectory() as tmp, HttpFake() as srv:
+        os.environ["F2R_CACHE_DIR"] = tmp
+        rep = Report()
+        g = connect(srv.url, rep)
+        got = g.fetch_audio("FIRETRUK")
+        assert not any(k.startswith(("engine_", "exhaust_")) for k in got), got
+        assert "siren_wail" in got and "horn" in got
+
+        from f2r.audio import build_audio
+        out = Path(tmp) / "firetruk"
+        man = build_audio(out, wavs=dict(got), audio_name="FIRETRUK", vclass="VC_EMERGENCY",
+                          is_emergency=True, report=rep, use_ogg=False)
+        assert man["Source"] == "synthese", man["Source"]
+        assert len(man["EngineLoops"]) >= 4
+        assert man["HornSource"].startswith("jeu:")
+        assert man["SirenSource"].startswith("jeu:")
+        g.close()
+    print("OK test_engine_never_taken_from_siren")
+
+
+def test_implausible_sounds_fall_back_to_synthesis():
+    """Un klaxon / une sirene de 20 ms est refuse : on garde la synthese."""
+    with tempfile.TemporaryDirectory() as tmp, HttpFake() as srv:
+        os.environ["F2R_CACHE_DIR"] = tmp
+        rep = Report()
+        g = connect(srv.url, rep)
+        got = g.fetch_audio("BROKENSIREN")
+
+        from f2r.audio import build_audio
+        out = Path(tmp) / "broken"
+        man = build_audio(out, wavs=dict(got), audio_name="BROKENSIREN", vclass="VC_EMERGENCY",
+                          is_emergency=True, report=rep, use_ogg=False)
+        assert man["HornSource"] == "synthese", man["HornSource"]
+        assert man["SirenSource"] == "synthese", man["SirenSource"]
+        # les fichiers existent quand meme (synthetises)
+        for key in ("Horn", "Siren_wail", "Siren_yelp", "Siren_priority"):
+            assert (out / man["Files"][key]).is_file(), key
+        g.close()
+    print("OK test_implausible_sounds_fall_back_to_synthesis")
+
+
+def test_non_emergency_has_no_siren():
+    """Un vehicule civil recupere le klaxon mais aucune sirene."""
+    with tempfile.TemporaryDirectory() as tmp, HttpFake() as srv:
+        os.environ["F2R_CACHE_DIR"] = tmp
+        rep = Report()
+        g = connect(srv.url, rep)
+        got = g.fetch_audio("ADDER")
+        assert "horn" in got
+        assert not any(k.startswith("siren") for k in got), got
+
+        from f2r.audio import build_audio
+        out = Path(tmp) / "adder"
+        man = build_audio(out, wavs=dict(got), audio_name="ADDER", vclass="VC_SUPER",
+                          is_emergency=False, report=rep, use_ogg=False)
+        assert man["HornSource"].startswith("jeu:")
+        assert "SirenSource" not in man
+        assert not any(k.startswith("Siren") for k in man["Files"]), man["Files"]
+        g.close()
+    print("OK test_non_emergency_has_no_siren")
+
+
 ALL = [test_fetch_textures_and_cache, test_chunked_transfer, test_corrupt_file_rejected,
        test_audio_fetch, test_server_failure_is_graceful, test_stdio_transport,
-       test_discover_disabled, test_discover_via_url, test_collect_missing_textures]
+       test_discover_disabled, test_discover_via_url, test_collect_missing_textures,
+       test_horn_and_sirens_from_game, test_engine_never_taken_from_siren,
+       test_implausible_sounds_fall_back_to_synthesis, test_non_emergency_has_no_siren]
 
 if __name__ == "__main__":
     for fn in ALL:
