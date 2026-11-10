@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    gta-extract : convertit les ressources binaires GTA V (RSC7) en XML CodeWalker
+    (.yft/.ydr/.ytd/.awc/.rel) + fichiers .dds/.wav, sous Windows, Linux et macOS.
+    S'appuie sur CodeWalker.Core (licence MIT, https://github.com/dexyfex/CodeWalker)
+    cloné par build.sh / build.ps1 dans ./.cache/CodeWalker.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>gta-extract</AssemblyName>
+    <RollForward>Major</RollForward>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <NoWarn>$(NoWarn);CS0618;NU1701</NoWarn>
+    <CodeWalkerDir Condition="'$(CodeWalkerDir)' == ''">$(MSBuildThisFileDirectory).cache/CodeWalker</CodeWalkerDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(CodeWalkerDir)/CodeWalker.Core/CodeWalker.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="extra_strings.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+roblox_out/
+out/
+_work/
+.pytest_cache/

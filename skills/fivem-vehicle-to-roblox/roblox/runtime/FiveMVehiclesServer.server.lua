@@ -1,0 +1,154 @@
+--!nonstrict
+-- FiveMVehiclesServer (Script, ServerScriptService)
+-- Autorité serveur : valide les actions du conducteur (phares, clignotants, klaxon, sirène,
+-- moteur), relaie la télémétrie (régime, accélérateur...) aux autres joueurs via attributs,
+-- gère portes / capot / coffre (ProximityPrompt) et applique la custom au démarrage.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
+
+local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
+local Custom = require(folder:WaitForChild("VehicleCustomization"))
+local remote = folder:WaitForChild("VehicleEvent")
+local telemetry = folder:WaitForChild("VehicleTelemetry")
+
+local TAG = "FiveMVehicle"
+local TOGGLES = {
+	Engine = "boolean",
+	Headlights = "number",
+	Indicator = "string",
+	Siren = "boolean",
+	SirenSound = "string",
+	Horn = "boolean",
+	ExtraLights = "boolean",
+}
+local VALID = {
+	Indicator = { Off = true, Left = true, Right = true, Hazard = true },
+	SirenSound = { off = true, wail = true, yelp = true, priority = true },
+}
+
+local function humanoidOf(player)
+	local char = player.Character
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function isDriver(player, model)
+	local seat = model:FindFirstChild("DriverSeat", true)
+	local hum = humanoidOf(player)
+	return seat ~= nil and hum ~= nil and seat.Occupant == hum
+end
+
+local function isOccupantOrNear(player, model, maxDist)
+	local hum = humanoidOf(player)
+	if not hum then
+		return false
+	end
+	if hum.SeatPart and hum.SeatPart:IsDescendantOf(model) then
+		return true
+	end
+	local root = hum.RootPart
+	return root ~= nil and model.PrimaryPart ~= nil and (root.Position - model.PrimaryPart.Position).Magnitude <= maxDist
+end
+
+remote.OnServerEvent:Connect(function(player, model, action, key, value)
+	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
+		return
+	end
+	if action == "Set" then
+		local t = TOGGLES[key]
+		if not t or typeof(value) ~= t or not isDriver(player, model) then
+			return
+		end
+		if VALID[key] and not VALID[key][value] then
+			return
+		end
+		if key == "Headlights" then
+			value = math.clamp(math.floor(value), 0, 2)
+		end
+		if key == "Siren" and not model:GetAttribute("HasSiren") then
+			return
+		end
+		model:SetAttribute(key, value)
+	elseif action == "Door" then
+		local cfg = require(model.VehicleConfig)
+		if type(key) ~= "string" or not (cfg.Hinges and cfg.Hinges[key]) then
+			return
+		end
+		if not isOccupantOrNear(player, model, 25) then
+			return
+		end
+		local cur = model:GetAttribute("Door_" .. key) or 0
+		model:SetAttribute("Door_" .. key, cur > 0.5 and 0 or 1)
+	elseif action == "Window" then
+		if type(key) ~= "string" or not isOccupantOrNear(player, model, 6) then
+			return
+		end
+		Custom.SetWindowDown(model, key, value == true)
+	end
+end)
+
+-- Télémétrie du conducteur (10 Hz, non fiable) -> attributs lus par les autres clients
+telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, brake, reverse, gear)
+	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
+		return
+	end
+	if type(rpm) ~= "number" or type(throttle) ~= "number" or type(steer) ~= "number" then
+		return
+	end
+	if rpm ~= rpm or throttle ~= throttle or steer ~= steer then
+		return -- NaN
+	end
+	if not isDriver(player, model) then
+		return
+	end
+	model:SetAttribute("Rpm", math.clamp(rpm, 0, 20000))
+	model:SetAttribute("Throttle", math.clamp(throttle, 0, 1))
+	model:SetAttribute("Steer", math.clamp(steer, -1, 1))
+	model:SetAttribute("Brake", brake == true)
+	model:SetAttribute("Reverse", reverse == true)
+	if type(gear) == "number" then
+		model:SetAttribute("Gear", math.clamp(math.floor(gear), -1, 12))
+	end
+end)
+
+local function setupVehicle(model)
+	-- sièges : le moteur démarre quand le conducteur s'assoit (comme GTA)
+	local seat = model:FindFirstChild("DriverSeat", true)
+	if seat then
+		seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+			local hum = seat.Occupant
+			if hum then
+				local plr = game:GetService("Players"):GetPlayerFromCharacter(hum.Parent)
+				model:SetAttribute("DriverUserId", plr and plr.UserId or 0)
+				if model:GetAttribute("AutoStartEngine") ~= false then
+					model:SetAttribute("Engine", true)
+				end
+			else
+				model:SetAttribute("DriverUserId", 0)
+				model:SetAttribute("Horn", false)
+				model:SetAttribute("Brake", false)
+				model:SetAttribute("Throttle", 0)
+				model:SetAttribute("Steer", 0)
+			end
+		end)
+	end
+	-- portes / capot / coffre
+	for _, prompt in ipairs(model:GetDescendants()) do
+		if prompt:IsA("ProximityPrompt") and prompt:GetAttribute("HingeBone") then
+			prompt.Triggered:Connect(function(player)
+				local bone = prompt:GetAttribute("HingeBone")
+				if not isOccupantOrNear(player, model, prompt.MaxActivationDistance + 10) then
+					return
+				end
+				local cur = model:GetAttribute("Door_" .. bone) or 0
+				model:SetAttribute("Door_" .. bone, cur > 0.5 and 0 or 1)
+			end)
+		end
+	end
+	Custom.Apply(model, Custom.Serialize(model))
+end
+
+for _, m in ipairs(CollectionService:GetTagged(TAG)) do
+	task.spawn(setupVehicle, m)
+end
+CollectionService:GetInstanceAddedSignal(TAG):Connect(setupVehicle)
