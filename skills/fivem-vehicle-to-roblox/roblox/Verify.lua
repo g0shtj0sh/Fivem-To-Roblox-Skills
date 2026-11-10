@@ -16,6 +16,8 @@
 		runtime    modules runtime installés (ReplicatedStorage / ServerScriptService / StarterPlayerScripts)
 		structure  pièces attendues présentes et nommées, échelle (empattement), véhicule droit, avant vers −Z
 		wheels     roues à leur place (pivots et géométrie), côtés gauche/droite
+		collision  hitbox fidèle : collision GTA présente, invisible, solide, bien soudée, précision
+		           réglée ; rayons depuis les 6 faces : écart hitbox / carrosserie visible (et ancienne boîte)
 		sounds     SoundId renseignés, boucles moteur présentes (client en Play : chargement réel)
 		custom     SetColor / SetMod / SetLivery / SetExtra / SetNeon / SetPlate, Serialize / Apply restaure l'état
 		joints     Motor6D qui bougent (roues, volant, portes, capot, coffre) — client en Play (runtime actif)
@@ -37,8 +39,8 @@ _G.F2R_VERIFY = nil
 
 local context = (not RunService:IsRunning()) and "edit" or (RunService:IsClient() and "client" or "server")
 local DEFAULTS = {
-	edit = { "runtime", "structure", "wheels", "sounds", "custom" },
-	server = { "runtime", "structure", "wheels", "sounds", "custom" },
+	edit = { "runtime", "structure", "wheels", "collision", "sounds", "custom" },
+	server = { "runtime", "structure", "wheels", "collision", "sounds", "custom" },
 	client = { "joints", "lights", "sounds", "audio" },
 }
 
@@ -310,6 +312,138 @@ function groups.wheels()
 	end
 end
 
+function groups.collision()
+	local col = CONFIG.Collision or {}
+	if col.Source ~= "gta" then
+		rec("warn", "hitbox fidèle", "pas de collision GTA dans ce véhicule : hitbox = boîte englobante")
+		return
+	end
+	local pieces = partsWhere(function(p)
+		return p:GetAttribute("Kind") == "collision"
+	end)
+	local wheelsCol = {}
+	local folder = model:FindFirstChild("Collision")
+	for _, d in ipairs(folder and folder:GetDescendants() or {}) do
+		if d:IsA("BasePart") and d:GetAttribute("Kind") == "collision_wheel" then
+			table.insert(wheelsCol, d)
+		end
+	end
+	check(#pieces == (col.Pieces or -1), "morceaux de collision", fmt("%d/%d", #pieces, col.Pieces or 0))
+	local nWheels = 0
+	for _ in pairs(col.Wheels or {}) do
+		nWheels += 1
+	end
+	check(#wheelsCol == nWheels, "roues de collision", fmt("%d/%d cylindres", #wheelsCol, nWheels))
+	local bad, fid, unwelded = 0, {}, {}
+	for _, p in ipairs(pieces) do
+		if not (p.CanCollide and p.CanQuery and p.CanTouch and p.Transparency >= 1) then
+			bad += 1
+		end
+		local f = tostring(p.CollisionFidelity):gsub("Enum.CollisionFidelity.", "")
+		fid[f] = (fid[f] or 0) + 1
+		local owner = p:GetAttribute("Owner")
+		local want = owner == CONFIG.RootBone and root or pivotOf(owner)
+		local w = p:FindFirstChildOfClass("WeldConstraint")
+		if not (w and w.Part0 == want and w.Part1 == p) then
+			table.insert(unwelded, p.Name)
+		end
+	end
+	check(bad == 0, "collision invisible, solide et interrogeable", fmt("%d pièce(s) mal réglée(s)", bad))
+	local fl = {}
+	for k, n in pairs(fid) do
+		table.insert(fl, k .. " " .. n)
+	end
+	table.sort(fl)
+	check((fid.Default or 0) == 0 and (fid.Box or 0) == 0, "précision de collision", table.concat(fl, ", "))
+	check(#unwelded == 0, "collision soudée à son os (portes, capot, coffre)",
+		#unwelded > 0 and ("mal soudées : " .. table.concat(unwelded, ", ")) or "ok")
+	local hb = model:FindFirstChild("Hitbox")
+	check(hb ~= nil and not hb.CanCollide and not hb.CanQuery, "boîte englobante neutralisée",
+		hb and fmt("CanCollide %s, CanQuery %s", tostring(hb.CanCollide), tostring(hb.CanQuery)) or "absente")
+
+	-- fidélité : rayons depuis les 6 faces de la boîte englobante, vers l'intérieur
+	local visual = partsWhere(function(p)
+		return p:GetAttribute("Kind") ~= "collision" and p.Transparency < 1
+	end)
+	local saved = {}
+	for _, p in ipairs(visual) do
+		saved[p] = p.CanQuery
+		p.CanQuery = true
+	end
+	local hbQuery = hb and hb.CanQuery
+	if hb then
+		hb.CanQuery = true
+	end
+	local function params(list)
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Include
+		rp.FilterDescendantsInstances = list
+		return rp
+	end
+	local colAll = table.clone(pieces)
+	for _, w in ipairs(wheelsCol) do
+		table.insert(colAll, w)
+	end
+	local pV, pC, pB = params(visual), params(colAll), params(hb and { hb } or {})
+	local lo, hi = v3(CONFIG.Bounds.Min) * spm, v3(CONFIG.Bounds.Max) * spm
+	local tol = 0.15 * spm -- 15 cm : marge GTA (4 cm) + approximation de la collision des pièces visibles
+	local faces = {
+		{ axis = 1, sign = -1 }, { axis = 1, sign = 1 }, { axis = 2, sign = -1 }, { axis = 2, sign = 1 },
+		{ axis = 3, sign = -1 }, { axis = 3, sign = 1 },
+	}
+	local stats = { col = { agree = 0, small = 0, big = 0 }, box = { agree = 0, small = 0, big = 0 } }
+	local nV = 0
+	local N = 9
+	for _, f in ipairs(faces) do
+		local a1, a2 = (f.axis % 3) + 1, ((f.axis + 1) % 3) + 1
+		for i = 1, N do
+			for j = 1, N do
+				local pt = { 0, 0, 0 }
+				pt[a1] = lo[({ "X", "Y", "Z" })[a1]] + (hi - lo)[({ "X", "Y", "Z" })[a1]] * (i - 0.5) / N
+				pt[a2] = lo[({ "X", "Y", "Z" })[a2]] + (hi - lo)[({ "X", "Y", "Z" })[a2]] * (j - 0.5) / N
+				local edge = f.sign > 0 and hi[({ "X", "Y", "Z" })[f.axis]] or lo[({ "X", "Y", "Z" })[f.axis]]
+				pt[f.axis] = edge + f.sign * 2
+				local dir = { 0, 0, 0 }
+				dir[f.axis] = -f.sign * ((hi - lo)[({ "X", "Y", "Z" })[f.axis]] + 4)
+				local o = root.CFrame:PointToWorldSpace(Vector3.new(pt[1], pt[2], pt[3]))
+				local d = root.CFrame:VectorToWorldSpace(Vector3.new(dir[1], dir[2], dir[3]))
+				local hv = workspace:Raycast(o, d, pV)
+				if hv then
+					nV += 1
+					for key, rp in pairs({ col = pC, box = pB }) do
+						local h = workspace:Raycast(o, d, rp)
+						local s = stats[key]
+						if not h or h.Distance > hv.Distance + tol then
+							s.small += 1 -- la hitbox laisse passer ce que l'on voit
+						elseif h.Distance < hv.Distance - tol then
+							s.big += 1 -- la hitbox arrête avant la carrosserie
+						else
+							s.agree += 1
+						end
+					end
+				end
+			end
+		end
+	end
+	for p, q in pairs(saved) do
+		p.CanQuery = q
+	end
+	if hb then
+		hb.CanQuery = hbQuery
+	end
+	if nV == 0 then
+		rec("fail", "hitbox fidèle à la carrosserie", "aucun rayon n'a touché la carrosserie visible")
+		return
+	end
+	local function pct(n)
+		return math.floor(n / nV * 100 + 0.5)
+	end
+	local c, b = stats.col, stats.box
+	check(c.agree / nV >= 0.8, "hitbox fidèle à la carrosserie",
+		fmt("%d %% des %d rayons à moins de %.2f stud (ancienne boîte : %d %%) ; trop large %d %%, trop juste %d %% (boîte : %d %% / %d %%)",
+			pct(c.agree), nV, tol, pct(b.agree), pct(c.big), pct(c.small), pct(b.big), pct(b.small)))
+end
+
 function groups.sounds()
 	local folder = model:FindFirstChild("Sounds", true)
 	if not folder then
@@ -517,6 +651,7 @@ function groups.custom()
 end
 
 -- les groupes suivants observent le runtime client (RenderStepped) : en Play, contexte Client
+local autoChecked = false
 local function runtimeOrSkip(name)
 	if context ~= "client" then
 		rec("skip", name, "à lancer côté client pendant un Play (le runtime de rendu n'y tourne pas en " .. context .. ")")
@@ -527,7 +662,19 @@ local function runtimeOrSkip(name)
 		rec("fail", name, "require VehicleRuntime : " .. tostring(Runtime))
 		return nil
 	end
-	local r = Runtime.Attach(model)
+	-- le script client doit avoir attaché le rendu tout seul (sans l'aide de Verify)
+	local auto = Runtime.Get(model)
+	if not autoChecked then
+		autoChecked = true
+		local t0 = os.clock()
+		while not auto and os.clock() - t0 < 5 do
+			task.wait(0.1)
+			auto = Runtime.Get(model)
+		end
+		check(auto ~= nil, "rendu attaché par FiveMVehiclesClient",
+			auto and "ok" or "non attaché après 5 s : lumières, portes et sons inertes en jeu")
+	end
+	local r = auto or Runtime.Attach(model)
 	if not r then
 		rec("fail", name, "Runtime.Attach a échoué")
 		return nil
