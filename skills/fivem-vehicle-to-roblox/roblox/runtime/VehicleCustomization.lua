@@ -189,10 +189,8 @@ function Custom.SetWindowTint(model, amount)
 end
 
 -- ------------------------------------------------------------------ néons / xénons / plaque
-function Custom.SetNeon(model, enabled, color)
+local function paintNeons(model, enabled, color)
 	color = color or Color3.fromRGB(0, 140, 255)
-	model:SetAttribute("Neon", enabled and true or false)
-	model:SetAttribute("NeonColor", color)
 	local folder = model:FindFirstChild("Neons")
 	if folder then
 		for _, p in ipairs(folder:GetChildren()) do
@@ -207,6 +205,13 @@ function Custom.SetNeon(model, enabled, color)
 			end
 		end
 	end
+end
+
+function Custom.SetNeon(model, enabled, color)
+	color = color or Color3.fromRGB(0, 140, 255)
+	model:SetAttribute("Neon", enabled and true or false)
+	model:SetAttribute("NeonColor", color)
+	paintNeons(model, enabled, color)
 end
 
 function Custom.SetXenon(model, color)
@@ -286,8 +291,29 @@ function Custom.Serialize(model)
 	return out
 end
 
+-- Clés dont l'absence dans une sauvegarde vaut « état d'origine » : Apply les efface pour que
+-- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
+-- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
+local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_" }
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor" }
+
 function Custom.Apply(model, data)
-	for k, v in pairs(data or {}) do
+	data = data or {}
+	for k in pairs(model:GetAttributes()) do
+		if data[k] == nil then
+			local reset = table.find(RESET_KEYS, k) ~= nil
+			for _, p in ipairs(RESET_PREFIXES) do
+				if string.sub(k, 1, #p) == p then
+					reset = true
+				end
+			end
+			if reset then
+				-- Extra_<n> absent = extra d'origine (visible)
+				model:SetAttribute(k, if string.sub(k, 1, 6) == "Extra_" then true else nil)
+			end
+		end
+	end
+	for k, v in pairs(data) do
 		if type(v) == "table" and v[1] == "Color3" then
 			v = Color3.new(v[2], v[3], v[4])
 		end
@@ -300,9 +326,7 @@ function Custom.Apply(model, data)
 		end
 	end
 	Custom.SetLivery(model, model:GetAttribute("Livery") or 0)
-	if model:GetAttribute("Neon") ~= nil then
-		Custom.SetNeon(model, model:GetAttribute("Neon"), model:GetAttribute("NeonColor"))
-	end
+	paintNeons(model, model:GetAttribute("Neon") == true, model:GetAttribute("NeonColor"))
 	if model:GetAttribute("PlateText") then
 		Custom.SetPlate(model, model:GetAttribute("PlateText"))
 	end
