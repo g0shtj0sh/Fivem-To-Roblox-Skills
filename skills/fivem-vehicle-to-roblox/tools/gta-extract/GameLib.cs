@@ -30,9 +30,14 @@ internal sealed class GameLib
     readonly bool gen9;
     RpfManager rpfman;
 
-    // dat151 (réglages véhicule) et dat54 (sons) indexés par hash de nom
-    readonly Dictionary<uint, RelData> gameDict = new();
-    readonly Dictionary<uint, RelData> soundsDict = new();
+    // GameFileCache charge les .rel audio dans l'ordre réel des DLC
+    // (dlclist.xml + « order » de chaque setup2.xml) : la version la plus
+    // prioritaire d'une entrée écrase les précédentes, ce qu'un scan plat des
+    // .rel ne fait pas. C'est indispensable pour les klaxons et les sirènes.
+    GameFileCache cache;
+    Dictionary<MetaHash, RelData> gameDict = new Dictionary<MetaHash, RelData>();
+    Dictionary<MetaHash, RelData> soundsDict = new Dictionary<MetaHash, RelData>();
+    public int DlcPacks, AudioRelFiles;
 
     // hash d'un « ContainerName » -> chemin de l'entrée .awc dans les RPF
     readonly Dictionary<uint, string> awcByContainer = new();
@@ -49,36 +54,100 @@ internal sealed class GameLib
     public void Init()
     {
         GTA5Keys.LoadFromPath(folder, gen9, null);
-        rpfman = new RpfManager();
         var errs = new List<string>();
-        rpfman.Init(folder, gen9, _ => { }, e => errs.Add(e));
-        IndexAudioAndVehicles();
+
+        // On ne charge que l'audio : archétypes, véhicules et peds coûtent cher
+        // et ne servent pas ici.
+        cache = new GameFileCache(256L * 1024 * 1024, 10.0, folder, gen9, "latest", false, "");
+        cache.SelectedDlc = string.Empty;   // => GameFileCache prend le dernier DLC de dlclist.xml
+        cache.EnableDlc = true;
+        cache.LoadArchetypes = false;
+        cache.LoadVehicles = false;
+        cache.LoadPeds = false;
+        cache.LoadAudio = true;
+        cache.Init(_ => { }, e => errs.Add(e));
+
+        rpfman = cache.RpfMan;
+        gameDict = cache.AudioGameDict;
+        soundsDict = cache.AudioSoundsDict;
+        DlcPacks = cache.DlcActiveRpfs == null ? 0 : cache.DlcActiveRpfs.Count;
+        AudioRelFiles = cache.AudioDatRelFiles == null ? 0 : cache.AudioDatRelFiles.Count;
+
+        IndexAwcAndVehicleYtds();
     }
 
-    void IndexAudioAndVehicles()
+    /// Liste ordonnée des DLC telle que le jeu la voit (diagnostic).
+    public JsonArray DlcOrder(int limit)
     {
-        var relEntries = new List<RpfFileEntry>();
+        var a = new JsonArray();
+        if (cache?.DlcSetupFiles == null) return a;
+        foreach (var sf in cache.DlcSetupFiles)
+        {
+            if (a.Count >= limit) break;
+            a.Add(new JsonObject
+            {
+                ["name"] = sf.deviceName,
+                ["order"] = sf.order,
+                ["minorOrder"] = sf.minorOrder,
+            });
+        }
+        return a;
+    }
+
+    // Priorité d'un chemin, calquée sur l'ordre dans lequel le jeu charge ses
+    // archives : base < update.rpf < DLC dans l'ordre de dlclist.xml. Sans ça,
+    // une vieille version de resident/vehicles.awc peut gagner et les flux de
+    // klaxon / sirène ne sont pas trouvés.
+    Dictionary<string, int> dlcPriority;
+
+    void BuildDlcPriority()
+    {
+        dlcPriority = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (cache?.DlcSetupFiles == null) return;
+        int i = 0;
+        foreach (var sf in cache.DlcSetupFiles)
+        {
+            var n = (sf.deviceName ?? "").ToLowerInvariant();
+            if (n.Length == 0) continue;
+            dlcPriority[n] = ++i;              // 1..N, dans l'ordre du jeu
+            if (n.StartsWith("dlc_")) dlcPriority[n.Substring(4)] = i;
+            if (n.StartsWith("dlc")) dlcPriority[n.Substring(3)] = i;
+        }
+    }
+
+    int PathPriority(string path)
+    {
+        // path est en minuscules, séparateurs « / »
+        var i = path.IndexOf("dlcpacks/", StringComparison.Ordinal);
+        if (i >= 0)
+        {
+            var rest = path.Substring(i + 9);
+            var j = rest.IndexOf('/');
+            var name = j > 0 ? rest.Substring(0, j) : rest;
+            int pr;
+            if (dlcPriority != null && dlcPriority.TryGetValue(name, out pr)) return 1000 + pr;
+            return 1000;                        // DLC inconnu de dlclist : juste au-dessus d'update
+        }
+        if (path.StartsWith("update", StringComparison.Ordinal)) return 500;
+        return 0;                               // archives de base
+    }
+
+    void IndexAwcAndVehicleYtds()
+    {
+        BuildDlcPriority();
+        var awcPri = new Dictionary<uint, int>();
+        var ytds = new List<(int pri, string key)>();
         foreach (var kv in rpfman.EntryDict)
         {
             if (kv.Value is not RpfFileEntry fe) continue;
             var nl = fe.NameLower ?? fe.Name.ToLowerInvariant();
             var path = (fe.Path ?? fe.Name).ToLowerInvariant().Replace('\\', '/');
-            if (nl.EndsWith(".rel")) { relEntries.Add(fe); continue; }
-            if (nl.EndsWith(".awc")) { RegisterAwc(path); continue; }
-            if (nl.EndsWith(".ytd") && IsVehicleYtd(path)) vehicleYtds.Add(kv.Key);
+            if (nl.EndsWith(".awc")) { RegisterAwc(path, PathPriority(path), awcPri); continue; }
+            if (nl.EndsWith(".ytd") && IsVehicleYtd(path)) ytds.Add((PathPriority(path), kv.Key));
         }
-        foreach (var fe in relEntries)
-        {
-            RelFile rel;
-            try { rel = rpfman.GetFile<RelFile>(fe); } catch { continue; }
-            if (rel?.RelDatas == null) continue;
-            var dict = rel.RelType == RelDatFileType.Dat54DataEntries ? soundsDict : gameDict;
-            foreach (var rd in rel.RelDatas)
-            {
-                if (rd.NameHash == 0) continue;
-                dict[rd.NameHash] = rd;
-            }
-        }
+        // les dictionnaires les plus récents d'abord : même logique pour les textures
+        ytds.Sort((x, y) => y.pri.CompareTo(x.pri));
+        foreach (var t in ytds) vehicleYtds.Add(t.key);
     }
 
     static bool IsVehicleYtd(string path)
@@ -88,36 +157,38 @@ internal sealed class GameLib
            || path.Contains("script_txds");
 
     // Un ContainerName est le chemin du conteneur d'ondes relatif à x64/audio/,
-    // sans extension (ex. « sfx/dlc_business/sportscar_vintage1_eur_6_cyl »).
-    // On enregistre plusieurs variantes pour couvrir les écritures possibles.
-    void RegisterAwc(string path)
+    // sans extension (ex. « streamed_vehicles_granular/supercar_4_eur_v8 »).
+    void RegisterAwc(string path, int pri, Dictionary<uint, int> awcPri)
     {
         var noExt = path.EndsWith(".awc") ? path.Substring(0, path.Length - 4) : path;
         var i = noExt.IndexOf("/audio/", StringComparison.Ordinal);
-        if (i < 0) { RegisterVariant(Path.GetFileName(noExt), path); return; }
+        if (i < 0) { RegisterVariant(Path.GetFileName(noExt), path, pri, awcPri); return; }
         var rel = noExt.Substring(i + 7);                 // « sfx/streamed_vehicles_granular.rpf/xxx »
 
-        // Les AWC sont souvent rangés dans des RPF imbriqués dont le nom reprend
-        // celui du dossier logique : le ContainerName du dat54 ne contient PAS le
-        // « .rpf ». On retire donc ces segments d'archive du chemin.
+        // Les AWC sont rangés dans des RPF imbriqués dont le nom reprend celui du
+        // dossier logique : le ContainerName du dat54 ne contient PAS le « .rpf ».
         var parts = rel.Split('/');
         var clean = new List<string>();
         foreach (var seg in parts)
             clean.Add(seg.EndsWith(".rpf") ? seg.Substring(0, seg.Length - 4) : seg);
         var cleanRel = string.Join("/", clean);
 
-        RegisterVariant(cleanRel, path);                                  // sfx/xxx/yyy
-        if (cleanRel.StartsWith("sfx/")) RegisterVariant(cleanRel.Substring(4), path);  // xxx/yyy
-        RegisterVariant(rel, path);                                       // avec les .rpf
-        if (rel.StartsWith("sfx/")) RegisterVariant(rel.Substring(4), path);
-        RegisterVariant(Path.GetFileName(noExt), path);                   // yyy
+        RegisterVariant(cleanRel, path, pri, awcPri);
+        if (cleanRel.StartsWith("sfx/")) RegisterVariant(cleanRel.Substring(4), path, pri, awcPri);
+        RegisterVariant(rel, path, pri, awcPri);
+        if (rel.StartsWith("sfx/")) RegisterVariant(rel.Substring(4), path, pri, awcPri);
+        RegisterVariant(Path.GetFileName(noExt), path, pri, awcPri);
     }
 
-    void RegisterVariant(string v, string path)
+    void RegisterVariant(string v, string path, int pri, Dictionary<uint, int> awcPri)
     {
         if (string.IsNullOrEmpty(v)) return;
         var h = JenkHash.GenHash(v);
-        if (h != 0 && !awcByContainer.ContainsKey(h)) awcByContainer[h] = path;
+        if (h == 0) return;
+        int old;
+        if (awcPri.TryGetValue(h, out old) && old >= pri) return;   // on garde le plus prioritaire
+        awcPri[h] = pri;
+        awcByContainer[h] = path;
     }
 
     // ------------------------------------------------------------- textures
@@ -219,28 +290,151 @@ internal sealed class GameLib
 
     // ---------------------------------------------------------------- audio
 
-    T Get<T>(Dictionary<uint, RelData> d, MetaHash h) where T : RelData
+    T Get<T>(Dictionary<MetaHash, RelData> d, MetaHash h) where T : RelData
     {
         RelData v;
         return d.TryGetValue(h, out v) ? v as T : null;
     }
 
+    /// Cherche une entrée audio : d'abord les sons (dat54), puis les réglages (dat151).
+    RelData Lookup(MetaHash h, out string dict)
+    {
+        RelData rd;
+        if (soundsDict.TryGetValue(h, out rd) && rd != null) { dict = "dat54"; return rd; }
+        if (gameDict.TryGetValue(h, out rd) && rd != null) { dict = "dat151"; return rd; }
+        dict = null;
+        return null;
+    }
+
+    /// Fichier .rel d'où vient l'entrée retenue : c'est lui qui a « gagné »
+    /// l'arbitrage entre DLC.
+    static string RelSource(RelData rd)
+    {
+        var rel = rd?.Rel;
+        if (rel == null) return null;
+        if (rel.RpfFileEntry != null && !string.IsNullOrEmpty(rel.RpfFileEntry.Path))
+            return rel.RpfFileEntry.Path.Replace('\\', '/');
+        return rel.Name;
+    }
+
     sealed class Want
     {
         public string Role;
+        public string Canon;          // nom attendu par f2r/audio.py
         public MetaHash Container;
         public MetaHash File;
+        public ChainNode Node;
     }
 
-    // Parcourt l'arbre des sons dat54 : GranularSound -> 6 canaux, SimpleSound ->
-    // (ContainerName, FileName), tout autre type -> ses ChildSoundsHashes.
-    void CollectSounds(MetaHash soundHash, string role, List<Want> acc, HashSet<uint> seen, int depth)
+    // Noms de flux que f2r/audio.py sait exploiter directement.
+    static readonly HashSet<string> KnownEngineStreams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        if (soundHash.Hash == 0 || depth > 6 || acc.Count > 64) return;
-        if (!seen.Add(soundHash.Hash)) return;
-        RelData rd;
-        if (!soundsDict.TryGetValue(soundHash, out rd) || rd == null) return;
+        "engine_accel", "engine_decel", "engine_idle",
+        "exhaust_accel", "exhaust_decel", "exhaust_idle",
+    };
 
+    /// Un maillon de la chaîne audio, pour le diagnostic comme pour l'extraction.
+    sealed class ChainNode
+    {
+        public string Role, Canon, Dict, Type, Source;
+        public MetaHash Hash;
+        public bool IsLeaf;
+        public MetaHash Container, File;
+        public string Wav;
+        public double Seconds;
+        public long Bytes;
+        public string Awc, Status;
+        public readonly List<ChainNode> Children = new List<ChainNode>();
+        public readonly List<string> Props = new List<string>();
+
+        public JsonObject ToJson(bool withProps)
+        {
+            var o = new JsonObject
+            {
+                ["role"] = Role,
+                ["hash"] = Hash.ToString(),
+                ["type"] = Type ?? "(absent des .rel)",
+            };
+            if (Dict != null) o["dict"] = Dict;
+            if (Source != null) o["source"] = Source;
+            if (IsLeaf)
+            {
+                o["container"] = Container.ToString();
+                o["file"] = File.ToString();
+                if (Awc != null) o["awc"] = Awc;
+                if (Status != null) o["status"] = Status;
+                if (Wav != null) { o["wav"] = Wav; o["seconds"] = Math.Round(Seconds, 2); o["bytes"] = Bytes; }
+            }
+            if (withProps && Props.Count > 0)
+            {
+                var pa = new JsonArray();
+                foreach (var p in Props) pa.Add(p);
+                o["props"] = pa;
+            }
+            if (Children.Count > 0)
+            {
+                var ca = new JsonArray();
+                foreach (var c in Children) ca.Add(c.ToJson(withProps));
+                o["children"] = ca;
+            }
+            return o;
+        }
+    }
+
+    static readonly HashSet<string> SkipProps = new HashSet<string>
+    {
+        "NameHash", "ParentSound", "Name", "Category", "Unk", "Flags",
+    };
+
+    /// Descend l'arbre des sons jusqu'aux feuilles (ContainerName + FileName).
+    /// Les types intermédiaires sont nombreux (multitrack, randomized, variable,
+    /// switch, liste de hashes…) et n'ont pas d'interface commune : on suit donc
+    /// par réflexion tous les tableaux de hashes, et tout champ de type MetaHash
+    /// qui désigne lui-même un son connu.
+    ChainNode Walk(MetaHash h, string role, HashSet<uint> seen, int depth, List<Want> leaves,
+                   string canon = null)
+    {
+        var node = new ChainNode { Role = role, Canon = canon, Hash = h };
+        if (h.Hash == 0) { node.Type = "(vide)"; return node; }
+        if (depth > 8 || leaves.Count > 96) { node.Type = "(coupé : trop profond)"; return node; }
+        if (!seen.Add(h.Hash)) { node.Type = "(déjà vu)"; return node; }
+
+        string dict;
+        var rd = Lookup(h, out dict);
+        if (rd == null) return node;
+        node.Dict = dict;
+        node.Type = rd.GetType().Name;
+        node.Source = RelSource(rd);
+
+        var t = rd.GetType();
+        var arrays = new List<System.Reflection.PropertyInfo>();
+        var hashes = new List<System.Reflection.PropertyInfo>();
+        foreach (var pi in t.GetProperties())
+        {
+            if (SkipProps.Contains(pi.Name)) continue;
+            if (pi.PropertyType == typeof(MetaHash[])) arrays.Add(pi);
+            else if (pi.PropertyType == typeof(MetaHash)) hashes.Add(pi);
+        }
+
+        // Trace : tous les champs de hash non nuls, pour comprendre une structure
+        // inconnue sans avoir à deviner.
+        foreach (var pi in hashes)
+        {
+            MetaHash v;
+            try { v = (MetaHash)pi.GetValue(rd); } catch { continue; }
+            if (v.Hash != 0) node.Props.Add(pi.Name + " = " + v.ToString());
+        }
+        foreach (var pi in arrays)
+        {
+            MetaHash[] arr;
+            try { arr = pi.GetValue(rd) as MetaHash[]; } catch { continue; }
+            if (arr == null || arr.Length == 0) continue;
+            var sb = new StringBuilder(pi.Name + "[" + arr.Length + "] =");
+            for (int i = 0; i < arr.Length && i < 8; i++) sb.Append(' ').Append(arr[i].ToString());
+            node.Props.Add(sb.ToString());
+        }
+
+        // Cas 1 : son granulaire (moteur) -> six canaux, chacun une feuille.
         var gran = rd as Dat54GranularSound;
         if (gran != null)
         {
@@ -249,117 +443,351 @@ internal sealed class GameLib
             foreach (var c in chans)
             {
                 if (c == null || c.ContainerName.Hash == 0 || c.FileName.Hash == 0) continue;
-                acc.Add(new Want { Role = role, Container = c.ContainerName, File = c.FileName });
+                var cn = c.FileName.ToString();
+                node.Children.Add(Leaf(role, c.ContainerName, c.FileName, leaves,
+                                       KnownEngineStreams.Contains(cn) ? cn : null));
             }
-            return;
+            return node;
         }
 
-        // Un son « simple » porte directement le couple (conteneur, fichier .wav).
-        var t = rd.GetType();
+        // Cas 2 : son simple -> feuille directe.
         var cnp = t.GetProperty("ContainerName");
         var fnp = t.GetProperty("FileName");
         if (cnp != null && fnp != null)
         {
             var cn = cnp.GetValue(rd);
             var fn = fnp.GetValue(rd);
-            if (cn is MetaHash && fn is MetaHash && ((MetaHash)cn).Hash != 0 && ((MetaHash)fn).Hash != 0)
+            if (cn is MetaHash && fn is MetaHash
+                && ((MetaHash)cn).Hash != 0 && ((MetaHash)fn).Hash != 0)
             {
-                acc.Add(new Want { Role = role, Container = (MetaHash)cn, File = (MetaHash)fn });
-                return;
+                node.IsLeaf = true;
+                node.Container = (MetaHash)cn;
+                node.File = (MetaHash)fn;
+                var fname = node.File.ToString();
+                if (node.Canon == null && KnownEngineStreams.Contains(fname)) node.Canon = fname;
+                leaves.Add(new Want
+                {
+                    Role = role, Canon = node.Canon,
+                    Container = node.Container, File = node.File, Node = node,
+                });
+                return node;
             }
         }
 
-        // Sinon c'est un conteneur logique : on descend dans TOUS ses tableaux de
-        // hashes de sons enfants (ChildSoundsHashes, SoundHashes, Variations...).
-        foreach (var pi in t.GetProperties())
+        // Cas 3 : conteneur logique -> on descend.
+        foreach (var pi in arrays)
         {
-            if (pi.PropertyType != typeof(MetaHash[])) continue;
-            MetaHash[] arr = null;
-            try { arr = pi.GetValue(rd) as MetaHash[]; } catch { }
+            MetaHash[] arr;
+            try { arr = pi.GetValue(rd) as MetaHash[]; } catch { continue; }
             if (arr == null) continue;
             foreach (var ch in arr)
-                CollectSounds(ch, role, acc, seen, depth + 1);
+                if (ch.Hash != 0) node.Children.Add(Walk(ch, role, seen, depth + 1, leaves, canon));
+        }
+        foreach (var pi in hashes)
+        {
+            MetaHash v;
+            try { v = (MetaHash)pi.GetValue(rd); } catch { continue; }
+            if (v.Hash == 0 || !soundsDict.ContainsKey(v)) continue;
+            node.Children.Add(Walk(v, role + ":" + pi.Name, seen, depth + 1, leaves, canon));
+        }
+        return node;
+    }
+
+    ChainNode Leaf(string role, MetaHash container, MetaHash file, List<Want> leaves, string canon)
+    {
+        var n = new ChainNode
+        {
+            Role = role, Canon = canon, IsLeaf = true, Hash = file,
+            Container = container, File = file, Type = "(flux AWC)",
+        };
+        leaves.Add(new Want { Role = role, Canon = canon, Container = container, File = file, Node = n });
+        return n;
+    }
+
+    // ------------------------------------------------- extraction des feuilles
+
+    /// Extrait les AWC nécessaires (un seul passage par AWC) puis renseigne
+    /// chaque feuille avec son .wav et sa durée.
+    void ResolveLeaves(List<Want> leaves, string outDir, JsonArray containers)
+    {
+        var dirs = new Dictionary<uint, string>();
+        var errs = new Dictionary<uint, string>();
+        foreach (var w in leaves)
+        {
+            if (dirs.ContainsKey(w.Container.Hash) || errs.ContainsKey(w.Container.Hash)) continue;
+            var info = new JsonObject { ["container"] = w.Container.ToString() };
+            string rel = null, err = null;
+            try { rel = ExtractAwc(w.Container, outDir, info); }
+            catch (Exception ex) { err = ex.Message; }
+            if (rel != null) dirs[w.Container.Hash] = rel;
+            else { errs[w.Container.Hash] = err ?? "introuvable"; info["error"] = err ?? "introuvable"; }
+            if (containers != null) containers.Add(info);
+        }
+        foreach (var w in leaves)
+        {
+            var n = w.Node;
+            string dir;
+            if (!dirs.TryGetValue(w.Container.Hash, out dir))
+            {
+                n.Status = "awc_not_found";
+                continue;
+            }
+            n.Awc = dir;
+            var wav = FindWav(Path.Combine(outDir, dir), w.File);
+            if (wav == null) { n.Status = "wav_not_found"; continue; }
+            n.Status = "ok";
+            n.Wav = Path.GetRelativePath(outDir, wav).Replace('\\', '/');
+            n.Bytes = new FileInfo(wav).Length;
+            n.Seconds = WavSeconds(wav);
         }
     }
 
-    /// Resout audioNameHash -> flux .wav extraits, en suivant la chaine
-    /// Dat151CarAudioSettings -> GranularEngine -> Dat54GranularSound -> AWC.
-    /// Chaque AWC n'est extrait qu'une fois, meme s'il alimente plusieurs canaux.
+    static string Tag(BinaryReader br)
+    {
+        var b = br.ReadBytes(4);
+        return b.Length < 4 ? "" : Encoding.ASCII.GetString(b);
+    }
+
+    /// Durée d'un .wav PCM, lue dans son en-tête (aucun décodage).
+    static double WavSeconds(string path)
+    {
+        try
+        {
+            using (var f = File.OpenRead(path))
+            using (var br = new BinaryReader(f))
+            {
+                if (Tag(br) != "RIFF") return 0;
+                br.ReadUInt32();
+                if (Tag(br) != "WAVE") return 0;
+                int rate = 0, bits = 0, chans = 0;
+                while (f.Position + 8 <= f.Length)
+                {
+                    var id = Tag(br);
+                    var len = br.ReadUInt32();
+                    var body = f.Position;                 // début des données du chunk
+                    var next = body + len + (len % 2);
+                    if (id == "fmt ")
+                    {
+                        br.ReadUInt16();
+                        chans = br.ReadUInt16();
+                        rate = (int)br.ReadUInt32();
+                        br.ReadUInt32();
+                        br.ReadUInt16();
+                        bits = br.ReadUInt16();
+                    }
+                    else if (id == "data")
+                    {
+                        if (rate <= 0 || bits <= 0 || chans <= 0) return 0;
+                        return (double)len / (rate * chans * (bits / 8.0));
+                    }
+                    if (next <= body) break;           // chunk vide ou longueur absurde
+                    f.Position = next;
+                }
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    // ------------------------------------------------------ chaîne d'un véhicule
+
+    static readonly string[] SirenKinds = { "wail", "yelp", "priority" };
+
+    /// Devine le type de sirène d'après les noms de flux et de conteneur.
+    /// La plupart des flux de sirène n'ont pas de nom connu (hash seul) : on
+    /// retombe alors sur la durée (voir ClassifySirens).
+    static string SirenKindByName(ChainNode n)
+    {
+        var txt = (n.Role + " " + n.File.ToString() + " " + n.Container.ToString()).ToLowerInvariant();
+        if (txt.Contains("wail")) return "wail";
+        if (txt.Contains("yelp")) return "yelp";
+        if (txt.Contains("priority") || txt.Contains("manual") || txt.Contains("hilo")
+            || txt.Contains("phaser")) return "priority";
+        return null;
+    }
+
+    /// Associe wail / yelp / priority aux flux de sirène trouvés.
+    ///
+    /// Les noms étant presque toujours des hashes inconnus, on se sert de la
+    /// durée, qui distingue bien les trois dans GTA : le « wail » est une longue
+    /// montée-descente (plusieurs secondes), le « yelp » et le « priority » sont
+    /// des boucles courtes. Le plus long devient donc le wail, puis les deux
+    /// suivants, du plus long au plus court, yelp puis priority.
+    static Dictionary<ChainNode, string> ClassifySirens(List<ChainNode> sirens)
+    {
+        var kinds = new Dictionary<ChainNode, string>();
+        var used = new HashSet<string>();
+
+        // 1) les rares flux réellement nommés
+        foreach (var n in sirens)
+        {
+            var k = SirenKindByName(n);
+            if (k != null && used.Add(k)) kinds[n] = k;
+        }
+
+        // 2) les autres, par durée décroissante, en évitant les doublons de flux
+        var rest = new List<ChainNode>();
+        var seenFile = new HashSet<uint>();
+        foreach (var n in sirens)
+        {
+            if (kinds.ContainsKey(n)) { seenFile.Add(n.File.Hash); continue; }
+            if (!seenFile.Add(n.File.Hash)) continue;
+            rest.Add(n);
+        }
+        rest.Sort((x, y) => y.Seconds.CompareTo(x.Seconds));
+        foreach (var n in rest)
+        {
+            string pick = null;
+            foreach (var k in SirenKinds)
+                if (!used.Contains(k)) { pick = k; break; }
+            if (pick == null) break;
+            // un « wail » doit être long : sinon on laisse la synthèse s'en charger
+            if (pick == "wail" && n.Seconds < 1.5)
+            {
+                used.Add("wail");
+                continue;
+            }
+            kinds[n] = pick;
+            used.Add(pick);
+        }
+        return kinds;
+    }
+
+    sealed class VehChain
+    {
+        public Dat151CarAudioSettings Car;
+        public string EngineKind = "none";     // granular | loops | none
+        public List<ChainNode> Roots = new List<ChainNode>();
+        public List<Want> Leaves = new List<Want>();
+    }
+
+    VehChain BuildChain(string audioName)
+    {
+        var nameHash = new MetaHash(JenkHash.GenHash(audioName.ToLowerInvariant()));
+        var car = Get<Dat151CarAudioSettings>(gameDict, nameHash);
+        if (car == null) return null;
+        var vc = new VehChain { Car = car };
+
+        var granular = Get<Dat151GranularEngineAudioSettings>(gameDict, car.GranularEngine);
+        if (granular != null)
+        {
+            vc.EngineKind = "granular";
+            vc.Roots.Add(Walk(granular.EngineAccel, "engine", new HashSet<uint>(), 0, vc.Leaves));
+            vc.Roots.Add(Walk(granular.ExhaustAccel, "exhaust", new HashSet<uint>(), 0, vc.Leaves));
+        }
+        else
+        {
+            // Camions et vehicules anciens : pas de moteur granulaire, mais des
+            // boucles bas / haut regime dans Dat151VehicleEngineAudioSettings.
+            var eng = Get<Dat151VehicleEngineAudioSettings>(gameDict, car.Engine);
+            if (eng != null)
+            {
+                vc.EngineKind = "loops";
+                var map = new (MetaHash h, string role, string canon)[]
+                {
+                    (eng.HighEngineLoop, "engine", "engine_accel"),
+                    (eng.RevsOffLoop, "engine", "engine_decel"),
+                    (eng.LowEngineLoop, "engine", "engine_idle"),
+                    (eng.HighExhaustLoop, "exhaust", "exhaust_accel"),
+                    (eng.LowExhaustLoop, "exhaust", "exhaust_idle"),
+                    (eng.IdleEngineSimpleLoop, "engine", "engine_idle"),
+                    (eng.IdleExhaustSimpleLoop, "exhaust", "exhaust_idle"),
+                };
+                foreach (var m in map)
+                    if (m.h.Hash != 0)
+                        vc.Roots.Add(Walk(m.h, m.role, new HashSet<uint>(), 0, vc.Leaves, m.canon));
+            }
+        }
+        vc.Roots.Add(Walk(car.HornSounds, "horn", new HashSet<uint>(), 0, vc.Leaves));
+        vc.Roots.Add(Walk(car.SirenSounds, "siren", new HashSet<uint>(), 0, vc.Leaves));
+        vc.Roots.Add(Walk(car.StartupRevs, "startup", new HashSet<uint>(), 0, vc.Leaves));
+        return vc;
+    }
+
+    /// Diagnostic : chaîne complète d'un audioNameHash, avec la source .rel qui a
+    /// gagné à chaque maillon. Si « out » est fourni, les .wav sont extraits et
+    /// chaque feuille porte sa durée.
+    public JsonObject AudioChain(string audioName, string outDir, bool withProps)
+    {
+        var res = new JsonObject { ["audioName"] = audioName };
+        var vc = BuildChain(audioName);
+        if (vc == null)
+        {
+            res["status"] = "not_found";
+            res["error"] = "aucun Dat151CarAudioSettings nomme " + audioName;
+            return res;
+        }
+        res["status"] = "ok";
+        res["engineKind"] = vc.EngineKind;
+        res["carAudioSettings"] = new JsonObject
+        {
+            ["source"] = RelSource(vc.Car),
+            ["granularEngine"] = vc.Car.GranularEngine.ToString(),
+            ["hornSounds"] = vc.Car.HornSounds.ToString(),
+            ["sirenSounds"] = vc.Car.SirenSounds.ToString(),
+            ["startupRevs"] = vc.Car.StartupRevs.ToString(),
+        };
+        if (!string.IsNullOrEmpty(outDir))
+        {
+            Directory.CreateDirectory(outDir);
+            ResolveLeaves(vc.Leaves, outDir, null);
+        }
+        var roots = new JsonArray();
+        foreach (var r in vc.Roots) roots.Add(r.ToJson(withProps));
+        res["chain"] = roots;
+        return res;
+    }
+
+    /// Extraction pour le pipeline : flux moteur, klaxon et sirènes classés.
     public JsonObject VehicleAudio(string audioName, string outDir)
     {
         var res = new JsonObject { ["audioName"] = audioName };
-        var nameHash = new MetaHash(JenkHash.GenHash(audioName.ToLowerInvariant()));
-        var car = Get<Dat151CarAudioSettings>(gameDict, nameHash);
-        if (car == null)
+        var vc = BuildChain(audioName);
+        if (vc == null)
         {
             res["status"] = "not_found";
             res["error"] = "aucun Dat151CarAudioSettings nomme " + audioName + " dans les .rel du jeu";
             return res;
         }
         res["status"] = "ok";
-        res["granularEngine"] = car.GranularEngine.ToString();
-        res["hornSounds"] = car.HornSounds.ToString();
+        res["granularEngine"] = vc.Car.GranularEngine.ToString();
+        res["hornSounds"] = vc.Car.HornSounds.ToString();
+        res["sirenSounds"] = vc.Car.SirenSounds.ToString();
+        res["engineKind"] = vc.EngineKind;
+        res["source"] = RelSource(vc.Car);
 
-        var wants = new List<Want>();
-        var granular = Get<Dat151GranularEngineAudioSettings>(gameDict, car.GranularEngine);
-        if (granular != null)
-        {
-            CollectSounds(granular.EngineAccel, "engine", wants, new HashSet<uint>(), 0);
-            CollectSounds(granular.ExhaustAccel, "exhaust", wants, new HashSet<uint>(), 0);
-        }
-        else res["warning"] = "GranularEngine introuvable pour ce vehicule";
-        CollectSounds(car.HornSounds, "horn", wants, new HashSet<uint>(), 0);
-        CollectSounds(car.StartupRevs, "startup", wants, new HashSet<uint>(), 0);
-        if (car.SirenSounds.Hash != 0)
-            CollectSounds(car.SirenSounds, "siren", wants, new HashSet<uint>(), 0);
-
-        // 1) extraction : un AWC = une seule fois
-        var awcDirs = new Dictionary<uint, string>();
-        var awcErr = new Dictionary<uint, string>();
         var containers = new JsonArray();
-        foreach (var w in wants)
-        {
-            if (awcDirs.ContainsKey(w.Container.Hash) || awcErr.ContainsKey(w.Container.Hash)) continue;
-            var info = new JsonObject { ["container"] = w.Container.ToString() };
-            string rel = null, err = null;
-            try { rel = ExtractAwc(w.Container, outDir, info); }
-            catch (Exception ex) { err = ex.Message; }
-            if (rel != null) awcDirs[w.Container.Hash] = rel;
-            else
-            {
-                awcErr[w.Container.Hash] = err ?? "introuvable";
-                info["error"] = err ?? "introuvable";
-            }
-            containers.Add(info);
-        }
+        ResolveLeaves(vc.Leaves, outDir, containers);
         res["containers"] = containers;
 
-        // 2) association role -> fichier .wav
+        // Classement des sirènes : par nom quand il parle, sinon par ordre
+        // d'apparition (wail, yelp, priority), ce que fait le jeu en pratique.
+        var sirens = new List<ChainNode>();
+        foreach (var w in vc.Leaves)
+            if (w.Role.StartsWith("siren") && w.Node.Status == "ok" && w.Node.Seconds >= 0.15)
+                sirens.Add(w.Node);
+        var kinds = ClassifySirens(sirens);
+
         var streams = new JsonArray();
-        foreach (var w in wants)
+        foreach (var w in vc.Leaves)
         {
+            var n = w.Node;
             var item = new JsonObject
             {
                 ["role"] = w.Role,
+                ["canon"] = w.Canon,
                 ["container"] = w.Container.ToString(),
                 ["file"] = w.File.ToString(),
+                ["status"] = n.Status ?? "unresolved",
             };
-            string dir;
-            if (!awcDirs.TryGetValue(w.Container.Hash, out dir))
+            string kind;
+            if (kinds.TryGetValue(n, out kind)) item["sirenKind"] = kind;
+            if (n.Awc != null) item["awcDir"] = n.Awc;
+            if (n.Wav != null)
             {
-                string e2;
-                item["status"] = "awc_not_found";
-                item["error"] = awcErr.TryGetValue(w.Container.Hash, out e2) ? e2 : "introuvable";
-                streams.Add(item);
-                continue;
-            }
-            var wav = FindWav(Path.Combine(outDir, dir), w.File);
-            if (wav == null) item["status"] = "wav_not_found";
-            else
-            {
-                item["wav"] = Path.GetRelativePath(outDir, wav).Replace('\\', '/');
-                item["bytes"] = new FileInfo(wav).Length;
-                item["status"] = "ok";
+                item["wav"] = n.Wav;
+                item["bytes"] = n.Bytes;
+                item["seconds"] = Math.Round(n.Seconds, 2);
             }
             streams.Add(item);
         }
@@ -372,34 +800,52 @@ internal sealed class GameLib
     {
         string awcPath;
         if (!awcByContainer.TryGetValue(container.Hash, out awcPath)) return null;
-        info["awc"] = awcPath;
+        if (info != null) info["awc"] = awcPath;
         var key = awcPath.Replace('/', '\\');
         RpfEntry e;
         if (!rpfman.EntryDict.TryGetValue(key, out e) || !(e is RpfFileEntry fe))
             throw new Exception("entree RPF introuvable : " + awcPath);
-        var data = fe.File.ExtractFile(fe);
-        if (data == null) throw new Exception(fe.File.LastError ?? "extraction impossible");
         var relDir = Path.Combine("awc", Path.GetFileNameWithoutExtension(fe.Name));
         var dir = Path.Combine(outDir, relDir);
-        Directory.CreateDirectory(dir);
-        string xmlName;
-        var xml = MetaXml.GetXml(fe, data, out xmlName, dir);
-        if (!string.IsNullOrEmpty(xml))
-            File.WriteAllText(Path.Combine(dir, fe.Name + ".xml"), xml, new UTF8Encoding(false));
-        int n = 0;
-        foreach (var w in Directory.EnumerateFiles(dir, "*.wav", SearchOption.AllDirectories)) n++;
-        info["wavs"] = n;
+        if (!Directory.Exists(dir))
+        {
+            var data = fe.File.ExtractFile(fe);
+            if (data == null) throw new Exception(fe.File.LastError ?? "extraction impossible");
+            Directory.CreateDirectory(dir);
+            string xmlName;
+            var xml = MetaXml.GetXml(fe, data, out xmlName, dir);
+            if (!string.IsNullOrEmpty(xml))
+                File.WriteAllText(Path.Combine(dir, fe.Name + ".xml"), xml, new UTF8Encoding(false));
+        }
+        if (info != null)
+        {
+            int n = 0;
+            foreach (var w in Directory.EnumerateFiles(dir, "*.wav", SearchOption.AllDirectories)) n++;
+            info["wavs"] = n;
+        }
         return relDir.Replace('\\', '/');
     }
 
-    /// Retrouve le .wav d'un flux. CodeWalker nomme le fichier d'apres la chaine
-    /// connue du hash, ou « 0xXXXXXXXX » quand elle est inconnue.
+    // Dans un AWC, l'identifiant d'un flux ne tient que sur 29 bits :
+    // AwcStreamInfo.Read fait « Id = RawVal & 0x1FFFFFFF », les 3 bits hauts
+    // servant au nombre de morceaux. Le hash FileName d'un dat54 est, lui, sur
+    // 32 bits. Il faut donc le masquer avant toute comparaison — sans ça, tous
+    // les flux dont le nom n'est pas connu (klaxons, sirènes) restent
+    // introuvables alors que le bon AWC a été trouvé.
+    const uint AwcIdMask = 0x1FFFFFFF;
+
+    /// Retrouve le .wav d'un flux. CodeWalker nomme le fichier d'après la chaîne
+    /// connue du hash (reconstruit en testant les 3 bits perdus), sinon
+    /// « 0x » + l'identifiant masqué en hexadécimal.
     static string FindWav(string dir, MetaHash file)
     {
         if (!Directory.Exists(dir)) return null;
+        var masked = file.Hash & AwcIdMask;
         var cands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             file.ToString(),
+            "0x" + masked.ToString("X8"),
+            "0x" + masked.ToString("X"),
             "0x" + file.Hash.ToString("X8"),
             file.Hash.ToString(),
         };
@@ -438,6 +884,8 @@ internal sealed class GameLib
             ["dat151Items"] = lib.gameDict.Count,
             ["dat54Sounds"] = lib.soundsDict.Count,
             ["awcContainers"] = lib.awcByContainer.Count,
+            ["dlcPacks"] = lib.DlcPacks,
+            ["audioRelFiles"] = lib.AudioRelFiles,
             ["initSeconds"] = Math.Round((DateTime.UtcNow - t0).TotalSeconds, 1),
         });
 
@@ -567,6 +1015,189 @@ internal sealed class GameLib
                         found[name] = info;
                     }
                     return new JsonObject { ["status"] = "ok", ["found"] = found, ["missing"] = missing };
+                }
+
+            case "scan_stream":
+                {
+                    // Balaye les AWC (filtrables) a la recherche d'un identifiant de flux.
+                    var fNode = req["file"] ?? throw new Exception("'file' requis");
+                    var fTxt = fNode.GetValue<string>();
+                    uint want = uint.TryParse(fTxt, out var fu) ? fu : JenkHash.GenHash(fTxt.ToLowerInvariant());
+                    var filtNode = req["pathContains"];
+                    var filt = filtNode == null ? "" : filtNode.GetValue<string>().ToLowerInvariant();
+                    var lim = req["limit"] == null ? 8 : req["limit"].GetValue<int>();
+                    var hits = new JsonArray();
+                    int scanned = 0, failed = 0;
+                    foreach (var kv in rpfman.EntryDict)
+                    {
+                        if (kv.Value is not RpfFileEntry fe) continue;
+                        var nl = fe.NameLower ?? fe.Name.ToLowerInvariant();
+                        if (!nl.EndsWith(".awc")) continue;
+                        var path = (fe.Path ?? fe.Name).ToLowerInvariant().Replace('\\', '/');
+                        if (filt.Length > 0 && path.IndexOf(filt, StringComparison.Ordinal) < 0) continue;
+                        scanned++;
+                        try
+                        {
+                            var awc = rpfman.GetFile<AwcFile>(fe);
+                            var infos = awc?.StreamInfos;
+                            if (infos == null) continue;
+                            var wantMasked = want & AwcIdMask;
+                            foreach (var si in infos)
+                            {
+                                if (si == null || si.Id != wantMasked) continue;
+                                hits.Add(new JsonObject { ["awc"] = path, ["streams"] = infos.Length });
+                                break;
+                            }
+                        }
+                        catch { failed++; }
+                        if (hits.Count >= lim) break;
+                    }
+                    return new JsonObject
+                    {
+                        ["status"] = "ok", ["fileHash"] = want, ["scanned"] = scanned,
+                        ["failed"] = failed, ["hits"] = hits,
+                    };
+                }
+
+            case "list_awc_streams":
+                {
+                    // Identifiants de flux d'un AWC (pour comprendre son nommage).
+                    var pNode = req["awc"] ?? throw new Exception("'awc' requis");
+                    var want = pNode.GetValue<string>().ToLowerInvariant().Replace('\\', '/');
+                    var lim = req["limit"] == null ? 40 : req["limit"].GetValue<int>();
+                    foreach (var kv in rpfman.EntryDict)
+                    {
+                        if (kv.Value is not RpfFileEntry fe) continue;
+                        var path = (fe.Path ?? fe.Name).ToLowerInvariant().Replace('\\', '/');
+                        if (path != want && !path.EndsWith(want, StringComparison.Ordinal)) continue;
+                        var awc = rpfman.GetFile<AwcFile>(fe);
+                        var arr = new JsonArray();
+                        var infos = awc?.StreamInfos;
+                        if (infos != null)
+                            for (int i = 0; i < infos.Length && arr.Count < lim; i++)
+                                if (infos[i] != null)
+                                    arr.Add(new JsonObject
+                                    {
+                                        ["id"] = infos[i].Id,
+                                        ["hex"] = "0x" + infos[i].Id.ToString("X8"),
+                                        ["name"] = new MetaHash(infos[i].Id).ToString(),
+                                    });
+                        return new JsonObject
+                        {
+                            ["status"] = "ok", ["awc"] = path,
+                            ["total"] = infos == null ? 0 : infos.Length,
+                            ["multiChannel"] = awc != null && awc.MultiChannelFlag,
+                            ["streams"] = arr,
+                        };
+                    }
+                    return new JsonObject { ["status"] = "error", ["error"] = "AWC introuvable : " + want };
+                }
+
+            case "find_stream":
+                {
+                    // Pour un conteneur donne : tous les AWC candidats, et lequel
+                    // contient reellement le flux demande.
+                    var cNode = req["container"];
+                    var fNode = req["file"];
+                    if (cNode == null) throw new Exception("'container' requis");
+                    var cTxt = cNode.GetValue<string>();
+                    uint cHash = uint.TryParse(cTxt, out var cu) ? cu : JenkHash.GenHash(cTxt.ToLowerInvariant());
+                    uint fHash = 0;
+                    if (fNode != null)
+                    {
+                        var fTxt = fNode.GetValue<string>();
+                        fHash = uint.TryParse(fTxt, out var fu) ? fu : JenkHash.GenHash(fTxt.ToLowerInvariant());
+                    }
+                    var cands = new JsonArray();
+                    foreach (var kv in rpfman.EntryDict)
+                    {
+                        if (kv.Value is not RpfFileEntry fe) continue;
+                        var nl = fe.NameLower ?? fe.Name.ToLowerInvariant();
+                        if (!nl.EndsWith(".awc")) continue;
+                        var path = (fe.Path ?? fe.Name).ToLowerInvariant().Replace('\\', '/');
+                        // on recalcule les variantes de ce chemin pour voir si l'une matche
+                        var probe = new Dictionary<uint, int>();
+                        var saveMap = new Dictionary<uint, string>(awcByContainer);
+                        awcByContainer.Clear();
+                        RegisterAwc(path, 0, probe);
+                        bool match = awcByContainer.ContainsKey(cHash);
+                        awcByContainer.Clear();
+                        foreach (var kv2 in saveMap) awcByContainer[kv2.Key] = kv2.Value;
+                        if (!match) continue;
+
+                        var o = new JsonObject { ["awc"] = path, ["priority"] = PathPriority(path) };
+                        try
+                        {
+                            var awc = rpfman.GetFile<AwcFile>(fe);
+                            var infos = awc?.StreamInfos;
+                            o["streams"] = infos == null ? 0 : infos.Length;
+                            if (fHash != 0 && infos != null)
+                            {
+                                bool has = false;
+                                var want2 = fHash & AwcIdMask;
+                                foreach (var si in infos) if (si != null && si.Id == want2) { has = true; break; }
+                                o["hasStream"] = has;
+                            }
+                        }
+                        catch (Exception ex) { o["error"] = ex.Message; }
+                        cands.Add(o);
+                        if (cands.Count >= 24) break;
+                    }
+                    string chosen;
+                    return new JsonObject
+                    {
+                        ["status"] = "ok",
+                        ["containerHash"] = cHash,
+                        ["fileHash"] = fHash,
+                        ["chosen"] = awcByContainer.TryGetValue(cHash, out chosen) ? chosen : null,
+                        ["candidates"] = cands,
+                    };
+                }
+
+            case "list_car_audio":
+                {
+                    // Diagnostic : quels vehicules sont definis par quel .rel.
+                    var subNode = req["sourceContains"];
+                    var sub = subNode == null ? "" : subNode.GetValue<string>().ToLowerInvariant();
+                    var lim = req["limit"] == null ? 30 : req["limit"].GetValue<int>();
+                    var withSiren = req["withSiren"] != null && req["withSiren"].GetValue<bool>();
+                    var arr = new JsonArray();
+                    foreach (var kv in gameDict)
+                    {
+                        var car = kv.Value as Dat151CarAudioSettings;
+                        if (car == null) continue;
+                        if (withSiren && car.SirenSounds.Hash == 0) continue;
+                        var src = RelSource(car) ?? "";
+                        if (sub.Length > 0 && src.ToLowerInvariant().IndexOf(sub, StringComparison.Ordinal) < 0)
+                            continue;
+                        var nm = kv.Key.ToString();
+                        if (nm == kv.Key.Hash.ToString()) continue;   // nom inconnu : inutile pour un test
+                        arr.Add(new JsonObject { ["name"] = nm, ["source"] = src });
+                        if (arr.Count >= lim) break;
+                    }
+                    return new JsonObject { ["status"] = "ok", ["cars"] = arr };
+                }
+
+            case "audio_chain":
+                {
+                    var anNode = req["audioName"];
+                    if (anNode == null) throw new Exception("'audioName' requis");
+                    var outNode = req["out"];
+                    var withProps = req["props"] != null && req["props"].GetValue<bool>();
+                    return AudioChain(anNode.GetValue<string>(),
+                                      outNode == null ? null : outNode.GetValue<string>(), withProps);
+                }
+
+            case "dlc_order":
+                {
+                    var lim = req["limit"] == null ? 200 : req["limit"].GetValue<int>();
+                    return new JsonObject
+                    {
+                        ["status"] = "ok",
+                        ["dlcPacks"] = DlcPacks,
+                        ["audioRelFiles"] = AudioRelFiles,
+                        ["order"] = DlcOrder(lim),
+                    };
                 }
 
             case "vehicle_audio":
