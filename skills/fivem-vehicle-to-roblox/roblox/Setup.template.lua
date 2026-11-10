@@ -271,9 +271,68 @@ local function folderFor(info)
 	return f
 end
 
+-- Collision officielle du véhicule (col__<os>__<n>) : pièces invisibles qui forment la hitbox
+-- fidèle, soudées à leur os (une portière ouverte garde sa collision). La précision de collision
+-- ne s'écrit pas par script : on l'applique par CreateMeshPartAsync + ApplyMesh (taille gardée).
+local AssetService = game:GetService("AssetService")
+local collisionFolder
+local collisionParts = {}
+local function collisionFolderFor(owner)
+	if not collisionFolder then
+		collisionFolder = Instance.new("Folder")
+		collisionFolder.Name = "Collision"
+		collisionFolder.Parent = model
+	end
+	local f = collisionFolder:FindFirstChild(owner)
+	if not f then
+		f = Instance.new("Folder")
+		f.Name = owner
+		f.Parent = collisionFolder
+	end
+	return f
+end
+
 for name, info in pairs(PARTS) do
 	local p = byName[name]
-	if p then
+	if p and info.Kind == "collision" then
+		for _, c in ipairs(p:GetChildren()) do
+			if c:IsA("SurfaceAppearance") then
+				c:Destroy()
+			end
+		end
+		if p:IsA("MeshPart") then
+			p.TextureID = ""
+		end
+		p.Anchored = false
+		p.Transparency = 1
+		p.CastShadow = false
+		p.CanCollide, p.CanQuery, p.CanTouch = true, true, true
+		p.Massless = info.Owner ~= CONFIG.RootBone
+		p:SetAttribute("F2RPart", true)
+		p:SetAttribute("Kind", "collision")
+		p:SetAttribute("Bone", info.Bone)
+		p:SetAttribute("BoneChain", info.BoneChain)
+		p:SetAttribute("Owner", info.Owner)
+		p:SetAttribute("Convex", info.Convex == true)
+		p:SetAttribute("BaseTransparency", 1)
+		if p:IsA("MeshPart") then
+			local want = info.Convex and Enum.CollisionFidelity.Hull or Enum.CollisionFidelity.PreciseConvexDecomposition
+			local ok, err = pcall(function()
+				local tmp = AssetService:CreateMeshPartAsync(p.MeshContent, { CollisionFidelity = want })
+				p:ApplyMesh(tmp)
+				tmp:Destroy()
+			end)
+			if not ok then
+				warnf("Précision de collision non appliquée à %s (%s) : reste %s.", name, tostring(err), tostring(p.CollisionFidelity))
+			end
+		end
+		p.Parent = collisionFolderFor(info.Owner)
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = pivots[info.Owner] or root
+		weld.Part1 = p
+		weld.Parent = p
+		table.insert(collisionParts, p)
+	elseif p then
 		local sa = p:FindFirstChildOfClass("SurfaceAppearance")
 		p.Anchored = false
 		p.CanCollide, p.CanQuery, p.CanTouch, p.Massless = false, false, false, true
@@ -393,6 +452,42 @@ for name, info in pairs(PARTS) do
 		weld.Part0 = pivots[info.Owner] or root
 		weld.Part1 = p
 		weld.Parent = p
+	end
+end
+
+-- roues de collision (Disc GTA -> cylindres), et rôle de la boîte « Hitbox »
+local coll = CONFIG.Collision or {}
+for bone, w in pairs(coll.Wheels or {}) do
+	local pv = pivots[bone]
+	if pv then
+		local c = Instance.new("Part")
+		c.Name = "Collision_" .. bone
+		c.Shape = Enum.PartType.Cylinder -- axe = X de la pièce = axe de la roue
+		c.Size = Vector3.new(w.Width * spm, w.Radius * 2 * spm, w.Radius * 2 * spm)
+		c.CFrame = VF.Rotation + L2W(w.Center)
+		c.Transparency = 1
+		c.CastShadow = false
+		c.CanCollide = coll.WheelsCollide == true -- par défaut : rayons et contacts seulement
+		c.CanQuery, c.CanTouch = true, true
+		c.Massless = true
+		c:SetAttribute("Kind", "collision_wheel")
+		c:SetAttribute("Owner", bone)
+		c.Parent = collisionFolderFor(bone)
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0, weld.Part1, weld.Parent = pv, c, c
+		table.insert(collisionParts, c)
+	end
+end
+if #collisionParts > 0 then
+	-- la boîte reste comme volume englobant (repères, zones), sans collision ni rayons
+	hitbox.CanCollide, hitbox.CanQuery, hitbox.CanTouch = false, false, false
+	hitbox.Massless = true
+	hitbox:SetAttribute("BoundsOnly", true)
+	model:SetAttribute("CollisionSource", coll.Source or "gta")
+else
+	model:SetAttribute("CollisionSource", "box")
+	if coll.Source == "gta" then
+		warnf("Collision GTA attendue mais aucune pièce col__* trouvée : hitbox = boîte englobante.")
 	end
 end
 
@@ -643,6 +738,10 @@ for _, n in ipairs(CONFIG.Extras or {}) do
 	model:SetAttribute("Extra_" .. n, true)
 end
 CollectionService:AddTag(model, "FiveMVehicle")
+pcall(function()
+	-- avec StreamingEnabled : le véhicule arrive en entier chez le client (pièces, joints, config)
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+end)
 
 -- ------------------------------------------------------------------ 13. modules runtime
 local folder = ReplicatedStorage:FindFirstChild("FiveMVehicles") or Instance.new("Folder")
@@ -743,5 +842,6 @@ return {
 	missingParts = missing,
 	missingSounds = missingSounds,
 	groundedBy = groundedBy,
+	collisionParts = #collisionParts,
 	warnings = warnings,
 }

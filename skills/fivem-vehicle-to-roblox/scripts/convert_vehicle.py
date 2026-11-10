@@ -31,6 +31,7 @@ sys.path.insert(0, str(HERE))
 
 from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
+from f2r import collision as collision_mod  # noqa: E402
 from f2r import cwxml, gamelib, inventory, meta  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
@@ -137,6 +138,48 @@ def write_studio_bundle(out: Path, name: str, config: dict, parts_cfg: dict, sou
     for extra in ("Verify.lua", "ApplySoundIds.lua"):
         shutil.copyfile(SKILL_ROOT / "roblox" / extra, sdir / extra)
     (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+# ------------------------------------------------------------------ collision (hitbox fidèle)
+
+def add_collision(frag_path: Path, vb: VehicleBuilder, glb: GlbWriter, parts_cfg: dict, args,
+                  report: Report) -> dict:
+    """Ajoute au GLB la collision officielle du .yft (col__<os>__<n>) et renvoie CONFIG.Collision.
+    Sans données de collision : hitbox = boîte englobante (comportement d'avant)."""
+    if getattr(args, "no_collision", False):
+        return {"Source": "box"}
+    try:
+        coll = collision_mod.parse_collision(frag_path)
+    except Exception as exc:  # noqa: BLE001
+        report.warn(f"Collision du .yft illisible ({exc}) : hitbox = boîte englobante.")
+        return {"Source": "box"}
+    if coll is None:
+        report.warn("Le .yft ne contient pas de collision (Physics/Bounds) : hitbox = boîte englobante "
+                    "(peu fidèle aux formes du véhicule).")
+        return {"Source": "box"}
+    root = vb.skel.root_name
+    mat = GMaterial(name="F2R_Collision", base_color=[1.0, 0.0, 1.0, 1.0])
+    pieces = 0
+    for m in coll.meshes:
+        bone = m.owner_group if m.owner_group in vb.skel.by_name else root
+        owner = vb.owner_of(bone) if bone in vb.skel.by_name else root
+        P, N, I = collision_mod.flat_mesh(m.pos, m.idx)
+        glb.add_mesh(m.name, P, N, np.zeros((len(P), 2), np.float32), I, mat)
+        chain = "/".join(list(vb.skel.ancestors(bone))) if bone in vb.skel.by_name else bone
+        lo, hi = m.pos.min(axis=0), m.pos.max(axis=0)
+        parts_cfg[m.name] = {"Kind": "collision", "Bone": bone, "BoneChain": chain, "Owner": owner,
+                             "Center": r4((lo + hi) / 2), "Tris": len(m.idx) // 3, "Convex": m.convex}
+        pieces += 1
+    wheels = {}
+    for w in coll.wheels:
+        if w.group in vb.skel.by_name:
+            wheels[w.group] = {"Center": r4(w.center), "Radius": round(w.radius, 4), "Width": round(w.width, 4)}
+    report.info(f"Collision GTA : {pieces} morceau(x), {coll.triangles} triangles, {len(wheels)} roue(s)"
+                + (f" ; écartés : {', '.join(coll.skipped)}" if coll.skipped else "") + ".")
+    if any(m.skipped_primitives for m in coll.meshes):
+        report.warn("Collision : primitives (boîte / sphère / capsule) dans une géométrie, non converties.")
+    return {"Source": "gta", "Pieces": pieces, "Triangles": coll.triangles, "Wheels": wheels,
+            "WheelsCollide": bool(getattr(args, "wheel_collision", False))}
 
 
 # ------------------------------------------------------------------ helpers
@@ -290,6 +333,8 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         info = part_info(p, vb, store, has_tex)
         parts_cfg[p.name] = info
 
+    collision_cfg = add_collision(frag_path, vb, glb, parts_cfg, args, report)
+
     carriers = []
     for i, tex in enumerate(livery_names):
         png = store.get(tex)
@@ -347,6 +392,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     # ---- configuration Roblox
     config = build_config(name, vinfo, variation, carcols, handling, vb, parts_cfg, mods_cfg, stat_cfg,
                           mod_count, carriers, livery_names, audio, is_emergency, args)
+    config["Collision"] = collision_cfg
     sound_ids = load_sound_ids(args.sound_ids, out / "sounds")
     setup = build_setup(config, parts_cfg, sound_ids)
     (out / f"{name}_Setup.lua").write_text(setup, encoding="utf-8")
@@ -363,6 +409,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
              "missing_textures": len(store.missing), "glb": str(glb_path), "glb_mb": round(glb_path.stat().st_size / 1e6, 2),
              "game_textures": len(game_tex), "audio_from_game": audio_from_game,
              "game_transfer": game.transfer_summary() if game is not None else "",
+             "collision": collision_cfg,
              "horn_source": audio.get("HornSource", "synthese"),
              "siren_source": audio.get("SirenSource")}
     if tris > 300_000:
@@ -448,12 +495,13 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
                  mod_count, carriers, livery_names, audio, is_emergency, args) -> dict:
     lo, hi = vb.bounds()
     bones = vb.bones_info()
-    owners = sorted({i["Owner"] for i in parts_cfg.values()} - {vb.skel.root_name})
+    owners = sorted({i["Owner"] for i in parts_cfg.values() if i["Kind"] != "collision"} - {vb.skel.root_name})
     wheels = vb.wheel_info()
     dynamic = sorted(set(owners) | set(wheels) | {b for b in bones if b.startswith("siren") and b[5:].isdigit()})
     hinges = vb.hinge_info({"door": 70.0, "bonnet": 50.0, "boot": 60.0, "boot_2": 60.0})
     for hb, h in hinges.items():
-        cs = [i["Center"] for i in parts_cfg.values() if i["Owner"] == hb and "ModSlot" not in i]
+        cs = [i["Center"] for i in parts_cfg.values()
+              if i["Owner"] == hb and "ModSlot" not in i and i["Kind"] != "collision"]
         if cs:
             h["Center"] = r4(np.mean(cs, axis=0))
     steering = None
@@ -587,6 +635,10 @@ def main(argv=None) -> int:
     ap.add_argument("--max-tris", type=int, default=19000, help="triangles max par MeshPart (limite Roblox 20k)")
     ap.add_argument("--max-texture", type=int, default=1024, help="taille max des textures (px)")
     ap.add_argument("--livery-uv", default="auto", choices=["auto", "uv0", "uv1"])
+    ap.add_argument("--no-collision", action="store_true",
+                    help="ne pas reprendre la collision du .yft (hitbox = boîte englobante)")
+    ap.add_argument("--wheel-collision", action="store_true",
+                    help="cylindres de roues solides (CanCollide) ; par défaut ils ne servent qu'aux rayons et contacts")
     ap.add_argument("--texture-overrides",
                     help="dossier d'images qui remplacent les textures du pack de même nom (rebadge, retouches)")
     ap.add_argument("--sound-ids", help="JSON {fichier: assetId} produit par roblox_upload.py")
@@ -705,6 +757,12 @@ def write_report(out: Path, name: str, stats: dict | None, report: Report) -> No
         if stats.get("game_textures"):
             lines.append(f"- Dont **{stats['game_textures']}** texture(s) reprises du jeu de base "
                          "(vehshare / txdRelationships) via le serveur d'assets GTA V.")
+        col = stats.get("collision") or {}
+        if col.get("Source") == "gta":
+            lines.append(f"- Hitbox : **collision officielle du véhicule** ({col['Pieces']} morceaux, "
+                         f"{col['Triangles']} triangles, {len(col.get('Wheels') or {})} roues)")
+        else:
+            lines.append("- Hitbox : **boîte englobante** (pas de collision dans le .yft, ou --no-collision)")
         if stats.get("game_transfer"):
             lines.append(f"- Transfert depuis le serveur d'assets : {stats['game_transfer']}")
         lines.append("- Son moteur : **" + ("vrai son du jeu (AWC vanilla, découpé en boucles)"
