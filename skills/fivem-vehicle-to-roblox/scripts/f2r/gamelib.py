@@ -342,6 +342,10 @@ class GameAssets:
         self.server_status: dict = {}
         self._neg_file = cache_root() / "missing_textures.json"
         self._neg_tex: set[str] = set(_read_json(self._neg_file, []))
+        # Mesures du transfert PC -> VM (rapportées dans report.md).
+        self.stats: dict[str, dict] = {
+            k: {"prepare_s": 0.0, "download_s": 0.0, "files": 0, "chunks": 0, "bytes": 0, "cached": 0}
+            for k in ("textures", "audio")}
 
     # -- cycle de vie -------------------------------------------------------
 
@@ -386,8 +390,24 @@ class GameAssets:
 
     # -- transfert ----------------------------------------------------------
 
-    def _download(self, manifest: dict, entry: dict, dest: Path) -> Path | None:
+    def transfer_summary(self) -> str:
+        """Une ligne lisible : durée et volume transférés par catégorie."""
+        parts = []
+        for kind, st in self.stats.items():
+            if not (st["files"] or st["cached"] or st["prepare_s"]):
+                continue
+            mb = st["bytes"] / 1e6
+            dl = st["download_s"]
+            rate = f", {mb / dl:.2f} Mo/s" if dl > 0 and mb > 0 else ""
+            parts.append(f"{kind} : {st['files']} fichier(s), {mb:.2f} Mo en {st['chunks']} morceau(x), "
+                         f"préparation PC {st['prepare_s']:.1f} s + transfert {dl:.1f} s{rate}"
+                         + (f", {st['cached']} déjà en cache" if st["cached"] else ""))
+        return " ; ".join(parts) or "aucun transfert"
+
+    def _download(self, manifest: dict, entry: dict, dest: Path, kind: str = "textures") -> Path | None:
         """Récupère un fichier du lot morceau par morceau et vérifie son SHA-256."""
+        st = self.stats[kind]
+        t0 = time.monotonic()
         tmp = dest.with_suffix(dest.suffix + ".part")
         h = hashlib.sha256()
         got = 0
@@ -397,13 +417,17 @@ class GameAssets:
                     c = self.client.call("gta_chunk", bundle=manifest["bundle"],
                                          file=entry["file"], index=i)
                     blob = base64.b64decode(c["data"])
+                    st["chunks"] += 1
+                    st["bytes"] += len(blob)
                     f.write(blob)
                     h.update(blob)
                     got += len(blob)
         except Exception as exc:                                # noqa: BLE001
             tmp.unlink(missing_ok=True)
+            st["download_s"] += time.monotonic() - t0
             self.report.warn(f"Transfert de {entry['file']} interrompu : {exc}")
             return None
+        st["download_s"] += time.monotonic() - t0
         if got != entry["bytes"] or h.hexdigest() != entry["sha256"]:
             tmp.unlink(missing_ok=True)
             self.report.warn(f"Contrôle d'intégrité échoué pour {entry['file']} "
@@ -411,6 +435,7 @@ class GameAssets:
             return None
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp.replace(dest)
+        st["files"] += 1
         return dest
 
     # -- textures -----------------------------------------------------------
@@ -428,6 +453,7 @@ class GameAssets:
             p = cdir / f"{n}.png"
             if p.is_file():
                 out[n] = p
+                self.stats["textures"]["cached"] += 1
             elif n in self._neg_tex and not retry:
                 continue                     # déjà connue comme absente du jeu
             else:
@@ -435,18 +461,21 @@ class GameAssets:
         if not todo:
             return out
 
+        t0 = time.monotonic()
         try:
             man = self.client.call("gta_prepare_textures", names=todo, vehicle=vehicle or "",
                                    txds=list(txds or []), max_size=max_size)
         except Exception as exc:                                # noqa: BLE001
+            self.stats["textures"]["prepare_s"] += time.monotonic() - t0
             self.report.warn(f"Textures du jeu de base indisponibles : {exc}")
             return out
 
+        self.stats["textures"]["prepare_s"] += time.monotonic() - t0
         by_file = {f["file"]: f for f in man.get("files") or []}
         for entry in by_file.values():
             name = entry.get("name") or Path(entry["file"]).stem
             dest = cdir / f"{name}.png"
-            if self._download(man, entry, dest) is not None:
+            if self._download(man, entry, dest, "textures") is not None:
                 out[name] = dest
                 self._neg_tex.discard(name)
         for miss in man.get("missing") or []:
@@ -465,13 +494,18 @@ class GameAssets:
         cdir = _cache_dir(f"audio/{AUDIO_CACHE_VERSION}/{audio_name.lower()}")
         done = cdir / ".complete"
         if done.is_file() and not retry:
-            return {p.stem: p for p in sorted(cdir.glob("*.wav"))}
+            cached = {p.stem: p for p in sorted(cdir.glob("*.wav"))}
+            self.stats["audio"]["cached"] += len(cached)
+            return cached
 
+        t0 = time.monotonic()
         try:
             man = self.client.call("gta_prepare_audio", audio_name=audio_name)
         except Exception as exc:                                # noqa: BLE001
+            self.stats["audio"]["prepare_s"] += time.monotonic() - t0
             self.report.warn(f"Son vanilla « {audio_name} » indisponible : {exc}")
             return {}
+        self.stats["audio"]["prepare_s"] += time.monotonic() - t0
         if man.get("status") != "ok":
             self.report.info(f"Le jeu ne définit pas de son pour « {audio_name} » "
                              f"({man.get('error') or man.get('status')}).")
@@ -484,7 +518,7 @@ class GameAssets:
             if dest.is_file() and not retry:
                 out[name] = dest
                 continue
-            if self._download(man, entry, dest) is not None:
+            if self._download(man, entry, dest, "audio") is not None:
                 out[name] = dest
         if out:
             done.write_text(time.strftime("%Y-%m-%d %H:%M:%S"), encoding="utf-8")
