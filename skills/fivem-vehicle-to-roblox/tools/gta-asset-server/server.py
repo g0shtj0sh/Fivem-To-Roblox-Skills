@@ -1,25 +1,25 @@
-"""Serveur d'assets GTA V — côté PC, pour le skill fivem-vehicle-to-roblox.
+﻿"""Serveur d'assets GTA V â€” cÃ´tÃ© PC, pour le skill fivem-vehicle-to-roblox.
 
-Il expose les ressources du *jeu de base* (textures partagées, sons de véhicule)
-que les packs FiveM réutilisent sans les inclure, sous forme d'un **serveur MCP
-HTTP** écoutant uniquement sur 127.0.0.1.
+Il expose les ressources du *jeu de base* (textures partagÃ©es, sons de vÃ©hicule)
+que les packs FiveM rÃ©utilisent sans les inclure, sous forme d'un **serveur MCP
+HTTP** Ã©coutant uniquement sur 127.0.0.1.
 
 Pourquoi MCP : la VM vibestarter ne peut joindre le PC que par la passerelle de
-vibestarter (gvproxy n'autorise que ses deux ports). Déclarer ce serveur dans
-« My MCP servers » est donc le seul canal fiable, et il survit aux redémarrages.
+vibestarter (gvproxy n'autorise que ses deux ports). DÃ©clarer ce serveur dans
+Â« My MCP servers Â» est donc le seul canal fiable, et il survit aux redÃ©marrages.
 Voir docs/transport-tests.md.
 
-Outils exposés :
-    gta_status              état du serveur et du jeu détecté
+Outils exposÃ©s :
+    gta_status              Ã©tat du serveur et du jeu dÃ©tectÃ©
     gta_find_textures       quelles textures existent (sans transfert)
-    gta_prepare_textures    convertit en PNG <= 1024 px et prépare un lot
+    gta_prepare_textures    convertit en PNG <= 1024 px et prÃ©pare un lot
     gta_prepare_audio       extrait le son vanilla d'un audioNameHash
-    gta_chunk               récupère un morceau d'un fichier du lot (base64)
-    gta_build_index         construit l'index complet des textures véhicules
+    gta_chunk               rÃ©cupÃ¨re un morceau d'un fichier du lot (base64)
+    gta_build_index         construit l'index complet des textures vÃ©hicules
 
-Sécurité : écoute sur 127.0.0.1 seulement ; ne sert que des textures de
-dictionnaires de véhicules et des sons référencés par un audioNameHash de
-véhicule ; aucun accès à un chemin arbitraire ; GTA V est ouvert en lecture seule.
+SÃ©curitÃ© : Ã©coute sur 127.0.0.1 seulement ; ne sert que des textures de
+dictionnaires de vÃ©hicules et des sons rÃ©fÃ©rencÃ©s par un audioNameHash de
+vÃ©hicule ; aucun accÃ¨s Ã  un chemin arbitraire ; GTA V est ouvert en lecture seule.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SKILL = HERE.parent.parent                     # skills/fivem-vehicle-to-roblox
-sys.path.insert(0, str(SKILL / "scripts"))     # pour réutiliser f2r.textures
+sys.path.insert(0, str(SKILL / "scripts"))     # pour rÃ©utiliser f2r.textures
 
 import gta_locate                               # noqa: E402
 from gta_client import GtaClient, GtaExtractError  # noqa: E402
@@ -46,17 +46,22 @@ PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_NAME = "gta-asset-server"
 SERVER_VERSION = "1.0.0"
 
-# La passerelle vibestarter plafonne un message MCP à ~33 Mo. On reste large :
-# 6 Mo de données brutes -> ~8 Mo en base64.
+# La passerelle vibestarter plafonne un message MCP Ã  ~33 Mo. On reste large :
+# 6 Mo de donnÃ©es brutes -> ~8 Mo en base64.
 CHUNK_BYTES = 6 * 1024 * 1024
 
 CACHE_ROOT = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "fivem2roblox" / "asset-server"
 BUNDLES = CACHE_ROOT / "bundles"
 
-# Flux AWC réellement utiles au pipeline Roblox (audio.py sait les exploiter).
-USEFUL_AUDIO = ("engine_accel", "engine_decel", "engine_idle",
-                "exhaust_accel", "exhaust_decel", "exhaust_idle",
-                "horn", "siren")
+# Flux moteur / Ã©chappement utiles au pipeline Roblox : audio.py les reconnaÃ®t
+# par leur nom (pick_stream) et y dÃ©coupe les boucles par rÃ©gime.
+ENGINE_STREAMS = ("engine_accel", "engine_decel", "engine_idle",
+                  "exhaust_accel", "exhaust_decel", "exhaust_idle")
+
+# DurÃ©es plausibles, par rÃ´le : Ã©carte un flux manifestement inadaptÃ© (un
+# Â« klaxon Â» de 20 ms ou une Â« sirÃ¨ne Â» de 50 ms viennent d'une mauvaise
+# rÃ©solution, mieux vaut la synthÃ¨se).
+DURATION_BOUNDS = {"horn": (0.08, 5.0), "siren": (0.2, 20.0), "engine": (0.1, 40.0)}
 
 
 def log(*a):
@@ -119,7 +124,7 @@ class AssetService:
 
     def prepare_textures(self, names: list[str], vehicle: str | None,
                          txds: list[str] | None, max_size: int) -> dict:
-        from f2r.textures import resize_for_roblox       # même code que la VM
+        from f2r.textures import resize_for_roblox       # mÃªme code que la VM
 
         names = [n.lower() for n in names if n and n.strip()]
         key = json.dumps([sorted(set(names)), vehicle, sorted(txds or []), max_size])
@@ -141,7 +146,7 @@ class AssetService:
 
             def store_png(name: str, img, info: dict) -> None:
                 # On garde la RGBA brute (pas de conversion normale/couleur ici) :
-                # c'est le pipeline de la VM qui décide du rôle de chaque texture.
+                # c'est le pipeline de la VM qui dÃ©cide du rÃ´le de chaque texture.
                 img = resize_for_roblox(img.convert("RGBA"), max_size)
                 out = bundle / (name.lower() + ".png")
                 img.save(out, "PNG", optimize=True)
@@ -154,8 +159,8 @@ class AssetService:
                     img = Image.open(Path(info["dds"]))
                     img.load()
                 except Exception as exc:               # noqa: BLE001
-                    # Pillow ne gère pas tous les formats GTA (A8, L8, BC7...) :
-                    # on redemande les pixels déjà décompressés à CodeWalker.
+                    # Pillow ne gÃ¨re pas tous les formats GTA (A8, L8, BC7...) :
+                    # on redemande les pixels dÃ©jÃ  dÃ©compressÃ©s Ã  CodeWalker.
                     retry.append((name, f"{type(exc).__name__}: {exc}"))
                     continue
                 try:
@@ -175,7 +180,7 @@ class AssetService:
                     info = (d.get("found") or {}).get(name) or {}
                     blob = info.get("bgra")
                     if not blob or not Path(blob).is_file():
-                        failed.append({"name": name, "error": why + " ; décodage direct : "
+                        failed.append({"name": name, "error": why + " ; dÃ©codage direct : "
                                        + str(info.get("error") or "indisponible")})
                         continue
                     try:
@@ -214,39 +219,74 @@ class AssetService:
                 return {"kind": "audio", "status": r.get("status", "error"),
                         "audio_name": audio_name, "error": r.get("error"), "files": []}
 
-            entries, seen = [], set()
-            for s in r.get("streams") or []:
-                if s.get("status") != "ok" or not s.get("wav"):
+            # Nom final de chaque son, tel que f2r/audio.py et le runtime Roblox
+            # l'attendent : engine_accelâ€¦, horn, siren_wail / yelp / priority.
+            best: dict[str, tuple[float, Path, dict]] = {}
+            rejected: list[dict] = []
+            for st in r.get("streams") or []:
+                if st.get("status") != "ok" or not st.get("wav"):
                     continue
-                stream = str(s.get("file") or "").lower()
-                if not any(k in stream for k in USEFUL_AUDIO):
+                src = raw / st["wav"]
+                if not src.is_file():
                     continue
-                src = raw / s["wav"]
-                if not src.is_file() or stream in seen:
+                role = str(st.get("role") or "").split(":")[0].lower()
+                stream = str(st.get("file") or "").lower()
+                secs = float(st.get("seconds") or 0.0)
+
+                if role in ("engine", "exhaust"):
+                    # « canon » est le nom donné par gta-extract ; il couvre aussi
+                    # les véhicules sans moteur granulaire, dont les flux n'ont
+                    # pas de nom parlant.
+                    canon = (st.get("canon") or "").lower()
+                    name = canon if canon in ENGINE_STREAMS else (
+                        stream if stream in ENGINE_STREAMS else None)
+                    lo, hi = DURATION_BOUNDS["engine"]
+                elif role == "horn":
+                    name = "horn"
+                    lo, hi = DURATION_BOUNDS["horn"]
+                elif role == "siren":
+                    kind = st.get("sirenKind")
+                    name = f"siren_{kind}" if kind else None
+                    lo, hi = DURATION_BOUNDS["siren"]
+                else:
                     continue
-                seen.add(stream)
-                dst = bundle / (stream + ".wav")
+                if name is None:
+                    continue
+                if not (lo <= secs <= hi):
+                    rejected.append({"name": name, "stream": stream,
+                                     "seconds": round(secs, 2), "reason": "duree implausible"})
+                    continue
+                # Ã  nom Ã©gal, on garde le flux le plus long (son le plus complet)
+                prev = best.get(name)
+                if prev is None or secs > prev[0]:
+                    best[name] = (secs, src, st)
+
+            entries = []
+            for name, (secs, src, st) in sorted(best.items()):
+                dst = bundle / (name + ".wav")
                 shutil.copyfile(src, dst)
-                entries.append({"name": stream, "file": dst.name, "role": s.get("role")})
+                entries.append({"name": name, "file": dst.name, "role": st.get("role"),
+                                "stream": st.get("file"), "seconds": round(secs, 2)})
             shutil.rmtree(raw, ignore_errors=True)
-            notes = [c for c in (r.get("containers") or [])]
             return _manifest(bundle, entries,
                              {"kind": "audio", "status": "ok", "audio_name": audio_name,
-                              "containers": notes,
-                              "unresolved": [s.get("file") for s in (r.get("streams") or [])
-                                             if s.get("status") != "ok"]})
+                              "engine_kind": r.get("engineKind"),
+                              "containers": list(r.get("containers") or []),
+                              "rejected": rejected,
+                              "unresolved": [st.get("file") for st in (r.get("streams") or [])
+                                             if st.get("status") != "ok"]})
 
     # -- morceaux -----------------------------------------------------------
 
     def chunk(self, bundle: str, file: str, index: int) -> dict:
-        # Validation stricte : pas de traversée de chemin, et le fichier doit
+        # Validation stricte : pas de traversÃ©e de chemin, et le fichier doit
         # figurer dans le manifeste du lot.
         if not bundle or "/" in bundle or "\\" in bundle or bundle.startswith("."):
             raise ValueError("identifiant de lot invalide")
         bdir = BUNDLES / bundle
         man_path = bdir / "manifest.json"
         if not man_path.is_file():
-            raise ValueError("lot inconnu ou expiré : " + bundle)
+            raise ValueError("lot inconnu ou expirÃ© : " + bundle)
         man = json.loads(man_path.read_text(encoding="utf-8"))
         entry = next((f for f in man["files"] if f["file"] == file), None)
         if entry is None:
@@ -272,20 +312,20 @@ class AssetService:
 TOOLS = [
     {
         "name": "gta_status",
-        "description": "État du serveur d'assets GTA V : dossier du jeu détecté, nombre d'entrées RPF, "
+        "description": "Ã‰tat du serveur d'assets GTA V : dossier du jeu dÃ©tectÃ©, nombre d'entrÃ©es RPF, "
                        "taille des morceaux de transfert.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "gta_find_textures",
-        "description": "Indique lesquelles des textures demandées existent dans le jeu de base "
-                       "(vehshare, dictionnaires de véhicules) sans rien transférer.",
+        "description": "Indique lesquelles des textures demandÃ©es existent dans le jeu de base "
+                       "(vehshare, dictionnaires de vÃ©hicules) sans rien transfÃ©rer.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "names": {"type": "array", "items": {"type": "string"},
                           "description": "noms de textures GTA, ex. vehicle_generic_detail2"},
-                "vehicle": {"type": "string", "description": "nom du modèle, ex. adder (indice de recherche)"},
+                "vehicle": {"type": "string", "description": "nom du modÃ¨le, ex. adder (indice de recherche)"},
                 "txds": {"type": "array", "items": {"type": "string"},
                          "description": "dictionnaires parents issus de txdRelationships"},
             },
@@ -294,8 +334,8 @@ TOOLS = [
     },
     {
         "name": "gta_prepare_textures",
-        "description": "Extrait les textures demandées du jeu, les convertit en PNG (<= max_size px, "
-                       "puissance de 2, alpha conservé) et renvoie un manifeste de lot avec taille, "
+        "description": "Extrait les textures demandÃ©es du jeu, les convertit en PNG (<= max_size px, "
+                       "puissance de 2, alpha conservÃ©) et renvoie un manifeste de lot avec taille, "
                        "SHA-256 et nombre de morceaux par fichier. Utiliser ensuite gta_chunk.",
         "inputSchema": {
             "type": "object",
@@ -303,15 +343,16 @@ TOOLS = [
                 "names": {"type": "array", "items": {"type": "string"}},
                 "vehicle": {"type": "string"},
                 "txds": {"type": "array", "items": {"type": "string"}},
-                "max_size": {"type": "integer", "description": "défaut 1024"},
+                "max_size": {"type": "integer", "description": "dÃ©faut 1024"},
             },
             "required": ["names"],
         },
     },
     {
         "name": "gta_prepare_audio",
-        "description": "Extrait le son vanilla d'un véhicule à partir de son audioNameHash "
-                       "(ex. ADDER) : flux moteur et échappement (accel/decel/idle) en .wav. "
+        "description": "Extrait le son vanilla d'un vÃ©hicule Ã  partir de son audioNameHash "
+                       "(ex. ADDER) : moteur et Ã©chappement (accel/decel/idle), klaxon, et "
+                       "pour un vÃ©hicule d'urgence les sirÃ¨nes (wail / yelp / priority), en .wav. "
                        "Renvoie un manifeste de lot ; utiliser ensuite gta_chunk.",
         "inputSchema": {
             "type": "object",
@@ -321,21 +362,21 @@ TOOLS = [
     },
     {
         "name": "gta_chunk",
-        "description": "Renvoie un morceau d'un fichier d'un lot, encodé en base64.",
+        "description": "Renvoie un morceau d'un fichier d'un lot, encodÃ© en base64.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "bundle": {"type": "string"},
                 "file": {"type": "string"},
-                "index": {"type": "integer", "description": "numéro de morceau, à partir de 0"},
+                "index": {"type": "integer", "description": "numÃ©ro de morceau, Ã  partir de 0"},
             },
             "required": ["bundle", "file"],
         },
     },
     {
         "name": "gta_build_index",
-        "description": "Construit l'index complet des textures des dictionnaires de véhicules "
-                       "(~30 s). Améliore la résolution des textures rares.",
+        "description": "Construit l'index complet des textures des dictionnaires de vÃ©hicules "
+                       "(~30 s). AmÃ©liore la rÃ©solution des textures rares.",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]
@@ -343,9 +384,9 @@ TOOLS = [
 
 class McpHandler(BaseHTTPRequestHandler):
     server_version = f"{SERVER_NAME}/{SERVER_VERSION}"
-    service: AssetService = None          # injecté
+    service: AssetService = None          # injectÃ©
 
-    def log_message(self, fmt, *args):    # silence les logs par requête
+    def log_message(self, fmt, *args):    # silence les logs par requÃªte
         pass
 
     # -- utilitaires HTTP ---------------------------------------------------
@@ -406,7 +447,7 @@ class McpHandler(BaseHTTPRequestHandler):
     def _handle(self, m: dict):
         if not isinstance(m, dict):
             return {"jsonrpc": "2.0", "id": None,
-                    "error": {"code": -32600, "message": "requête invalide"}}
+                    "error": {"code": -32600, "message": "requÃªte invalide"}}
         mid = m.get("id")
         method = m.get("method") or ""
         params = m.get("params") or {}
@@ -420,8 +461,8 @@ class McpHandler(BaseHTTPRequestHandler):
                     "protocolVersion": version,
                     "capabilities": {"tools": {"listChanged": False}},
                     "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-                    "instructions": "Ressources du jeu de base GTA V (textures partagées, sons de "
-                                    "véhicules) pour le skill fivem-vehicle-to-roblox.",
+                    "instructions": "Ressources du jeu de base GTA V (textures partagÃ©es, sons de "
+                                    "vÃ©hicules) pour le skill fivem-vehicle-to-roblox.",
                 }
             elif method in ("notifications/initialized", "notifications/cancelled"):
                 return None
@@ -435,7 +476,7 @@ class McpHandler(BaseHTTPRequestHandler):
                 if is_notification:
                     return None
                 return {"jsonrpc": "2.0", "id": mid,
-                        "error": {"code": -32601, "message": "méthode inconnue : " + method}}
+                        "error": {"code": -32601, "message": "mÃ©thode inconnue : " + method}}
         except Exception as exc:                                  # noqa: BLE001
             log("[erreur]", traceback.format_exc(limit=4))
             if is_notification:
@@ -474,18 +515,18 @@ class McpHandler(BaseHTTPRequestHandler):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Serveur d'assets GTA V (MCP, 127.0.0.1)")
-    ap.add_argument("--game", help="dossier de GTA V (sinon détection automatique)")
+    ap.add_argument("--game", help="dossier de GTA V (sinon dÃ©tection automatique)")
     ap.add_argument("--port", type=int, default=27300)
-    ap.add_argument("--legacy", action="store_true", help="forcer l'édition Legacy (non gen9)")
-    ap.add_argument("--prewarm", action="store_true", help="charger l'index RPF au démarrage")
+    ap.add_argument("--legacy", action="store_true", help="forcer l'Ã©dition Legacy (non gen9)")
+    ap.add_argument("--prewarm", action="store_true", help="charger l'index RPF au dÃ©marrage")
     ap.add_argument("--build-index", action="store_true",
-                    help="construire aussi l'index complet des textures au démarrage (~30 s)")
+                    help="construire aussi l'index complet des textures au dÃ©marrage (~30 s)")
     args = ap.parse_args(argv)
 
     if args.game:
         game = Path(args.game)
         if not gta_locate.is_game_folder(game):
-            log(f"ERREUR : {game} ne ressemble pas à une installation GTA V "
+            log(f"ERREUR : {game} ne ressemble pas Ã  une installation GTA V "
                 "(GTA5_Enhanced.exe / GTA5.exe + x64a.rpf attendus).")
             return 2
         gen9 = not args.legacy and gta_locate.is_gen9(game)
@@ -493,7 +534,7 @@ def main(argv=None) -> int:
         game, gen9 = gta_locate.detect()
         if game is None:
             log("ERREUR : GTA V introuvable. Relancez avec --game \"<dossier>\".")
-            log("Dossiers testés :")
+            log("Dossiers testÃ©s :")
             for c in gta_locate.candidates():
                 log("   -", c)
             return 2
@@ -508,7 +549,7 @@ def main(argv=None) -> int:
         return 2
 
     log(f"GTA V      : {game}")
-    log(f"Édition    : {'Enhanced (gen9)' if gen9 else 'Legacy'}")
+    log(f"Ã‰dition    : {'Enhanced (gen9)' if gen9 else 'Legacy'}")
     log(f"Extracteur : {exe}")
 
     svc = AssetService(game, gen9, exe)
@@ -516,32 +557,32 @@ def main(argv=None) -> int:
         try:
             svc.client.start()
             if args.build_index:
-                log("[gta] construction de l'index complet des textures …")
+                log("[gta] construction de l'index complet des textures â€¦")
                 log("[gta] " + json.dumps(svc.build_index()))
         except GtaExtractError as exc:
-            log("ERREUR au démarrage de l'extracteur :", exc)
+            log("ERREUR au dÃ©marrage de l'extracteur :", exc)
             return 3
 
     McpHandler.service = svc
-    # 127.0.0.1 uniquement : jamais exposé au réseau local.
+    # 127.0.0.1 uniquement : jamais exposÃ© au rÃ©seau local.
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", args.port), McpHandler)
     except OSError as exc:
-        log(f"ERREUR : impossible d'écouter sur 127.0.0.1:{args.port} ({exc}). "
-            "Le port est peut-être déjà pris.")
+        log(f"ERREUR : impossible d'Ã©couter sur 127.0.0.1:{args.port} ({exc}). "
+            "Le port est peut-Ãªtre dÃ©jÃ  pris.")
         return 4
     httpd.daemon_threads = True
     log("")
-    log(f"PRÊT — serveur MCP sur http://127.0.0.1:{args.port}/mcp")
+    log(f"PRÃŠT â€” serveur MCP sur http://127.0.0.1:{args.port}/mcp")
     log("")
-    log("Dans vibestarter > Paramètres > My MCP servers, ajoutez un serveur HTTP :")
+    log("Dans vibestarter > ParamÃ¨tres > My MCP servers, ajoutez un serveur HTTP :")
     log(f"    http://127.0.0.1:{args.port}/mcp")
-    log("(toute URL de chemin fonctionne : /mcp, /mc, / …)")
-    log("Ctrl+C pour arrêter.")
+    log("(toute URL de chemin fonctionne : /mcp, /mc, / â€¦)")
+    log("Ctrl+C pour arrÃªter.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        log("\nArrêt demandé.")
+        log("\nArrÃªt demandÃ©.")
     finally:
         svc.client.stop()
     return 0
