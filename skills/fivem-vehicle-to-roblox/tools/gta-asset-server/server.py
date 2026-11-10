@@ -229,7 +229,9 @@ class AssetService:
                 src = raw / st["wav"]
                 if not src.is_file():
                     continue
-                role = str(st.get("role") or "").split(":")[0].lower()
+                # le role peut etre « siren/Main » ou « engine:ChildSound » :
+                # on ne garde que la racine.
+                role = str(st.get("role") or "").split(":")[0].split("/")[0].lower()
                 stream = str(st.get("file") or "").lower()
                 secs = float(st.get("seconds") or 0.0)
 

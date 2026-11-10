@@ -321,6 +321,7 @@ internal sealed class GameLib
     {
         public string Role;
         public string Canon;          // nom attendu par f2r/audio.py
+        public uint Slot;             // emplacement du Dat54SoundSet d'origine
         public MetaHash Container;
         public MetaHash File;
         public ChainNode Node;
@@ -337,6 +338,7 @@ internal sealed class GameLib
     sealed class ChainNode
     {
         public string Role, Canon, Dict, Type, Source;
+        public uint Slot;
         public MetaHash Hash;
         public bool IsLeaf;
         public MetaHash Container, File;
@@ -392,11 +394,11 @@ internal sealed class GameLib
     /// par réflexion tous les tableaux de hashes, et tout champ de type MetaHash
     /// qui désigne lui-même un son connu.
     ChainNode Walk(MetaHash h, string role, HashSet<uint> seen, int depth, List<Want> leaves,
-                   string canon = null)
+                   string canon = null, uint slot = 0)
     {
-        var node = new ChainNode { Role = role, Canon = canon, Hash = h };
+        var node = new ChainNode { Role = role, Canon = canon, Slot = slot, Hash = h };
         if (h.Hash == 0) { node.Type = "(vide)"; return node; }
-        if (depth > 8 || leaves.Count > 96) { node.Type = "(coupé : trop profond)"; return node; }
+        if (depth > 8 || leaves.Count > 256) { node.Type = "(coupé : trop profond)"; return node; }
         if (!seen.Add(h.Hash)) { node.Type = "(déjà vu)"; return node; }
 
         string dict;
@@ -445,7 +447,7 @@ internal sealed class GameLib
                 if (c == null || c.ContainerName.Hash == 0 || c.FileName.Hash == 0) continue;
                 var cn = c.FileName.ToString();
                 node.Children.Add(Leaf(role, c.ContainerName, c.FileName, leaves,
-                                       KnownEngineStreams.Contains(cn) ? cn : null));
+                                       KnownEngineStreams.Contains(cn) ? cn : null, slot));
             }
             return node;
         }
@@ -467,40 +469,64 @@ internal sealed class GameLib
                 if (node.Canon == null && KnownEngineStreams.Contains(fname)) node.Canon = fname;
                 leaves.Add(new Want
                 {
-                    Role = role, Canon = node.Canon,
+                    Role = role, Canon = node.Canon, Slot = slot,
                     Container = node.Container, File = node.File, Node = node,
                 });
                 return node;
             }
         }
 
-        // Cas 3 : conteneur logique -> on descend.
+        // Cas 3 : ensemble nomme (Dat54SoundSet) -> chaque enfant porte un
+        // ScriptName, seul libelle fiable pour distinguer les tonalites.
+        var set = rd as Dat54SoundSet;
+        if (set != null && set.SoundSets != null && set.SoundSets.Length > 0)
+        {
+            foreach (var it in set.SoundSets)
+            {
+                if (it == null || it.ChildSound.Hash == 0) continue;
+                var label = SirenSlotLabel(it.ScriptName.Hash, it.ScriptName.ToString());
+                node.Props.Add("SoundSet[" + label + "] -> " + it.ChildSound.ToString());
+                // Chaque emplacement est resolu avec son propre jeu de « deja vu » :
+                // plusieurs emplacements partagent souvent les memes sous-arbres, et
+                // un ensemble partage masquerait les feuilles des emplacements suivants.
+                node.Children.Add(Walk(it.ChildSound, role + "/" + label, new HashSet<uint>(),
+                                       depth + 1, leaves, canon, it.ScriptName.Hash));
+            }
+            return node;
+        }
+
+        // Cas 4 : conteneur logique -> on descend.
         foreach (var pi in arrays)
         {
             MetaHash[] arr;
             try { arr = pi.GetValue(rd) as MetaHash[]; } catch { continue; }
             if (arr == null) continue;
             foreach (var ch in arr)
-                if (ch.Hash != 0) node.Children.Add(Walk(ch, role, seen, depth + 1, leaves, canon));
+                if (ch.Hash != 0) node.Children.Add(Walk(ch, role, seen, depth + 1, leaves, canon, slot));
         }
         foreach (var pi in hashes)
         {
             MetaHash v;
             try { v = (MetaHash)pi.GetValue(rd); } catch { continue; }
             if (v.Hash == 0 || !soundsDict.ContainsKey(v)) continue;
-            node.Children.Add(Walk(v, role + ":" + pi.Name, seen, depth + 1, leaves, canon));
+            node.Children.Add(Walk(v, role + ":" + pi.Name, seen, depth + 1, leaves, canon, slot));
         }
         return node;
     }
 
-    ChainNode Leaf(string role, MetaHash container, MetaHash file, List<Want> leaves, string canon)
+    ChainNode Leaf(string role, MetaHash container, MetaHash file, List<Want> leaves,
+                   string canon, uint slot)
     {
         var n = new ChainNode
         {
-            Role = role, Canon = canon, IsLeaf = true, Hash = file,
+            Role = role, Canon = canon, Slot = slot, IsLeaf = true, Hash = file,
             Container = container, File = file, Type = "(flux AWC)",
         };
-        leaves.Add(new Want { Role = role, Canon = canon, Container = container, File = file, Node = n });
+        leaves.Add(new Want
+        {
+            Role = role, Canon = canon, Slot = slot,
+            Container = container, File = file, Node = n,
+        });
         return n;
     }
 
@@ -593,6 +619,48 @@ internal sealed class GameLib
 
     static readonly string[] SirenKinds = { "wail", "yelp", "priority" };
 
+    // Les sirenes d'un vehicule sont un Dat54SoundSet dont chaque entree porte un
+    // « ScriptName ». Ces emplacements sont les MEMES pour tous les vehicules
+    // d'urgence (verifie sur POLICE, POLICE2, SHERIFF, AMBULANCE, FIRETRUK et
+    // POLIGNUS du DLC 2026) : seuls les sons enfants changent. Quatre de ces noms
+    // ont pu etre retrouves par hash Jenkins, les autres sont identifies par leur
+    // hash, stable d'un DLC a l'autre.
+    static readonly Dictionary<uint, string> SirenSlotNames = new Dictionary<uint, string>
+    {
+        { 1043621919u, "Horn" },
+        { 1689781374u, "Fast" },
+        { 3303937151u, "Slow" },
+        { 3410657623u, "Horn_Fast" },
+        { 3642518543u, "Horn_Slow" },
+        { 3911129148u, "Warning" },
+        { 1305684053u, "Main" },        // porte la sirene propre au vehicule
+        { 1410818973u, "Shared" },      // identique pour tous les vehicules
+    };
+
+    static string SirenSlotLabel(uint hash, string fallback)
+    {
+        string n;
+        return SirenSlotNames.TryGetValue(hash, out n) ? n : fallback;
+    }
+
+    // Emplacement -> tonalite attendue par le runtime Roblox, par ordre de
+    // preference. « Main » porte la sirene specifique du vehicule, « Slow » sert
+    // de repli pour le wail, « Fast » donne le yelp et « Warning » le hi-lo.
+    static readonly (uint slot, string kind)[] SirenSlotKinds =
+    {
+        (1305684053u, "wail"),
+        (3303937151u, "wail"),
+        (1689781374u, "yelp"),
+        (3303937151u, "yelp"),
+        (3911129148u, "priority"),
+        (3410657623u, "priority"),
+    };
+
+    // Fenetres de duree plausibles par tonalite : le wail est une longue
+    // montee-descente, le yelp et le hi-lo sont des boucles courtes.
+    static bool PlausibleFor(string kind, double secs)
+        => kind == "wail" ? secs >= 1.5 : (secs >= 0.15 && secs <= 2.5);
+
     /// Devine le type de sirène d'après les noms de flux et de conteneur.
     /// La plupart des flux de sirène n'ont pas de nom connu (hash seul) : on
     /// retombe alors sur la durée (voir ClassifySirens).
@@ -617,17 +685,42 @@ internal sealed class GameLib
     {
         var kinds = new Dictionary<ChainNode, string>();
         var used = new HashSet<string>();
+        var usedFiles = new HashSet<uint>();
 
         // 1) les rares flux réellement nommés
         foreach (var n in sirens)
         {
             var k = SirenKindByName(n);
-            if (k != null && used.Add(k)) kinds[n] = k;
+            if (k != null && used.Add(k)) { kinds[n] = k; usedFiles.Add(n.File.Hash); }
         }
 
-        // 2) les autres, par durée décroissante, en évitant les doublons de flux
+        // 2) par emplacement du SoundSet : c'est la source la plus sure, puisque
+        //    c'est le jeu lui-meme qui range chaque son dans un emplacement nomme.
+        foreach (var pref in SirenSlotKinds)
+        {
+            if (used.Contains(pref.kind)) continue;
+            ChainNode best = null;
+            foreach (var n in sirens)
+            {
+                if (n.Slot != pref.slot || kinds.ContainsKey(n)) continue;
+                if (usedFiles.Contains(n.File.Hash)) continue;
+                if (!PlausibleFor(pref.kind, n.Seconds)) continue;
+                // wail : le plus long ; tonalites courtes : la plus courte
+                if (best == null
+                    || (pref.kind == "wail" ? n.Seconds > best.Seconds : n.Seconds < best.Seconds))
+                    best = n;
+            }
+            if (best != null)
+            {
+                kinds[best] = pref.kind;
+                used.Add(pref.kind);
+                usedFiles.Add(best.File.Hash);
+            }
+        }
+
+        // 3) ce qui reste, par durée décroissante, en évitant les doublons de flux
         var rest = new List<ChainNode>();
-        var seenFile = new HashSet<uint>();
+        var seenFile = new HashSet<uint>(usedFiles);
         foreach (var n in sirens)
         {
             if (kinds.ContainsKey(n)) { seenFile.Add(n.File.Hash); continue; }
@@ -641,10 +734,10 @@ internal sealed class GameLib
             foreach (var k in SirenKinds)
                 if (!used.Contains(k)) { pick = k; break; }
             if (pick == null) break;
-            // un « wail » doit être long : sinon on laisse la synthèse s'en charger
-            if (pick == "wail" && n.Seconds < 1.5)
+            if (!PlausibleFor(pick, n.Seconds))
             {
-                used.Add("wail");
+                // rien de plausible pour cette tonalite : la synthese s'en charge
+                used.Add(pick);
                 continue;
             }
             kinds[n] = pick;
@@ -776,6 +869,7 @@ internal sealed class GameLib
             {
                 ["role"] = w.Role,
                 ["canon"] = w.Canon,
+                ["slot"] = w.Slot == 0 ? null : SirenSlotLabel(w.Slot, w.Slot.ToString()),
                 ["container"] = w.Container.ToString(),
                 ["file"] = w.File.ToString(),
                 ["status"] = n.Status ?? "unresolved",
