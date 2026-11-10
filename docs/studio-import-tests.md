@@ -130,6 +130,44 @@ Bruit à ignorer : dans une place qui contient d'autres véhicules, la console s
 identifiants du véhicule converti n'y figurait. Lire les résultats de Verify, pas le compte d'erreurs
 de `playtest_check`.
 
+## Hitbox fidèle (ajout du 2026-11-10, soir)
+
+Demande : une hitbox « accurate » à la voiture, au lieu de la boîte englobante.
+
+- **Source** : la collision du jeu, déjà dans le `.yft` (`Physics/LOD1/Archetype/Bounds`, composite).
+  m422 : 17 enfants → 11 maillages gardés (238 triangles : châssis 122, capot 32, coffre 20,
+  portières 16, pare-brise 8, vitres 4), 4 disques de roue, et deux écartés (`chassis_lowlod`,
+  doublon du châssis ; `chassis_dummy`, boîte). Chaque enfant i est relié au groupe
+  `Children[i].GroupIndex` → `Groups[g].Name` = l'os qui le porte. Sommets relatifs à
+  `GeometryCenter`, puis `CompositeTransform` (translation en dernière ligne).
+- **Convexité** (orientation par volume signé) : châssis fermé, 7,5 m³ (volume déclaré 7,3), mais
+  concave (dépassement jusqu'à 65 cm) ; capot et coffre concaves ; vitres ouvertes → tous en
+  `PreciseConvexDecomposition` sur m422. Disque de roue : la marge vaut le rayon ; largeur = 2 × BoxMax.x
+  (0,296 m pour un pneu visible de 0,297 m).
+- **Précision dans Studio** : écrire `CollisionFidelity` par script est **ignoré sans erreur** (reste
+  `Default`) ; `CreateMeshPartAsync(part.MeshContent, {CollisionFidelity = …})` + `ApplyMesh` marche
+  (≈ 0,4 s par pièce au premier passage) et garde la taille (pièce agrandie ×3,571) et la position.
+- **Fidélité mesurée** (Verify, Edit) : 400 rayons depuis les 6 faces de l'emprise, distance de la
+  hitbox comparée à celle de la carrosserie visible (collision par défaut des pièces visibles, rendues
+  interrogeables le temps du test), tolérance 15 cm :
+
+  | Hitbox | À moins de 15 cm | Trop large | Trop juste |
+  |---|---|---|---|
+  | collision GTA | **86 %** | 12 % | 2 % |
+  | ancienne boîte | 34 % | 66 % | 0 % |
+
+  « Trop large » : la collision GTA enveloppe calandre, passages de roues et bas de caisse ; « trop
+  juste » : rétroviseurs (sans collision dans le jeu).
+- **En jeu** (Play, client à 61 i/s) : un personnage lâché se pose sur `col__bonnet__1` à +1,55 stud
+  (capot), `col__boot__1` à +2,02 (coffre), `col__chassis__1` à +3,22 (toit) ; la boîte le portait à
+  +3,17 partout. Portière ouverte : sa collision et celle de sa vitre tournent de 70° avec elle.
+- **Bug trouvé en route** : `FiveMVehiclesClient` attachait le rendu une seule fois au démarrage ; si le
+  modèle n'était pas encore entièrement répliqué, le véhicule restait inerte (portes à 0°). Verify le
+  masquait (il attachait lui-même). Corrigé (attente de `game.Loaded`, nouvelles tentatives pendant
+  30 s) ; Verify contrôle désormais l'attachement automatique. Le Setup règle aussi
+  `ModelStreamingMode = Atomic`.
+- Passage final propre (place sans runtime) : Edit 42 réussis / 0 échec ; client 23/23.
+
 ## Reproduire
 
 ```bash

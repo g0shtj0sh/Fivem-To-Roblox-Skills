@@ -47,3 +47,6 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 | Véhicule qui flotte après import | hauteur d'insertion conservée | le Setup pose le véhicule au sol (`_G.F2R_NO_GROUND = true` pour l'éviter) |
 | Restaurer une sauvegarde laisse les néons allumés | `Custom.Apply` ne réinitialisait pas les clés absentes | corrigé : néons, xénons, mods, extras, vitres, perfs reviennent à l'origine |
 | Centaines de « Failed to load sound … no permission » | sons d'autres véhicules de la place | sans rapport : lire le rapport de Verify |
+| `CollisionFidelity` d'une MeshPart reste `Default` après l'avoir écrite par script | propriété non modifiable par script (ignorée sans erreur, mesuré) | `AssetService:CreateMeshPartAsync(part.MeshContent, {CollisionFidelity = …})` puis `part:ApplyMesh(tmp)` : taille et position gardées |
+| Véhicule inerte en jeu (ni lumières, ni portes, ni sons) alors que tout est installé | `FiveMVehiclesClient` attachait le rendu une seule fois, avant la fin de la réplication | corrigé (attente de `game.Loaded` + nouvelles tentatives) ; Verify contrôle « rendu attaché par FiveMVehiclesClient » |
+| Joueur qui flotte au-dessus du capot / hitbox en boîte | collision non reprise du .yft | collision GTA (automatique) ; si le .yft n'a pas de `Physics`, la boîte reste (avertissement du rapport) |

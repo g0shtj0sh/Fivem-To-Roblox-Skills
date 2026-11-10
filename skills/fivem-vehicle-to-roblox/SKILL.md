@@ -41,12 +41,14 @@ cd skills/fivem-vehicle-to-roblox
 python scripts/convert_vehicle.py "<zip>" -o "<sortie>" [--plate "TEXTE"] [--texture-overrides <dossier>]
 ```
 Options : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (> 300 000 triangles),
+`--no-collision` (hitbox = simple boîte), `--wheel-collision` (cylindres de roues solides),
 `--studs-per-meter`, `--texture-overrides <dossier>` (PNG/DDS de même nom qui remplacent les
 textures du pack : rebadge, retouches), `--sound-ids <json>`, `--retry-gamefiles`, `--no-game-server`.
 Code 2 = binaires sans extracteur : installer .NET 8 (ci-dessus) et relancer ; sinon export XML
 CodeWalker par l'utilisateur ; `dlc.rpf` chiffré → OpenIV.
 
-Lire `<sortie>/<nom>/report.md` : « texture(s) reprises du jeu de base », « vrai son du jeu »,
+Lire `<sortie>/<nom>/report.md` : « Hitbox : collision officielle du véhicule » (sinon boîte
+englobante : le .yft n'avait pas de `Physics/Bounds`, le signaler), « texture(s) reprises du jeu de base », « vrai son du jeu »,
 ligne « Transfert depuis le serveur d'assets » (fichiers, Mo, secondes). Une texture
 `vehshare`/`vehicle_generic_*` manquante ou un son synthétisé = serveur d'assets injoignable.
 
@@ -60,6 +62,20 @@ En parallèle :
 - Relancer la conversion avec `--sound-ids <sortie>/<nom>/sounds/sound_ids.json` (cache : ~15 s) pour
   intégrer les SoundId au Setup. Le GLB est identique d'une conversion à l'autre (déterministe) :
   pas de nouvel upload.
+
+## Hitbox fidèle (automatique)
+
+Le `.yft` contient la **collision officielle du véhicule** (Physics/LOD1, `Bound` composite) :
+carrosserie, capot, coffre, portières, vitres en maillages bas-poly (≈ 240 triangles), roues en
+disques. Le convertisseur l'exporte dans le GLB (`col__<os>__<n>`, écarte `*_lowlod` / `*_dummy`) ;
+le Setup en fait des pièces **invisibles, solides et interrogeables** dans `Collision/<os>/`,
+**soudées à leur os** (une portière ouverte garde sa collision), règle leur précision
+(`Hull` si le morceau est convexe, sinon `PreciseConvexDecomposition`, par `CreateMeshPartAsync` +
+`ApplyMesh` : écrire `CollisionFidelity` par script est ignoré sans erreur), ajoute les roues en
+cylindres (rayons et contacts ; solides avec `--wheel-collision`) et neutralise la boîte `Hitbox`
+(gardée comme volume englobant, attribut `BoundsOnly`). Mesuré sur m422 : 86 % des rayons à moins de
+15 cm de la carrosserie visible contre 34 % avec la boîte ; un joueur se pose sur le capot à +1,55 stud
+au lieu de +3,17. Voir la hitbox : rendre `Collision` visible (Transparency 0,5) le temps d'une capture.
 
 ## 3. Préparer les scripts pour Studio (sans recopier 100 Ko de code)
 
@@ -110,6 +126,9 @@ _G.F2R_SOUND_IDS = T.<nom>_sound_ids.Value ; run("ApplySoundIds")`.
 **Edit** — `require(T.Verify:Clone())({ model = <modèle> })` : runtime installé ; pièces présentes et
 nommées (`F2RExpectedParts`) ; véhicule droit, avant vers −Z ; échelle (empattement à 1 % près) ;
 phares devant les feux ; pièces dans l'emprise ; posé au sol ; roues à leur place et du bon côté ;
+hitbox (morceaux et roues présents, invisibles et solides, soudés à leur os, précision réglée, boîte
+neutralisée, **fidélité par 400 rayons** depuis les 6 faces comparée à la carrosserie visible et à la
+boîte : ≥ 80 % à moins de 15 cm) ;
 SoundId renseignés ; SetColor / SetMod / SetLivery / SetExtra / SetNeon / SetPlate et
 Serialize → Apply qui restaure l'état.
 
@@ -117,7 +136,8 @@ Serialize → Apply qui restaure l'état.
 1. `start_stop_play` (is_start = true).
 2. `execute_luau` Client :
    `require(game.ReplicatedStorage.rbxts_include.F2R_Transfer.Verify)({ model = workspace.F2R_ImportTest:WaitForChild("<nom>"), checks = {"joints","lights","sounds","audio"} })`
-   → portes/capot/coffre à l'angle de `Hinges` via `Door_*`, roues et volant via la télémétrie, chaque
+   → rendu attaché **tout seul** par `FiveMVehiclesClient` (sinon : véhicule inerte en jeu),
+   portes/capot/coffre à l'angle de `Hinges` via `Door_*`, roues et volant via la télémétrie, chaque
    LightRole en Neon (ou sa lumière allumée) pour Headlights 1/2, Brake, Reverse, Indicator
    Left/Right/Hazard, Engine, Siren ; sons chargés ; moteur audible.
 3. Conduite : `execute_luau` Server — asseoir le joueur (`seat:Sit(humanoid)` sur `Seats.DriverSeat`)
@@ -139,6 +159,9 @@ Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) 
 | rôle de lumière resté éteint | pièce sans `LightRole`, ID de lumière inconnu | `references/gta-format.md` (IDs de lumières) ; corriger `f2r/vehicle.py` |
 | SoundId vides / sons non chargés | upload non fait ou refusé | § 2 ; `ApplySoundIds` |
 | Serialize / Apply | état non restauré | `roblox/runtime/VehicleCustomization.lua` |
+| hitbox : précision `Default` | `ApplyMesh` refusé (mesh non chargé, droits) | relancer le Setup ; vérifier que le GLB est un asset du propriétaire de la place |
+| hitbox fidèle < 80 % | collision du mod grossière ou absente | lire « trop large / trop juste » ; mod sans `Physics` → boîte (signaler) |
+| rendu non attaché par FiveMVehiclesClient | runtime d'avant le correctif du 2026-11-10 | réinstaller `FiveMRuntime` (nouvelle version) |
 
 Après une correction du skill : reconvertir, réinstaller (supprimer le modèle, § 4b à 6) et revérifier.
 Une modification du runtime se propage par `FiveMRuntime` (version = empreinte des sources).

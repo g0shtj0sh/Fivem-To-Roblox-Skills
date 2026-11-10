@@ -27,7 +27,10 @@ ré-installer un modèle déjà installé : ré-importer le `.glb` pour recommen
 ├─ VehicleRoot      Part 1×1×1 invisible à l'origine du véhicule, ANCRÉE (désancre-la pour ta physique)
 │  ├─ Light_headlight_l (Attachment + SpotLight) … Light_indicator_rr …
 │  └─ Sounds (Attachment) : engine_on_1..4 / engine_off_1..4, Idle, Start, Horn, IndicatorOn/Off, Siren_*
-├─ Hitbox           boîte englobante, CanCollide, soudée à la racine
+├─ Hitbox           boîte englobante ; solide seulement sans collision GTA (sinon BoundsOnly : ni collision ni rayons)
+├─ Collision/<os>/  hitbox fidèle : col__<os>__<n> (MeshParts invisibles, CanCollide/CanQuery/CanTouch,
+│                   précision Hull ou PreciseConvexDecomposition), Collision_wheel_* (cylindres) ;
+│                   soudées à la racine ou au pivot de leur os (suivent portes, capot, coffre, roues)
 ├─ Visual/<propriétaire>/MeshParts   (Massless, CanCollide=false) + Mod_<Slot>_<n>/
 ├─ Joints/          Pivot_<os> + Motor6D <os> (roues, portes, capot, coffre, volant, gyrophares)
 ├─ Seats/           DriverSeat, Seat_seat_pside_f…
@@ -43,6 +46,7 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 
 | Attribut | Type | Rôle |
 |---|---|---|
+| `CollisionSource` | "gta"/"box" | origine de la hitbox (collision officielle du .yft, ou boîte englobante) |
 | `Engine` | bool | moteur allumé (auto au passage du conducteur, `AutoStartEngine`) |
 | `Headlights` | 0/1/2 | éteint / codes / pleins phares |
 | `Indicator` | "Off"/"Left"/"Right"/"Hazard" | clignotants |
