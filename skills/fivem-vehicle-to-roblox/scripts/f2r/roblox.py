@@ -76,19 +76,74 @@ def runtime_sources() -> dict[str, str]:
     }
 
 
-def build_setup(config: dict, parts: dict, sound_ids: dict[str, str]) -> str:
+def runtime_version() -> str:
+    """Empreinte courte des sources runtime : le Setup « studio/ » vérifie qu'elles sont installées."""
+    import hashlib
+    h = hashlib.sha256()
+    for k, v in sorted(runtime_sources().items()):
+        h.update(k.encode() + b"\0" + v.encode("utf-8"))
+    return h.hexdigest()[:12]
+
+
+def build_setup(config: dict, parts: dict, sound_ids: dict[str, str], *,
+                include_runtime: bool = True, include_config_source: bool = True) -> str:
+    """Setup complet (Modèle › Exécuter un script) ; variante compacte pour execute_luau avec
+    include_runtime=False (runtime posé par build_runtime_install) et include_config_source=False
+    (VehicleConfig sérialisé dans Studio depuis CONFIG)."""
     tpl = (RUNTIME_DIR / "Setup.template.lua").read_text(encoding="utf-8")
     srcs = runtime_sources()
-    sources_lua = "{\n" + "".join(f"\t{k} = {long_string(v)},\n" for k, v in srcs.items()) + "}"
+    sources_lua = ("{\n" + "".join(f"\t{k} = {long_string(v)},\n" for k, v in srcs.items()) + "}"
+                   if include_runtime else "nil")
     config_source = "-- Généré par fivem-vehicle-to-roblox\nreturn " + to_lua(config)
     repl = {
         "__VEHICLE_NAME__": config["Name"],
         "__CONFIG_TABLE__": to_lua(config),
-        "__CONFIG_SOURCE__": long_string(config_source),
+        "__CONFIG_SOURCE__": long_string(config_source) if include_config_source else "nil",
         "__PARTS_TABLE__": to_lua(parts),
         "__SOUND_IDS__": to_lua(sound_ids or {}),
         "__RUNTIME_SOURCES__": sources_lua,
+        "__RUNTIME_VERSION__": lua_string(runtime_version()),
     }
     # remplacement en une passe pour ne jamais ré-interpréter le contenu injecté
     pattern = re.compile("|".join(re.escape(k) for k in repl))
     return pattern.sub(lambda m: repl[m.group(0)], tpl)
+
+
+def build_runtime_install() -> str:
+    """Installe / met à jour les modules runtime seuls (une fois par place)."""
+    srcs = runtime_sources()
+    body = "{\n" + "".join(f"\t{k} = {long_string(v)},\n" for k, v in srcs.items()) + "}"
+    return (RUNTIME_DIR / "RuntimeInstall.template.lua").read_text(encoding="utf-8") \
+        .replace("__RUNTIME_VERSION__", lua_string(runtime_version())) \
+        .replace("__RUNTIME_SOURCES__", body)
+
+
+def split_for_execute_luau(source: str, key: str, max_bytes: int = 20000) -> list[str]:
+    """Découpe un gros script en appels execute_luau : chaque morceau s'ajoute à
+    _G.F2R_BUF[key] ; le dernier l'assemble et l'exécute avec loadstring, et renvoie
+    son résultat. Coupé sur des fins de ligne (jamais au milieu d'un caractère UTF-8)."""
+    lines = source.splitlines(keepends=True)
+    chunks, cur, size = [], [], 0
+    for ln in lines:
+        b = len(ln.encode("utf-8"))
+        if cur and size + b > max_bytes:
+            chunks.append("".join(cur))
+            cur, size = [], 0
+        cur.append(ln)
+        size += b
+    if cur:
+        chunks.append("".join(cur))
+    out = []
+    n = len(chunks)
+    for i, c in enumerate(chunks, 1):
+        head = (f"_G.F2R_BUF = _G.F2R_BUF or {{}}\n"
+                + (f"_G.F2R_BUF[{lua_string(key)}] = {{}}\n" if i == 1 else "")
+                + f"table.insert(_G.F2R_BUF[{lua_string(key)}], {long_string(c)})\n")
+        if i < n:
+            out.append(head + f"return \"{key} {i}/{n}\"\n")
+        else:
+            out.append(head + f"local src = table.concat(_G.F2R_BUF[{lua_string(key)}])\n"
+                       f"_G.F2R_BUF[{lua_string(key)}] = nil\n"
+                       f"local fn, err = loadstring(src, {lua_string('=' + key)})\n"
+                       "assert(fn, err)\nreturn fn()\n")
+    return out

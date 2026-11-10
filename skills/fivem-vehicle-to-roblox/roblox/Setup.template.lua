@@ -19,7 +19,8 @@ local CONFIG = __CONFIG_TABLE__
 local CONFIG_SOURCE = __CONFIG_SOURCE__
 local PARTS = __PARTS_TABLE__
 local SOUND_IDS = __SOUND_IDS__ -- { ["engine_on_1.wav"] = "rbxassetid://123", ... } (vide = à remplir)
-local SOURCES = __RUNTIME_SOURCES__
+local SOURCES = __RUNTIME_SOURCES__ -- nil dans la variante « studio/ » : runtime installé à part (FiveMRuntime.lua)
+local RUNTIME_VERSION = __RUNTIME_VERSION__
 
 local Selection = game:GetService("Selection")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
@@ -50,8 +51,11 @@ end
 ChangeHistoryService:SetWaypoint("FiveM vehicle setup: début")
 
 -- ------------------------------------------------------------------ 1. modèle importé
-local model
-for _, s in ipairs(Selection:Get()) do
+-- Automatisation (execute_luau) : _G.F2R_TARGET désigne le modèle importé, sans sélection.
+local model = typeof(_G.F2R_TARGET) == "Instance" and _G.F2R_TARGET:IsA("Model") and _G.F2R_TARGET or nil
+local NO_GROUND = _G.F2R_NO_GROUND == true -- true : garder la hauteur d'import (pas de pose au sol)
+_G.F2R_TARGET, _G.F2R_NO_GROUND = nil, nil
+for _, s in ipairs(model and {} or Selection:Get()) do
 	if s:IsA("Model") then
 		model = s
 		break
@@ -79,12 +83,17 @@ for _, d in ipairs(model:GetDescendants()) do
 		byName[d.Name] = d
 	end
 end
-local missing = 0
+local missing, expected, missingNames = 0, 0, {}
 for name in pairs(PARTS) do
+	expected += 1
 	if not byName[name] then
 		missing += 1
+		table.insert(missingNames, name)
 	end
 end
+table.sort(missingNames)
+model:SetAttribute("F2RExpectedParts", expected)
+model:SetAttribute("F2RMissingParts", table.concat(missingNames, ","))
 if missing > 0 then
 	warnf("%d pièce(s) attendue(s) introuvable(s) dans le modèle importé (noms modifiés par l'importeur ?)", missing)
 end
@@ -574,16 +583,52 @@ do
 end
 
 -- ------------------------------------------------------------------ 12. config + attributs
+local function luaLiteral(v, indent)
+	indent = indent or ""
+	local t = typeof(v)
+	if t == "string" then
+		return string.format("%q", v)
+	elseif t == "number" then
+		if v ~= v or v == math.huge or v == -math.huge then
+			return "0"
+		end
+		return (v == math.floor(v) and math.abs(v) < 1e15) and string.format("%d", v) or string.format("%.6g", v)
+	elseif t == "boolean" or t == "nil" then
+		return tostring(v)
+	elseif t == "table" then
+		local keys = {}
+		for k in pairs(v) do
+			table.insert(keys, k)
+		end
+		if #keys == 0 then
+			return "{}"
+		end
+		table.sort(keys, function(a, b)
+			if type(a) == type(b) then
+				return a < b
+			end
+			return type(a) == "number"
+		end)
+		local inner = indent .. "\t"
+		local parts = {}
+		for _, k in ipairs(keys) do
+			local key = (type(k) == "string" and string.match(k, "^[%a_][%w_]*$")) and k or ("[" .. luaLiteral(k) .. "]")
+			table.insert(parts, inner .. key .. " = " .. luaLiteral(v[k], inner))
+		end
+		return "{\n" .. table.concat(parts, ",\n") .. ",\n" .. indent .. "}"
+	end
+	return "nil"
+end
 local cfgModule = Instance.new("ModuleScript")
 cfgModule.Name = "VehicleConfig"
-cfgModule.Source = CONFIG_SOURCE
+cfgModule.Source = CONFIG_SOURCE or ("-- Généré par fivem-vehicle-to-roblox\nreturn " .. luaLiteral(CONFIG))
 cfgModule.Parent = model
 
 local defaults = {
 	Engine = false, Headlights = 0, Indicator = "Off", Siren = false, SirenSound = "wail",
 	HasSiren = CONFIG.HasSiren == true, Horn = false, Brake = false, Reverse = false,
 	Throttle = 0, Steer = 0, Livery = CONFIG.DefaultLivery or 0, PlateText = CONFIG.PlateText or "F2R 000",
-	AutoStartEngine = true, WindowTint = 0.45,
+	AutoStartEngine = true, WindowTint = 0.45, Neon = false,
 }
 for k, v in pairs(defaults) do
 	model:SetAttribute(k, v)
@@ -617,27 +662,68 @@ local function upsert(parent, className, name, source)
 	obj.Parent = parent
 	return obj
 end
-upsert(folder, "ModuleScript", "VehicleRuntime", SOURCES.VehicleRuntime)
-upsert(folder, "ModuleScript", "VehicleCustomization", SOURCES.VehicleCustomization)
-upsert(folder, "ModuleScript", "VehicleInput", SOURCES.VehicleInput)
-upsert(folder, "RemoteEvent", "VehicleEvent")
-if not folder:FindFirstChild("VehicleTelemetry") then
-	local ok = pcall(function()
-		upsert(folder, "UnreliableRemoteEvent", "VehicleTelemetry")
-	end)
-	if not ok then
-		upsert(folder, "RemoteEvent", "VehicleTelemetry")
+if SOURCES then
+	upsert(folder, "ModuleScript", "VehicleRuntime", SOURCES.VehicleRuntime)
+	upsert(folder, "ModuleScript", "VehicleCustomization", SOURCES.VehicleCustomization)
+	upsert(folder, "ModuleScript", "VehicleInput", SOURCES.VehicleInput)
+	upsert(folder, "RemoteEvent", "VehicleEvent")
+	if not folder:FindFirstChild("VehicleTelemetry") then
+		local ok = pcall(function()
+			upsert(folder, "UnreliableRemoteEvent", "VehicleTelemetry")
+		end)
+		if not ok then
+			upsert(folder, "RemoteEvent", "VehicleTelemetry")
+		end
 	end
+	upsert(ServerScriptService, "Script", "FiveMVehiclesServer", SOURCES.Server)
+	upsert(StarterPlayer:WaitForChild("StarterPlayerScripts"), "LocalScript", "FiveMVehiclesClient", SOURCES.Client)
+	folder:SetAttribute("RuntimeVersion", RUNTIME_VERSION)
+elseif folder:GetAttribute("RuntimeVersion") ~= RUNTIME_VERSION then
+	warnf("Runtime FiveMVehicles absent ou d'une autre version (%s, attendu %s) : exécuter studio/FiveMRuntime.lua.",
+		tostring(folder:GetAttribute("RuntimeVersion")), RUNTIME_VERSION)
 end
-upsert(ServerScriptService, "Script", "FiveMVehiclesServer", SOURCES.Server)
-upsert(StarterPlayer:WaitForChild("StarterPlayerScripts"), "LocalScript", "FiveMVehiclesClient", SOURCES.Client)
 
 -- application de la livrée / couleurs / visibilité par défaut (code partagé avec le runtime)
-local okCustom, Custom = pcall(require, folder.VehicleCustomization)
+-- copie : en Edit, require() renverrait la version chargée plus tôt dans la session Studio
+local okCustom, Custom = pcall(function()
+	return require(folder.VehicleCustomization:Clone())
+end)
 if okCustom then
 	Custom.Apply(model, Custom.Serialize(model))
 else
 	warnf("Impossible de charger VehicleCustomization dans Studio : %s", tostring(Custom))
+end
+
+-- ------------------------------------------------------------------ 14. pose au sol
+-- Le modèle arrive à la hauteur d'import (Importer 3D, insert_asset) : on pose le bas des roues
+-- sur ce qu'il y a dessous (rayon vers le bas, véhicule exclu), à 200 studs au plus.
+local groundedBy = nil
+if not NO_GROUND then
+	local lowest = math.huge
+	for _, w in pairs(CONFIG.Wheels or {}) do
+		lowest = math.min(lowest, (w.Position[2] - (w.Radius or 0.35)) * spm)
+	end
+	if lowest == math.huge then
+		lowest = lo.Y
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { model }
+	local hit = workspace:Raycast(root.Position + Vector3.new(0, 2, 0), Vector3.new(0, -200, 0), params)
+	if hit then
+		groundedBy = hit.Position.Y - (root.Position.Y + lowest)
+		model:PivotTo(model:GetPivot() + Vector3.new(0, groundedBy, 0))
+		log(string.format("Posé au sol (%+.2f studs, sur %s).", groundedBy, hit.Instance:GetFullName()))
+	else
+		warnf("Pas de sol sous le véhicule (200 studs) : laissé à sa hauteur d'import.")
+	end
+end
+
+-- conteneurs vides laissés par l'importeur (Model « <pièce>_Node » d'insert_asset, etc.)
+for _, d in ipairs(model:GetDescendants()) do
+	if d:IsA("Model") and d.Parent and #d:GetDescendants() == 0 then
+		d:Destroy()
+	end
 end
 
 Selection:Set({ model })
@@ -648,3 +734,14 @@ log(string.format("« %s » installé : %d pièces, %d articulations, %d mods, %
 if #warnings > 0 then
 	log(#warnings .. " avertissement(s) — voir ci-dessus.")
 end
+return {
+	ok = true,
+	model = model:GetFullName(),
+	parts = #visual:GetDescendants(),
+	joints = #jointsFolder:GetChildren(),
+	liveries = #liveries:GetChildren(),
+	missingParts = missing,
+	missingSounds = missingSounds,
+	groundedBy = groundedBy,
+	warnings = warnings,
+}

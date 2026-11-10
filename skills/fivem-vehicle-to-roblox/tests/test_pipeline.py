@@ -72,6 +72,30 @@ def test_pipeline():
         assert cfg["HasSiren"] is True
         setup = (out / "testcar_Setup.lua").read_text()
         assert "__CONFIG_TABLE__" not in setup and "local SOURCES" in setup
+        assert "__RUNTIME_VERSION__" not in setup and "F2RExpectedParts" in setup
+        # variante studio/ pour l'automatisation par execute_luau
+        sdir = out / "studio"
+        man = json.loads((sdir / "manifest.json").read_text())
+        assert man["vehicle"] == "testcar" and len(man["runtime_version"]) == 12
+        compact = (sdir / "testcar_Setup.studio.lua").read_text()
+        assert "local SOURCES = nil" in compact and "local CONFIG_SOURCE = nil" in compact
+        assert man["runtime_version"] in compact
+        assert (sdir / "Verify.lua").exists() and (sdir / "ApplySoundIds.lua").exists()
+        runtime = (sdir / "FiveMRuntime.lua").read_text()
+        assert "__RUNTIME_SOURCES__" not in runtime and "VehicleCustomization" in runtime
+        # chaque étape découpée doit se recomposer exactement en sa source
+        import re
+        for step, src in (("FiveMRuntime", runtime), ("testcar_Setup", compact)):
+            calls = next(s["calls"] for s in man["steps"] if s["key"] == step)
+            parts = []
+            for c in calls:
+                code = (sdir / c).read_text()
+                assert len(code.encode()) < 21000, c
+                m = re.search(r"table\.insert\(_G\.F2R_BUF\[\"[^\"]+\"\], \[(=+)\[\n(.*)\]\1\]\)\n", code, re.S)
+                assert m, c
+                parts.append(m.group(2))
+            assert "".join(parts) == src, step
+            assert "loadstring" in (sdir / calls[-1]).read_text()
         print(f"OK : {len(names)} nœuds, {len(gltf['images'])} images")
 
 

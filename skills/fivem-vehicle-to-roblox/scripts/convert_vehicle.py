@@ -34,7 +34,8 @@ from f2r import audio as audio_mod  # noqa: E402
 from f2r import cwxml, gamelib, inventory, meta  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
-from f2r.roblox import build_setup  # noqa: E402
+from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
+                        runtime_version, split_for_execute_luau)
 from f2r.textures import TextureStore  # noqa: E402
 from f2r.util import Report, extract_archive, register_names, write_json  # noqa: E402
 from f2r.vehicle import (LIGHT_IDS, SEAT_BONES, STEERING_BONES,  # noqa: E402
@@ -48,20 +49,37 @@ EMERGENCY_FLAGS = ("FLAG_EMERGENCY_SERVICE", "FLAG_LAW_ENFORCEMENT")
 
 # ------------------------------------------------------------------ extraction binaire
 
+def _find_dotnet() -> str | None:
+    """dotnet du PATH, sinon une installation utilisateur (dotnet-install.sh -> ~/.dotnet)."""
+    found = shutil.which("dotnet")
+    if found:
+        return found
+    for cand in (os.environ.get("DOTNET_ROOT"), str(Path.home() / ".dotnet")):
+        if cand and (Path(cand) / ("dotnet.exe" if os.name == "nt" else "dotnet")).is_file():
+            return str(Path(cand) / ("dotnet.exe" if os.name == "nt" else "dotnet"))
+    return None
+
+
 def find_extractor() -> list[str] | None:
-    dotnet = shutil.which("dotnet")
+    # `dotnet gta-extract.dll` d'abord : l'exécutable natif (apphost) ne trouve pas un
+    # .NET installé hors des chemins système (~/.dotnet) sans DOTNET_ROOT, et échoue
+    # alors avec « You must install .NET » (observé dans la VM VibeStarter, 2026-11-10).
+    dotnet = _find_dotnet()
     exe = EXTRACTOR_DIR / "bin" / ("gta-extract.exe" if os.name == "nt" else "gta-extract")
     dll = EXTRACTOR_DIR / "bin" / "gta-extract.dll"
+    if dll.exists() and dotnet:
+        os.environ.setdefault("DOTNET_ROOT", str(Path(dotnet).resolve().parent))
+        return [dotnet, str(dll)]
     if exe.exists():
         return [str(exe)]
-    if dll.exists() and dotnet:
-        return [dotnet, str(dll)]
     return None
 
 
 def build_extractor(report: Report) -> list[str] | None:
-    if not shutil.which("dotnet"):
+    dotnet = _find_dotnet()
+    if not dotnet:
         return None
+    os.environ["PATH"] = str(Path(dotnet).parent) + os.pathsep + os.environ.get("PATH", "")
     script = EXTRACTOR_DIR / ("build.ps1" if os.name == "nt" else "build.sh")
     cmd = (["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script)] if os.name == "nt"
            else ["bash", str(script)])
@@ -91,6 +109,34 @@ def run_extractor(cmd: list[str], src: Path, dst: Path, report: Report) -> bool:
         report.warn("gta-extract a échoué : " + r.stderr[-1500:])
         return False
     return ok > 0
+
+
+# ------------------------------------------------------------------ studio/ (automatisation)
+
+def write_studio_bundle(out: Path, name: str, config: dict, parts_cfg: dict, sound_ids: dict) -> None:
+    """Variante pour un agent qui pilote Studio par execute_luau (MCP Roblox Studio) :
+    runtime installé à part (une fois par place), Setup compact, et les deux déjà découpés
+    en appels execute_luau (studio/chunks/*.lua, à envoyer dans l'ordre de manifest.json)."""
+    sdir = out / "studio"
+    if sdir.exists():
+        shutil.rmtree(sdir)
+    (sdir / "chunks").mkdir(parents=True)
+    runtime = build_runtime_install()
+    compact = build_setup(config, parts_cfg, sound_ids, include_runtime=False, include_config_source=False)
+    (sdir / "FiveMRuntime.lua").write_text(runtime, encoding="utf-8")
+    (sdir / f"{name}_Setup.studio.lua").write_text(compact, encoding="utf-8")
+    manifest = {"runtime_version": runtime_version(), "vehicle": name, "steps": []}
+    for key, src in (("FiveMRuntime", runtime), (f"{name}_Setup", compact)):
+        calls = split_for_execute_luau(src, key)
+        files = []
+        for i, code in enumerate(calls, 1):
+            f = sdir / "chunks" / f"{key}_{i:02d}.lua"
+            f.write_text(code, encoding="utf-8")
+            files.append(f"chunks/{f.name}")
+        manifest["steps"].append({"key": key, "bytes": len(src.encode("utf-8")), "calls": files})
+    for extra in ("Verify.lua", "ApplySoundIds.lua"):
+        shutil.copyfile(SKILL_ROOT / "roblox" / extra, sdir / extra)
+    (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
 # ------------------------------------------------------------------ helpers
@@ -197,6 +243,14 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     # ---- textures + GLB
     sources = dict(inv.dds)
     sources.update({k: v for k, v in inv.images.items() if k not in sources})
+    if getattr(args, "texture_overrides", None):
+        # Textures de remplacement (rebadge, retouches) : même nom que la texture du pack.
+        n_over = 0
+        for f in sorted(Path(args.texture_overrides).iterdir()):
+            if f.suffix.lower() in (".png", ".dds", ".jpg", ".jpeg", ".tga", ".bmp"):
+                sources[f.stem.lower()] = f
+                n_over += 1
+        report.info(f"{n_over} texture(s) remplacée(s) depuis {args.texture_overrides}.")
     store = TextureStore(sources, out / "textures", report, args.max_texture)
 
     # Textures réutilisées du jeu de base (vehshare, txdRelationships…) : on les
@@ -296,6 +350,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     sound_ids = load_sound_ids(args.sound_ids, out / "sounds")
     setup = build_setup(config, parts_cfg, sound_ids)
     (out / f"{name}_Setup.lua").write_text(setup, encoding="utf-8")
+    write_studio_bundle(out, name, config, parts_cfg, sound_ids)
     write_json(out / "vehicle_config.json", {"vehicle": vinfo, "variation": variation, "handling_raw":
                                              metas["handling"].get((vinfo.get("handlingId") or name).lower()),
                                              "kits": kits, "roblox_config": config})
@@ -307,6 +362,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
              "liveries": len(carriers), "textures": len([v for v in store.cache.values() if v]),
              "missing_textures": len(store.missing), "glb": str(glb_path), "glb_mb": round(glb_path.stat().st_size / 1e6, 2),
              "game_textures": len(game_tex), "audio_from_game": audio_from_game,
+             "game_transfer": game.transfer_summary() if game is not None else "",
              "horn_source": audio.get("HornSource", "synthese"),
              "siren_source": audio.get("SirenSource")}
     if tris > 300_000:
@@ -531,6 +587,8 @@ def main(argv=None) -> int:
     ap.add_argument("--max-tris", type=int, default=19000, help="triangles max par MeshPart (limite Roblox 20k)")
     ap.add_argument("--max-texture", type=int, default=1024, help="taille max des textures (px)")
     ap.add_argument("--livery-uv", default="auto", choices=["auto", "uv0", "uv1"])
+    ap.add_argument("--texture-overrides",
+                    help="dossier d'images qui remplacent les textures du pack de même nom (rebadge, retouches)")
     ap.add_argument("--sound-ids", help="JSON {fichier: assetId} produit par roblox_upload.py")
     ap.add_argument("--plate", default="F2R 000", help="texte de plaque par défaut")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
@@ -576,10 +634,14 @@ def main(argv=None) -> int:
                 return 2
             report.warn(msg)
         else:
-            run_extractor(cmd, root, work / "xml", report)
+            ok = run_extractor(cmd, root, work / "xml", report)
             inv2 = inventory.scan(work / "xml", include_binaries=False)
             for attr in ("yft_xml", "ydr_xml", "ytd_xml", "dds", "images"):
                 getattr(inv, attr).update(getattr(inv2, attr))
+            if not ok and not (inv.yft_xml or inv.ydr_xml):
+                print("gta-extract n'a converti aucune ressource binaire ; voir l'avertissement "
+                      "ci-dessus (commande : " + " ".join(cmd) + ").", file=sys.stderr)
+                return 2
             inv.awc_xml += inv2.awc_xml
             inv.wavs += inv2.wavs
             for k, v in inv2.metas.items():
@@ -643,6 +705,8 @@ def write_report(out: Path, name: str, stats: dict | None, report: Report) -> No
         if stats.get("game_textures"):
             lines.append(f"- Dont **{stats['game_textures']}** texture(s) reprises du jeu de base "
                          "(vehshare / txdRelationships) via le serveur d'assets GTA V.")
+        if stats.get("game_transfer"):
+            lines.append(f"- Transfert depuis le serveur d'assets : {stats['game_transfer']}")
         lines.append("- Son moteur : **" + ("vrai son du jeu (AWC vanilla, découpé en boucles)"
                                             if stats.get("audio_from_game")
                                             else "son du pack, ou synthèse si absent") + "**")
