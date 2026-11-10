@@ -26,11 +26,9 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
-import io
 import json
 import os
 import shutil
-import socket
 import sys
 import threading
 import traceback
