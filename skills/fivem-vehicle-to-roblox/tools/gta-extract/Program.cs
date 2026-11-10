@@ -27,6 +27,8 @@ internal static class Program
             {
                 case "export": return Export(args.Skip(1).ToArray());
                 case "xml2bin": return Xml2Bin(args.Skip(1).ToArray());
+                case "probe": return Probe.Run(args.Skip(1).ToArray());
+                case "game-serve": return GameLib.Serve(args.Skip(1).ToArray());
                 default: return Usage();
             }
         }
