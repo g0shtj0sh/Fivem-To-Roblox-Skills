@@ -96,6 +96,25 @@ def test_pipeline():
                 parts.append(m.group(2))
             assert "".join(parts) == src, step
             assert "loadstring" in (sdir / calls[-1]).read_text()
+        # étape 3 : physique complète du véhicule
+        hd = cfg["Handling"]
+        assert hd["TractionCurveLateralDeg"] == 22.5 and abs(hd["TractionCurveLateralRad"] - 0.392699) < 1e-5
+        assert hd["DriveFront"] == 0.0 and hd["DriveRear"] == 2.0          # 0.05 -> propulsion pure
+        assert abs(hd["ShiftTimeUpS"] - 0.3) < 1e-6 and abs(hd["SuspensionCompDampScaled"] - 0.14) < 1e-9
+        assert hd["CentreOfMassLocal"] == [0.0, -0.1, -0.0] or hd["CentreOfMassLocal"] == [0.0, -0.1, 0.0]
+        assert hd["Flags"]["Model"]["Names"] == ["ABS_STD", "AXLE_F_MCPHERSON", "AXLE_R_MCPHERSON"]
+        assert hd["Flags"]["Handling"]["Names"] == ["TYRES_CAN_CLIP"]
+        assert hd["CarHandling"]["AdvancedFlags"]["Names"] == ["HARD_REV_LIMIT"]
+        assert abs(hd["CarHandling"]["CastorDeg"] - 4.0) < 1e-6 and hd["GravityMs2"] == 9.8
+        assert "fMass" in hd["Raw"] and hd["Gearbox"] == "auto"
+        ph = cfg["Physics"]
+        assert ph["FragMassKg"] == 1400 and ph["FragInertia"] == [1200, 1500, 450]
+        assert ph["ChildMassKg"]["wheel_lf"] == 20
+        hz = cfg["Hinges"]
+        assert hz["door_dside_f"]["Source"] == "yft" and abs(hz["door_dside_f"]["OpenAngle"] - 63.03) < 0.01
+        assert hz["door_dside_f"]["Axis"] == [0.0, -1.0, 0.0]               # s'ouvre vers l'extérieur
+        assert hz["bonnet"]["Source"] == "yft" and hz["bonnet"]["Axis"] == [1.0, 0.0, 0.0]
+        assert hz["door_pside_f"]["Source"] == "defaut"
         print(f"OK : {len(names)} nœuds, {len(gltf['images'])} images")
 
 

@@ -181,12 +181,21 @@ def main_yft(out: Path):
                    f"<DrawableModelsHigh><Item><RenderMask value=\"255\" /><Flags value=\"0\" /><HasSkin value=\"0\" />"
                    f"<BoneIndex value=\"0\" /><Unknown1 value=\"0\" /><Geometries>{wheel_geom}</Geometries></Item>"
                    f"</DrawableModelsHigh></Drawable></Item>")
+    # limites articulaires (radians, repère de l'os) : portière conducteur 1,1 rad autour de Z (négatif),
+    # capot 0,9 rad autour de X ; la portière passager n'en a pas (heuristique de repli)
+    joints = (f"<Joints><RotationLimits>"
+              f"<Item><BoneId value=\"{TAGS['door_dside_f']}\" /><UnknownA value=\"0\" />"
+              f"<Min x=\"0\" y=\"0\" z=\"-1.1\" /><Max x=\"0\" y=\"0\" z=\"0\" /></Item>"
+              f"<Item><BoneId value=\"{TAGS['bonnet']}\" /><UnknownA value=\"0\" />"
+              f"<Min x=\"0\" y=\"0\" z=\"0\" /><Max x=\"0.9\" y=\"0\" z=\"0\" /></Item>"
+              f"</RotationLimits></Joints>")
     tex_dict = ("<TextureDictionary><Item><Name>testcar_tyre</Name><FileName>testcar_tyre.dds</FileName></Item>"
                 "<Item><Name>testcar_tyre_n</Name><FileName>testcar_tyre_n.dds</FileName></Item></TextureDictionary>")
     xml = (f"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Fragment><Name>testcar_hi</Name>"
            f"<Drawable><Name>testcar_hi</Name><ShaderGroup>{tex_dict}<Shaders>{''.join(shaders)}</Shaders></ShaderGroup>"
-           f"{skeleton_xml(BONES)}{models}</Drawable>"
-           f"<Physics><LOD1><Children>{wheel_child}</Children></LOD1></Physics></Fragment>")
+           f"{skeleton_xml(BONES)}{joints}{models}</Drawable>"
+           f"<Physics><LOD1><Archetype><Mass value=\"1400\" /><InertiaTensor x=\"1200\" y=\"450\" z=\"1500\" /></Archetype>"
+           f"<Children>{wheel_child}</Children></LOD1></Physics></Fragment>")
     (out / "testcar_hi.yft.xml").write_text(xml, encoding="utf-8")
     d = out / "testcar_hi"
     d.mkdir(exist_ok=True)
@@ -278,6 +287,16 @@ METAS = {
   <fMass value="1400.0" /><fInitialDragCoeff value="8.0" /><vecCentreOfMassOffset x="0.0" y="0.0" z="-0.1" />
   <nInitialDriveGears value="6" /><fInitialDriveForce value="0.35" /><fInitialDriveMaxFlatVel value="200.0" />
   <fBrakeForce value="1.0" /><fSteeringLock value="40.0" /><strModelFlags>440010</strModelFlags>
+  <fTractionCurveMax value="2.45" /><fTractionCurveMin value="2.15" /><fTractionCurveLateral value="22.5" />
+  <fDriveBiasFront value="0.05" /><fClutchChangeRateScaleUpShift value="3.0" />
+  <fSuspensionCompDamp value="1.4" /><fSuspensionReboundDamp value="2.2" /><fAntiRollBarForce value="0.8" />
+  <fAntiRollBarBiasFront value="0.6" /><strHandlingFlags>20000</strHandlingFlags><strDamageFlags>0</strDamageFlags>
+  <SubHandlingData>
+    <Item type="CCarHandlingData"><fToeFront value="0.02" /><fCamberFront value="-0.05" /><fCastor value="0.04" />
+      <fMaxDriveBiasTransfer value="-1.0" /><strAdvancedFlags>10000</strAdvancedFlags>
+      <AdvancedData><Item><Slot value="0" /><Index value="0" /><Value value="1.0" /></Item></AdvancedData></Item>
+    <Item type="NULL" /><Item type="NULL" />
+  </SubHandlingData>
 </Item></HandlingData></CHandlingDataMgr>""",
 }
 

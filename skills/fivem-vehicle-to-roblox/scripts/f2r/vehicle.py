@@ -529,6 +529,19 @@ class VehicleBuilder:
             if not geo:
                 continue
             center = np.mean([p.center() for p in geo], axis=0)
+            lim = self.rotation_limit(hb)
+            if lim is not None:
+                # Limites du .yft (radians, repère de l'os) : l'axe de plus grande plage est la charnière
+                # réelle (gère aussi les portes en élytre / ciseaux), et le côté non nul donne le sens.
+                mn, mx = np.array(lim["min"], float), np.array(lim["max"], float)
+                k = int(np.argmax(np.abs(mx - mn)))
+                if abs(mx[k] - mn[k]) > 0.05:
+                    open_rad = mx[k] if abs(mx[k]) >= abs(mn[k]) else mn[k]
+                    axis = axes[:, k] / (np.linalg.norm(axes[:, k]) or 1.0) * (1.0 if open_rad >= 0 else -1.0)
+                    out[hb] = {"Pivot": pivot.round(4).tolist(), "Axis": axis.round(5).tolist(),
+                               "OpenAngle": round(math.degrees(abs(open_rad)), 2), "Source": "yft",
+                               "BoneAxis": "XYZ"[k]}
+                    continue
             if hb.startswith("door"):
                 axis = axes[:, 2]  # Z de l'os (vertical)
                 side = 1.0 if (center[0] if abs(center[0]) > 1e-3 else pivot[0]) >= 0 else -1.0
@@ -541,7 +554,40 @@ class VehicleBuilder:
             moved = _rotate(center - pivot, axis, 0.6)
             sign = 1.0 if test(moved) >= 0 else -1.0
             out[hb] = {"Pivot": pivot.round(4).tolist(), "Axis": (axis * sign).round(5).tolist(),
-                       "OpenAngle": defaults.get(hb.split("_")[0] if hb.startswith("door") else hb, 60.0)}
+                       "OpenAngle": defaults.get(hb.split("_")[0] if hb.startswith("door") else hb, 60.0),
+                       "Source": "defaut"}
+        return out
+
+    def rotation_limit(self, bone: str) -> dict | None:
+        """Limite articulaire du .yft pour un os (BoneId = tag de l'os, sinon index)."""
+        b = self.skel.by_name.get(bone)
+        if b is None:
+            return None
+        for lim in self.frag.main.rotation_limits:
+            if lim["bone_id"] == b.tag or (lim["bone_id"] == b.index and lim["bone_id"] not in self.skel.by_tag):
+                return lim
+        return None
+
+    def physics_info(self) -> dict:
+        """Masse / inertie du fragment et masse par os (Physics/LOD1 du .yft), repère local Roblox."""
+        ph = self.frag.physics or {}
+        out: dict = {}
+        if ph.get("mass"):
+            out["FragMassKg"] = round(float(ph["mass"]), 3)
+        if ph.get("inertia"):
+            ix, iy, iz = ph["inertia"]  # GTA (x droite, y avant, z haut) -> local (x, z, y) en magnitude
+            out["FragInertia"] = [round(ix, 4), round(iz, 4), round(iy, 4)]
+        for k in ("DampingLinearC", "DampingLinearV", "DampingLinearV2",
+                  "DampingAngularC", "DampingAngularV", "DampingAngularV2"):
+            if k in ph:
+                out[k] = [round(v, 6) for v in ph[k]]
+        masses = {}
+        for c in ph.get("children", []):
+            b = self.skel.by_tag.get(c["bone_tag"])
+            if b is not None and c["mass"] > 0:
+                masses[b.name] = round(masses.get(b.name, 0.0) + c["mass"], 3)
+        if masses:
+            out["ChildMassKg"] = masses
         return out
 
     def bones_info(self) -> dict:

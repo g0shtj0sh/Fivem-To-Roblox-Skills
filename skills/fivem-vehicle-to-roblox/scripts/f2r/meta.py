@@ -235,33 +235,228 @@ def parse_handling(paths, report: Report) -> dict[str, dict]:
     return out
 
 
+# Flags documentés (gtamods.com/wiki/Handling.meta, gtacars.net/gta5/glossary) ; les bits non
+# documentés sont exportés sous la forme "bit_0x...".
+MODEL_FLAGS = {
+    0x8: "IS_BIG", 0x10: "ABS_STD", 0x20: "ABS_OPTION", 0x40: "ABS_ALT_STD", 0x80: "ABS_ALT_OPTION",
+    0x800: "HAS_TRACKS", 0x10000: "AXLE_F_TORSION", 0x20000: "AXLE_F_SOLID", 0x40000: "AXLE_F_MCPHERSON",
+    0x100000: "AXLE_R_TORSION", 0x200000: "AXLE_R_SOLID", 0x400000: "AXLE_R_MCPHERSON",
+    0x800000: "DONT_FORCE_GRND_CLEARANCE", 0x2000000: "NO_WHEEL_BURST", 0x4000000: "INDESTRUCTIBLE",
+    0x8000000: "DOUBLE_FRONT_WHEELS", 0x20000000: "DOUBLE_REAR_WHEELS", 0x40000000: "NO_WHEEL_BREAK",
+    0x80000000: "IS_HATCHBACK",
+}
+HANDLING_FLAGS = {
+    0x1: "SMOOTHED_COMPRESSION", 0x2: "REDUCED_MOD_MASS", 0x4: "HAS_KERS", 0x8: "HAS_RALLY_TYRES",
+    0x10: "NO_HANDBRAKE", 0x20: "STEER_REARWHEELS", 0x40: "HANDBRAKE_REARWHEELSTEER", 0x80: "STEER_ALL_WHEELS",
+    0x100: "FREEWHEEL_NO_GAS", 0x200: "NO_REVERSE", 0x400: "REDUCED_RIGHTING_FORCE", 0x800: "STEER_NO_WHEELS",
+    0x1000: "CVT", 0x10000: "LESS_SNOW_SINK", 0x20000: "TYRES_CAN_CLIP", 0x40000: "REDUCED_DRIVE_OVER_DAMAGE",
+    0x100000: "OFFROAD_ABILITIES", 0x200000: "OFFROAD_ABILITIES_X2",
+    0x800000: "OFFROAD_INCREASED_GRAVITY_NO_FOLIAGE_DRAG", 0x1000000: "ENABLE_LEAN",
+    0x2000000: "FORCE_NO_TC_OR_SC", 0x8000000: "ARMOURED", 0x20000000: "IMPROVED_RIGHTING_FORCE",
+    0x40000000: "LOW_SPEED_WHEELIES",
+}
+DAMAGE_FLAGS = {0x1: "DRIVER_SIDE_FRONT_DOOR", 0x2: "DRIVER_SIDE_REAR_DOOR", 0x4: "PASSENGER_SIDE_FRONT_DOOR",
+                0x8: "PASSENGER_SIDE_REAR_DOOR", 0x10: "BONNET", 0x20: "BOOT"}
+ADVANCED_FLAGS = {
+    0x1: "DIFF_FRONT", 0x2: "DIFF_REAR", 0x4: "DIFF_CENTRE", 0x8: "DIFF_LIMITED_FRONT", 0x10: "DIFF_LIMITED_REAR",
+    0x20: "DIFF_LIMITED_CENTRE", 0x40: "DIFF_LOCKING_FRONT", 0x80: "DIFF_LOCKING_REAR", 0x100: "DIFF_LOCKING_CENTRE",
+    0x200: "GEARBOX_FULL_AUTO", 0x400: "GEARBOX_MANUAL", 0x800: "GEARBOX_DIRECT_SHIFT", 0x1000: "GEARBOX_ELECTRIC",
+    0x2000: "ASSIST_TRACTION_CONTROL", 0x4000: "ASSIST_STABILITY_CONTROL", 0x8000: "ALLOW_REDUCED_SUSPENSION_FORCE",
+    0x10000: "HARD_REV_LIMIT", 0x20000: "HOLD_GEAR_WITH_WHEELSPIN", 0x40000: "INCREASE_SUSPENSION_FORCE_WITH_SPEED",
+    0x80000: "BLOCK_INCREASED_ROT_VELOCITY_WITH_DRIVE_FORCE", 0x100000: "REDUCED_SELF_RIGHTING_SPEED",
+    0x200000: "CLOSE_RATIO_GEARBOX", 0x400000: "FORCE_SMOOTH_RPM", 0x800000: "ALLOW_TURN_ON_SPOT",
+    0x1000000: "CAN_WHEELIE", 0x2000000: "ENABLE_WHEEL_BLOCKER_SIDE_IMPACTS", 0x4000000: "FIX_OLD_BUGS",
+    0x8000000: "USE_DOWNFORCE_BIAS", 0x10000000: "REDUCE_BODY_ROLL_WITH_SUSPENSION_MODS",
+    0x20000000: "ALLOWS_EXTENDED_MODS",
+}
+
+
+def decode_flags(value, table: dict[int, str]) -> dict:
+    """'440010' (hexadécimal, comme dans les .meta) -> {"Hex": "0x440010", "Names": [...]}"""
+    if value in (None, ""):
+        return {"Hex": "0x0", "Names": []}
+    try:
+        v = int(str(value).strip(), 16) if not isinstance(value, int) else int(str(value), 16)
+    except ValueError:
+        return {"Hex": str(value), "Names": [], "Invalid": True}
+    names = []
+    bit = 1
+    while bit <= v:
+        if v & bit:
+            names.append(table.get(bit, f"bit_0x{bit:X}"))
+        bit <<= 1
+    return {"Hex": f"0x{v:X}", "Names": names}
+
+
+def _bias(b: float, snap: bool = False) -> tuple[float, float]:
+    """Répartition avant/arrière telle que stockée par le jeu : (2b, 2(1-b)). Pour la transmission,
+    b < 0.1 => propulsion pure, b > 0.9 => traction pure (chargeur FiveM / éditeur d'ikt)."""
+    if snap:
+        if b < 0.1:
+            return 0.0, 2.0
+        if b > 0.9:
+            return 2.0, 0.0
+    return round(2 * b, 5), round(2 * (1 - b), 5)
+
+
+def _gta_vec_to_local(v) -> list[float]:
+    """Vecteur GTA (x droite, y avant, z haut) -> repère local Roblox (x droite, y haut, z arrière)."""
+    x, y, z = (list(v) + [0, 0, 0])[:3] if isinstance(v, (list, tuple)) else (0, 0, 0)
+    return [round(float(x), 5), round(float(z), 5), round(-float(y), 5)]
+
+
 def summarize_handling(h: dict | None) -> dict:
-    """Valeurs clés utiles à un moteur physique custom (+ estimations régime moteur)."""
+    """Handling complet pour un moteur physique : valeurs du fichier (noms courts), conversions que
+    fait le jeu au chargement (unités SI), flags décodés et sous-handling CCarHandlingData.
+    Sources des conversions : FiveM handling-loader-five/HandlingLoader.cpp, ikt GTAVHandlingEditor
+    HandlingConversion.cpp (voir reports/ et research_notes/ du dépôt)."""
     if not h:
         return {}
+
     def num(k, d=0.0):
         v = h.get(k, d)
-        return v if isinstance(v, (int, float)) else d
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else float(d)
+
+    def vec(k):
+        v = h.get(k)
+        return [float(x) for x in v[:3]] if isinstance(v, list) and len(v) >= 3 else [0.0, 0.0, 0.0]
+
+    import math
     max_kmh = num("fInitialDriveMaxFlatVel", 150.0)
-    return {
+    gears = int(num("nInitialDriveGears", 6))
+    drive_bias = num("fDriveBiasFront", 0.0)
+    clutch_up = num("fClutchChangeRateScaleUpShift", 2.0)
+    clutch_down = num("fClutchChangeRateScaleDownShift", 2.0)
+    steer_deg = num("fSteeringLock", 35.0)
+    lat_deg = num("fTractionCurveLateral", 22.5)
+    tmax, tmin = num("fTractionCurveMax", 2.0), num("fTractionCurveMin", 1.8)
+    out = {
+        # --- compatibilité (clés déjà lues par le runtime)
         "MassKg": num("fMass", 1500.0),
         "DragCoeff": num("fInitialDragCoeff", 10.0),
-        "CentreOfMassOffset": h.get("vecCentreOfMassOffset", [0, 0, 0]),
-        "DriveBiasFront": num("fDriveBiasFront", 0.0),
-        "Gears": int(num("nInitialDriveGears", 6)),
+        "CentreOfMassOffset": vec("vecCentreOfMassOffset"),
+        "DriveBiasFront": drive_bias,
+        "Gears": gears,
         "DriveForce": num("fInitialDriveForce", 0.3),
         "DriveInertia": num("fDriveInertia", 1.0),
         "MaxFlatVelKmh": max_kmh,
         "BrakeForce": num("fBrakeForce", 1.0),
         "BrakeBiasFront": num("fBrakeBiasFront", 0.5),
         "HandBrakeForce": num("fHandBrakeForce", 0.7),
-        "SteeringLockDeg": num("fSteeringLock", 35.0),
-        "TractionCurveMax": num("fTractionCurveMax", 2.0),
-        "TractionCurveMin": num("fTractionCurveMin", 1.8),
+        "SteeringLockDeg": steer_deg,
+        "TractionCurveMax": tmax,
+        "TractionCurveMin": tmin,
         "SuspensionForce": num("fSuspensionForce", 2.0),
         "SuspensionUpperLimit": num("fSuspensionUpperLimit", 0.1),
         "SuspensionLowerLimit": num("fSuspensionLowerLimit", -0.1),
         "SuspensionRaise": num("fSuspensionRaise", 0.0),
         "ModelFlags": h.get("strModelFlags", ""),
         "HandlingFlags": h.get("strHandlingFlags", ""),
+        # --- masse, aéro, flottaison
+        "CentreOfMassLocal": _gta_vec_to_local(vec("vecCentreOfMassOffset")),
+        "InertiaMultiplier": vec("vecInertiaMultiplier"),
+        "InertiaMultiplierLocal": [round(abs(c), 5) for c in _gta_vec_to_local(vec("vecInertiaMultiplier"))],
+        "DownforceModifier": num("fDownforceModifier", 0.0),
+        "PercentSubmerged": num("fPercentSubmerged", 85.0),
+        "DragAccelCoeff": num("fInitialDragCoeff", 10.0) * 1e-4,  # a = k·v² (m/s², v en m/s) — hypothèse
+        # --- transmission
+        "DriveFront": _bias(drive_bias, snap=True)[0],
+        "DriveRear": _bias(drive_bias, snap=True)[1],
+        "ClutchChangeRateUp": clutch_up,
+        "ClutchChangeRateDown": clutch_down,
+        "ShiftTimeUpS": round(0.9 / clutch_up, 4) if clutch_up > 0 else None,
+        "ShiftTimeDownS": round(0.9 / clutch_down, 4) if clutch_down > 0 else None,
+        "MaxFlatVelMs": round(max_kmh / 3.6, 4),
+        "DriveMaxFlatVelMs": round(max_kmh / 3.6 * 1.2, 4),       # vitesse au rupteur pour un rapport de 1.0
+        "TopGearRatio": 0.9,                                        # rapport de dernière vitesse par défaut
+        "RedlineTopGearKmh": round(max_kmh * 1.2 / 0.9, 2),
+        "IdleRpm": 0.2, "RedlineRpm": 1.0,                          # régime normalisé GTA
+        # --- freins / direction
+        "BrakeFront": _bias(num("fBrakeBiasFront", 0.5))[0],
+        "BrakeRear": _bias(num("fBrakeBiasFront", 0.5))[1],
+        "SteeringLockRad": round(math.radians(steer_deg), 6),
+        # --- adhérence
+        "TractionCurveLateralDeg": lat_deg,
+        "TractionCurveLateralRad": round(math.radians(lat_deg), 6),
+        "TractionSpringDeltaMax": num("fTractionSpringDeltaMax", 0.15),
+        "LowSpeedTractionLossMult": num("fLowSpeedTractionLossMult", 1.0),
+        "CamberStiffness": num("fCamberStiffnesss", num("fCamberStiffness", 0.0)),
+        "TractionBiasFront": num("fTractionBiasFront", 0.5),
+        "TractionFront": _bias(num("fTractionBiasFront", 0.5))[0],
+        "TractionRear": _bias(num("fTractionBiasFront", 0.5))[1],
+        "TractionLossMult": num("fTractionLossMult", 1.0),
+        # --- suspension / anti-roulis
+        "SuspensionCompDamp": num("fSuspensionCompDamp", 1.0),
+        "SuspensionReboundDamp": num("fSuspensionReboundDamp", 1.0),
+        "SuspensionCompDampScaled": round(num("fSuspensionCompDamp", 1.0) * 0.1, 6),
+        "SuspensionReboundDampScaled": round(num("fSuspensionReboundDamp", 1.0) * 0.1, 6),
+        "SuspensionBiasFront": num("fSuspensionBiasFront", 0.5),
+        "SuspensionFront": _bias(num("fSuspensionBiasFront", 0.5))[0],
+        "SuspensionRear": _bias(num("fSuspensionBiasFront", 0.5))[1],
+        "AntiRollBarForce": num("fAntiRollBarForce", 0.0),
+        "AntiRollBarBiasFront": num("fAntiRollBarBiasFront", 0.5),  # sens disputé : 1 = avant retenu
+        "AntiRollFront": _bias(num("fAntiRollBarBiasFront", 0.5))[0],
+        "AntiRollRear": _bias(num("fAntiRollBarBiasFront", 0.5))[1],
+        "RollCentreHeightFront": num("fRollCentreHeightFront", 0.0),
+        "RollCentreHeightRear": num("fRollCentreHeightRear", 0.0),
+        # --- dégâts / divers
+        "CollisionDamageMult": num("fCollisionDamageMult", 1.0),
+        "WeaponDamageMult": num("fWeaponDamageMult", 1.0),
+        "DeformationDamageMult": num("fDeformationDamageMult", 1.0),
+        "EngineDamageMult": num("fEngineDamageMult", 1.0),
+        "PetrolTankVolume": num("fPetrolTankVolume", 65.0),
+        "OilVolume": num("fOilVolume", 5.0),
+        "SeatOffsetDist": [num("fSeatOffsetDistX"), num("fSeatOffsetDistY"), num("fSeatOffsetDistZ")],
+        "MonetaryValue": int(num("nMonetaryValue", 0)),
+        "AIHandling": h.get("AIHandling", ""),
+        "Flags": {
+            "Model": decode_flags(h.get("strModelFlags"), MODEL_FLAGS),
+            "Handling": decode_flags(h.get("strHandlingFlags"), HANDLING_FLAGS),
+            "Damage": decode_flags(h.get("strDamageFlags"), DAMAGE_FLAGS),
+        },
     }
+    # gravité « tout-terrain » (flags) : 9.8 m/s² de base
+    hf = out["Flags"]["Handling"]["Names"]
+    out["GravityMs2"] = 11.76 if ("OFFROAD_ABILITIES_X2" in hf or
+                                  "OFFROAD_INCREASED_GRAVITY_NO_FOLIAGE_DRAG" in hf) else (
+        10.78 if "OFFROAD_ABILITIES" in hf else 9.8)
+
+    # --- sous-handling (CCarHandlingData, CBikeHandlingData, CBoatHandlingData...)
+    subs = h.get("SubHandlingData")
+    subs = subs if isinstance(subs, list) else ([subs] if isinstance(subs, dict) else [])
+    for sub in subs:
+        if not isinstance(sub, dict) or not sub.get("_type") or sub.get("_type") == "NULL":
+            continue
+        t = sub["_type"]
+        data = {k: v for k, v in sub.items() if k != "_type"}
+        if t == "CCarHandlingData":
+            def snum(k, d=0.0):
+                v = sub.get(k, d)
+                return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else float(d)
+            car = {
+                "BackEndPopUpCarImpulseMult": snum("fBackEndPopUpCarImpulseMult"),
+                "BackEndPopUpBuildingImpulseMult": snum("fBackEndPopUpBuildingImpulseMult"),
+                "BackEndPopUpMaxDeltaSpeed": snum("fBackEndPopUpMaxDeltaSpeed"),
+                "ToeFront": snum("fToeFront"), "ToeRear": snum("fToeRear"),
+                "CamberFront": snum("fCamberFront"), "CamberRear": snum("fCamberRear"),
+                "Castor": snum("fCastor"),
+                "ToeFrontDeg": round(snum("fToeFront") * 45, 4), "ToeRearDeg": round(snum("fToeRear") * 45, 4),
+                "CamberFrontDeg": round(snum("fCamberFront") * 22.5, 4),
+                "CamberRearDeg": round(snum("fCamberRear") * 22.5, 4),
+                "CastorDeg": round(snum("fCastor") * 100, 4),
+                "EngineResistance": snum("fEngineResistance"),
+                "MaxDriveBiasTransfer": snum("fMaxDriveBiasTransfer", -1.0),
+                "JumpForceScale": snum("fJumpForceScale", 1.0),
+                "IncreasedRammingForceScale": snum("fIncreasedRammingForceScale", 1.0),
+                "AdvancedFlags": decode_flags(sub.get("strAdvancedFlags"), ADVANCED_FLAGS),
+                "AdvancedData": [x for x in (sub.get("AdvancedData") or []) if isinstance(x, dict)],
+            }
+            out["CarHandling"] = car
+        else:
+            out.setdefault("OtherSubHandling", {})[t] = data
+    adv = (out.get("CarHandling") or {}).get("AdvancedFlags", {}).get("Names", [])
+    out["Gearbox"] = ("electric" if ("GEARBOX_ELECTRIC" in adv or "CVT" in hf) else
+                      "manual" if "GEARBOX_MANUAL" in adv else "auto")
+    # valeurs brutes complètes du fichier (rien n'est perdu)
+    out["Raw"] = {k: v for k, v in h.items() if k != "SubHandlingData"}
+    return out

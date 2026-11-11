@@ -229,7 +229,11 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     vinfo = metas["vehicles"].get(name, {"modelName": name})
     variation = metas["carvariations"].get(name, {})
     carcols = metas["carcols"]
-    handling = meta.summarize_handling(metas["handling"].get((vinfo.get("handlingId") or name).lower()))
+    handling_id = (vinfo.get("handlingId") or name).lower()
+    handling = meta.summarize_handling(metas["handling"].get(handling_id))
+    if not handling:
+        report.warn(f"handling.meta : aucune entrée « {handling_id} » dans le pack (le véhicule réutilise "
+                    "probablement le handling d'une voiture du jeu de base). Valeurs physiques par défaut.")
     out.mkdir(parents=True, exist_ok=True)
 
     frag_path = find_fragment(inv, name)
@@ -609,6 +613,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "DefaultLivery": 1 if carriers else 0,
         "Extras": extras,
         "Handling": handling,
+        "Physics": vb.physics_info(),
         "PlateText": args.plate,
     }
 

@@ -68,6 +68,8 @@ class Drawable:
     models: list[Model]
     embedded_textures: list[str]
     bone_tag: int | None = None      # pour les enfants physiques (roues...)
+    # limites de rotation des os (Joints/RotationLimits) : [{"bone_id", "min" (rad, xyz), "max"}]
+    rotation_limits: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -76,6 +78,8 @@ class Fragment:
     main: Drawable
     children: list[Drawable]   # drawables des enfants physiques (roues, etc.)
     source: Path
+    # physique du fragment (Physics/LOD1) : masse/inertie de l'archétype, masse par enfant (os)
+    physics: dict = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------- helpers
@@ -231,7 +235,45 @@ def parse_drawable(el, lod: str, name: str = "") -> Drawable:
         bones=parse_bones(el),
         models=parse_models(el, lod),
         embedded_textures=embedded,
+        rotation_limits=parse_rotation_limits(el),
     )
+
+
+def parse_rotation_limits(drawable_el) -> list[dict]:
+    """Limites articulaires du squelette (portières, capot, coffre...), en radians, repère de l'os."""
+    out = []
+    for it in drawable_el.findall("Joints/RotationLimits/Item"):
+        out.append({"bone_id": int(_text(it, "BoneId", "0") or 0),
+                    "min": _vec(it, "Min", 3).tolist(), "max": _vec(it, "Max", 3).tolist()})
+    return out
+
+
+def _float(el, tag, default=0.0) -> float:
+    try:
+        return float(_text(el, tag, str(default)) or default)
+    except ValueError:
+        return default
+
+
+def parse_frag_physics(root) -> dict:
+    """Masse / inertie / amortissements de l'archétype et masse de chaque enfant physique."""
+    lod = root.find("Physics/LOD1")
+    if lod is None:
+        return {}
+    arch = lod.find("Archetype")
+    out: dict = {}
+    if arch is not None:
+        out["mass"] = _float(arch, "Mass")
+        out["inertia"] = _vec(arch, "InertiaTensor", 3).tolist()
+    for tag in ("DampingLinearC", "DampingLinearV", "DampingLinearV2",
+                "DampingAngularC", "DampingAngularV", "DampingAngularV2"):
+        if lod.find(tag) is not None:
+            out[tag] = _vec(lod, tag, 3).tolist()
+    out["children"] = [{"bone_tag": int(_text(c, "BoneTag", "0") or 0),
+                        "mass": _float(c, "PristineMass"),
+                        "damaged_mass": _float(c, "DamagedMass")}
+                       for c in lod.findall("Children/Item")]
+    return out
 
 
 def parse_fragment(path: Path, lod: str = "high") -> Fragment:
@@ -253,7 +295,8 @@ def parse_fragment(path: Path, lod: str = "high") -> Fragment:
             d.bone_tag = int(_text(child, "BoneTag", "0") or 0)
             if any(m.geometries for m in d.models):
                 children.append(d)
-        return Fragment(name=_text(root, "Name") or path.stem, main=main, children=children, source=path)
+        return Fragment(name=_text(root, "Name") or path.stem, main=main, children=children, source=path,
+                        physics=parse_frag_physics(root))
     if root.tag == "Drawable":  # .ydr.xml (pièces de mods parfois livrées en ydr)
         main = parse_drawable(root, lod, path.name.split(".")[0])
         return Fragment(name=main.name, main=main, children=[], source=path)
