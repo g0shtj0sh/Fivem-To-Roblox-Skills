@@ -134,7 +134,8 @@ Serialize → Apply qui restaure l'état.
 
 **Play, serveur** (`execute_luau` Server, un joueur) — `require(…Verify)({ model = …, checks = {…} })` :
 `seats_play` (monter puis descendre à chaque place ; `seat = "<nom>"` pour une seule), `lock_play`,
-`park_play`, `flip_play`, `void_play` (chute dans le vide rattrapée). Refaire `seats_play` le véhicule posé sur une pente légère (plateforme inclinée
+`park_play`, `flip_play`, `void_play` (chute dans le vide rattrapée).
+Corps adapté (client, joueur assis) : `checks = {"fit_play"}` — 0 point du corps hors habitacle, posé sur le siège, échelles lues. Refaire `seats_play` le véhicule posé sur une pente légère (plateforme inclinée
 temporaire dans le dossier de travail).
 
 **Play, client** (le runtime de rendu ne tourne que côté client ; `loadstring` y est interdit) :
@@ -215,6 +216,14 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 - **Conduite** (`VehicleDynamics` + `VehicleDrive`, client du conducteur) : le véhicule roule dès qu'un joueur
   prend le volant (boîte, freins, ABS, frein à main, suspension par rayons, son et compte-tours) ;
   `UseBuiltinDrive = false` pour brancher un autre châssis. Mesures : `docs/drive-tests.md` du dépôt.
+- **Corps adapté à l'habitacle** (`VehicleSeatFit`, automatique) : le convertisseur voxelise l'habitacle
+  (`CONFIG.Cabin`, 4 cm, ≈ 7 Ko) ; à l'assise, le client de l'occupant mesure son corps et cherche le réglage
+  qui le garde entièrement dedans — corps le plus grand, puis le plus large, puis siège le moins reculé, puis
+  le plus bas — et le serveur l'applique (R15 : `BodyHeight/Width/Depth/HeadScale` ; R6 : `ScaleTo`), recale la
+  soudure du siège (hauteur, recul) et masque les accessoires qui dépassent encore. Tout est rendu à la
+  descente. `SeatFit = false` sur le modèle pour désactiver ; `--no-seat-fit` à la conversion. Habitacle
+  ouvert (cabriolet) : pas d'adaptation. La posture assise reste celle de Roblox (tibias verticaux) : dans un
+  coupé bas, le corps est fortement réduit (mesures : `docs/seat-fit-tests.md`).
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 

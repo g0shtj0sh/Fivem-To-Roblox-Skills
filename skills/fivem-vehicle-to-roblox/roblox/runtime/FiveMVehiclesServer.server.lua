@@ -12,6 +12,7 @@ local Players = game:GetService("Players")
 local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Custom = require(folder:WaitForChild("VehicleCustomization"))
 local Access = require(folder:WaitForChild("VehicleAccess"))
+local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -53,7 +54,7 @@ local function isOccupantOrNear(player, model, maxDist)
 	return root ~= nil and model.PrimaryPart ~= nil and (root.Position - model.PrimaryPart.Position).Magnitude <= maxDist
 end
 
-remote.OnServerEvent:Connect(function(player, model, action, key, value)
+remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
 		return
 	end
@@ -82,6 +83,9 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value)
 		end
 		local cur = model:GetAttribute("Door_" .. key) or 0
 		model:SetAttribute("Door_" .. key, cur > 0.5 and 0 or 1)
+	elseif action == "Fit" then
+		-- corps de l'occupant adapté à l'habitacle (VehicleSeatFit) ; validé et borné côté serveur
+		SeatFit.Apply(player, model, key, value, ...)
 	elseif action == "Exit" then
 		Access.Exit(player)
 	elseif action == "Recover" then
@@ -180,6 +184,9 @@ local function setupVehicle(model)
 				-- descendu par un autre moyen que F (saut, script tiers) : on le pose dehors aussi
 				local prev = last
 				last = nil
+				if prev then
+					SeatFit.Restore(prev[1]) -- taille d'origine rendue avant de le poser dehors
+				end
 				if prev and prev[1].Parent and prev[1].Health > 0 and not Access.WasPlacedRecently(prev[2]) then
 					Access.EjectOccupant(model, seat, prev[1], prev[2])
 				end

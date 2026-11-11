@@ -349,6 +349,11 @@ end
 
 function Access.EjectOccupant(model, seat, hum, char)
 	placedAt[char] = os.clock()
+	-- taille d'origine rendue (VehicleSeatFit) avant de calculer où le poser
+	local okFit, SeatFit = pcall(require, script.Parent:FindFirstChild("VehicleSeatFit"))
+	if okFit and SeatFit and SeatFit.Restore(hum) then
+		task.wait()
+	end
 	openDoorBriefly(model, seat:GetAttribute("Door"))
 	local weld = seat:FindFirstChild("SeatWeld")
 	if weld then

@@ -32,7 +32,7 @@ sys.path.insert(0, str(HERE))
 from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
 from f2r import collision as collision_mod  # noqa: E402
-from f2r import cwxml, gamelib, inventory, meta  # noqa: E402
+from f2r import cabin, cwxml, gamelib, inventory, meta  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
@@ -562,6 +562,19 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
     elif not any(s["Driver"] for s in seats):
         seats[0]["Driver"] = True
 
+    # habitacle en voxels : adapter le corps des occupants (VehicleSeatFit)
+    cabin_cfg = None
+    if not getattr(args, "no_seat_fit", False):
+        try:
+            cabin_cfg = cabin.build_cabin(vb.parts, seats)
+        except Exception as exc:  # noqa: BLE001
+            vb.report.warn(f"Habitacle non calculé ({exc}) : pas d'adaptation du corps des occupants.")
+        if cabin_cfg:
+            st = cabin_cfg.pop("Stats")
+            vb.report.info(f"Habitacle : {st['CabinCells']} cellules d'air ({cabin_cfg['Cell'] * 100:.0f} cm), "
+                           f"{'ouvert (pas d adaptation du corps)' if cabin_cfg['Open'] else 'fermé'}, "
+                           f"grille {len(cabin_cfg['Bad']) / 1024:.1f} Ko.")
+
     engine_pos = bones.get("engine", {}).get("Position") or r4([0, (lo[1] + hi[1]) / 2, lo[2] + 0.8])
     extras = sorted({i["Extra"] for i in parts_cfg.values() if "Extra" in i})
 
@@ -601,6 +614,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Sirens": sirens,
         "HasSiren": bool(sirens),
         "Seats": seats,
+        "Cabin": cabin_cfg,
         "DoorPrompts": not args.no_door_prompts,
         "EnginePosition": engine_pos,
         "Audio": {"IdleRpm": audio["IdleRpm"], "MaxRpm": audio["MaxRpm"], "Volume": 1,
@@ -655,6 +669,8 @@ def main(argv=None) -> int:
     ap.add_argument("--no-build", action="store_true", help="ne pas compiler gta-extract automatiquement")
     ap.add_argument("--retry-gamefiles", action="store_true",
                     help="ignorer le cache et re-demander au serveur d'assets les textures / sons du jeu")
+    ap.add_argument("--no-seat-fit", action="store_true",
+                    help="ne pas calculer l'habitacle (pas d'adaptation du corps des occupants)")
     ap.add_argument("--no-game-server", action="store_true",
                     help="ne pas chercher le serveur d'assets GTA V (comportement hors ligne)")
     ap.add_argument("--game-server-url",

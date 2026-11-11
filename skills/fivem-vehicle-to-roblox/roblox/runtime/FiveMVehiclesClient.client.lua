@@ -13,6 +13,7 @@ local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Runtime = require(folder:WaitForChild("VehicleRuntime"))
 local Input = require(folder:WaitForChild("VehicleInput"))
 local Drive = require(folder:WaitForChild("VehicleDrive"))
+local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -199,6 +200,8 @@ local function onSeated(active, seat)
 		end
 		setPromptsHidden(model, true)
 		bindOccupantActions(model)
+		-- corps adapté à l'habitacle (bras dans la portière, tête dans le pavillon)
+		task.spawn(SeatFit.RunClient, model, seat, remote)
 	end
 	if model and seat.Name == "DriverSeat" then
 		driving = model

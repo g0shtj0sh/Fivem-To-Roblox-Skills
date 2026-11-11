@@ -14,7 +14,7 @@
 
 	Groupes :
 		runtime    modules runtime installés (ReplicatedStorage / ServerScriptService / StarterPlayerScripts)
-		structure  pièces attendues présentes et nommées, échelle (empattement), véhicule droit, avant vers −Z
+		structure  pièces attendues présentes et nommées, échelle (empattement), véhicule droit, avant vers −Z de VehicleRoot
 		wheels     roues à leur place (pivots et géométrie), côtés gauche/droite
 		collision  hitbox fidèle : collision GTA présente, invisible, solide, bien soudée, précision
 		           réglée ; rayons depuis les 6 faces : écart hitbox / carrosserie visible (et ancienne boîte)
@@ -221,25 +221,27 @@ function groups.structure()
 	local up = root.CFrame.UpVector
 	local look = root.CFrame.LookVector
 	check(up.Y > 0.999, "véhicule droit", fmt("UpVector = (%.3f, %.3f, %.3f)", up.X, up.Y, up.Z))
-	check(look:Dot(Vector3.new(0, 0, -1)) > 0.999, "avant vers −Z (VehicleRoot)", fmt("LookVector = (%.3f, %.3f, %.3f)", look.X, look.Y, look.Z))
+	-- le véhicule peut regarder n'importe où dans le monde (tourné après l'installation) : on contrôle
+	-- qu'il est à plat, puis que l'avant géométrique est du côté −Z de VehicleRoot
+	check(math.abs(look.Y) < 0.01, "avant à l'horizontale (VehicleRoot)", fmt("LookVector = (%.3f, %.3f, %.3f)", look.X, look.Y, look.Z))
 
-	-- l'avant géométrique (roues avant, phares) doit être du côté −Z du monde
+	-- l'avant géométrique (roues avant, phares) doit être du côté −Z de VehicleRoot
 	local fz, rz, nf, nr = 0, 0, 0, 0
 	for bone, w in pairs(CONFIG.Wheels or {}) do
 		local pv = pivotOf(bone)
 		if pv then
 			if w.Front then
-				fz += pv.Position.Z
+				fz += root.CFrame:PointToObjectSpace(pv.Position).Z
 				nf += 1
 			else
-				rz += pv.Position.Z
+				rz += root.CFrame:PointToObjectSpace(pv.Position).Z
 				nr += 1
 			end
 		end
 	end
 	if nf > 0 and nr > 0 then
 		fz, rz = fz / nf, rz / nr
-		check(fz < rz, "roues avant côté −Z", fmt("z avant %.2f, z arrière %.2f", fz, rz))
+		check(fz < rz, "roues avant côté −Z (repère du véhicule)", fmt("z avant %.2f, z arrière %.2f", fz, rz))
 		local wb = rz - fz
 		local cfgFront, cfgRear, cf, cr = 0, 0, 0, 0
 		for _, w in pairs(CONFIG.Wheels) do
@@ -259,9 +261,9 @@ function groups.structure()
 	end
 	local lights = CONFIG.Lights or {}
 	if lights.headlight_l and lights.taillight_l then
-		local h = root.CFrame:PointToWorldSpace(v3(lights.headlight_l) * spm)
-		local t = root.CFrame:PointToWorldSpace(v3(lights.taillight_l) * spm)
-		check(h.Z < t.Z, "phares devant les feux arrière", fmt("z phare %.2f, z feu %.2f", h.Z, t.Z))
+		local h = v3(lights.headlight_l) * spm -- repère de VehicleRoot
+		local t = v3(lights.taillight_l) * spm
+		check(h.Z < t.Z, "phares devant les feux arrière", fmt("z phare %.2f, z feu %.2f (repère du véhicule)", h.Z, t.Z))
 	end
 	-- emprise : la géométrie visible doit tenir dans les bornes du véhicule
 	local lo, hi = v3(CONFIG.Bounds.Min) * spm, v3(CONFIG.Bounds.Max) * spm
@@ -808,6 +810,56 @@ function groups.void_play()
 	model:PivotTo(home)
 	root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
 	root.Anchored = anchored0
+end
+
+-- Corps de l'occupant adapté à l'habitacle (VehicleSeatFit) : joueur local assis dans ce véhicule
+function groups.fit_play()
+	if context ~= "client" then
+		rec("skip", "fit_play", "scénario client : lancer en Play, execute_luau Client, joueur assis")
+		return
+	end
+	local okF, Fit = pcall(require, ReplicatedStorage.FiveMVehicles:FindFirstChild("VehicleSeatFit"))
+	if not okF or not Fit then
+		rec("fail", "fit_play", "VehicleSeatFit absent du runtime")
+		return
+	end
+	local g = Fit.Grid(model)
+	if not g then
+		local c = CONFIG.Cabin
+		rec(c and c.Open and "warn" or "skip", "fit_play", c and c.Open and "habitacle ouvert : pas d'adaptation" or "pas de grille d'habitacle (conversion sans --seat-fit)")
+		return
+	end
+	local char = game:GetService("Players").LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local seat = hum and hum.SeatPart
+	if not seat or not seat:IsDescendantOf(model) then
+		rec("skip", "fit_play", "le joueur local n'est pas assis dans ce véhicule")
+		return
+	end
+	local t0 = os.clock()
+	while (char:GetAttribute("F2RFitResult") == nil or char:GetAttribute("F2RFitResult") == "running") and os.clock() - t0 < 10 do
+		task.wait(0.1)
+	end
+	local res = tostring(char:GetAttribute("F2RFitResult"))
+	local pts = Fit.Sample(char, root, g.spm)
+	local bad = Fit.CountBad(g, pts)
+	check(bad == 0, "corps dans l'habitacle (" .. seat.Name .. ")", fmt("%d point(s) hors habitacle sur %d ; résultat %s", bad, #pts, res))
+	-- posé : 6 cm plus bas, le corps entrerait dans le coussin ou le plancher (sinon il flotte)
+	local below = 0
+	for _, p in ipairs(pts) do
+		if Fit.IsBad(g, p - Vector3.new(0, 0.06, 0)) then
+			below += 1
+		end
+	end
+	check(below > 0, "posé sur le siège (pas en l'air)", fmt("6 cm plus bas : %d point(s) dans le coussin / le plancher", below))
+	local sc = {}
+	for _, n in ipairs({ "BodyHeightScale", "BodyWidthScale", "BodyDepthScale", "HeadScale" }) do
+		local v = hum:FindFirstChild(n)
+		if v then
+			table.insert(sc, fmt("%s %.2f", n, v.Value))
+		end
+	end
+	check(true, "échelles appliquées", table.concat(sc, ", ") .. " ; F2RFit = " .. tostring(hum:GetAttribute("F2RFit")))
 end
 
 function groups.drive_play()
