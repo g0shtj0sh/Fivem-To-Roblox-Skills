@@ -31,7 +31,7 @@ Input.Bindings = {
 	Siren = { Enum.KeyCode.Q, Enum.KeyCode.DPadLeft },
 	SirenTone = { Enum.KeyCode.R },
 	Engine = { Enum.KeyCode.Z },
-	GearUp = { Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonY },
+	GearUp = { Enum.KeyCode.LeftShift, Enum.KeyCode.DPadUp }, -- Y (manette) = monter / descendre
 	GearDown = { Enum.KeyCode.LeftControl, Enum.KeyCode.ButtonX },
 	LookBack = { Enum.KeyCode.C, Enum.KeyCode.ButtonR3 },
 }

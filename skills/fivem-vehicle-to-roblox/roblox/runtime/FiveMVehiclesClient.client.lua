@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Runtime = require(folder:WaitForChild("VehicleRuntime"))
@@ -85,6 +86,87 @@ Input.Action.Event:Connect(function(name, value)
 	-- "GearUp", "GearDown", "LookBack"... : à écouter par ton moteur physique via Input.Action
 end)
 
+-- Invites « Conduire / Monter » : le serveur tient la vérité dans l'attribut Available ; on masque
+-- localement celles du véhicule où l'on est assis (sinon F déclencherait aussi une invite).
+local function enterPrompts(model)
+	local out = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ProximityPrompt") and d:GetAttribute("SeatName") then
+			table.insert(out, d)
+		end
+	end
+	return out
+end
+local promptConns = {}
+local function setPromptsHidden(model, hidden)
+	for _, c in ipairs(promptConns) do
+		c:Disconnect()
+	end
+	table.clear(promptConns)
+	if not model then
+		return
+	end
+	for _, prompt in ipairs(enterPrompts(model)) do
+		local function apply()
+			prompt.Enabled = (not hidden) and prompt:GetAttribute("Available") ~= false
+		end
+		apply()
+		if hidden then
+			table.insert(promptConns, prompt:GetAttributeChangedSignal("Available"):Connect(apply))
+			table.insert(promptConns, prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
+				if prompt.Enabled then
+					prompt.Enabled = false
+				end
+			end))
+		end
+	end
+end
+
+-- Descendre (F / Y / bouton tactile) et remettre sur ses roues (X / croix bas), pour tout occupant.
+local function bindOccupantActions(model)
+	ContextActionService:BindActionAtPriority("F2R_Exit", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			remote:FireServer(model, "Exit")
+		end
+		return Enum.ContextActionResult.Sink
+	end, true, Enum.ContextActionPriority.High.Value, Enum.KeyCode.F, Enum.KeyCode.ButtonY)
+	ContextActionService:SetTitle("F2R_Exit", "Descendre")
+	ContextActionService:BindActionAtPriority("F2R_Recover", function(_, state)
+		if state == Enum.UserInputState.Begin and model:GetAttribute("Flipped") == true then
+			remote:FireServer(model, "Recover")
+		end
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.X, Enum.KeyCode.DPadDown)
+end
+local function unbindOccupantActions()
+	ContextActionService:UnbindAction("F2R_Exit")
+	ContextActionService:UnbindAction("F2R_Recover")
+end
+
+-- Descente : le serveur choisit où poser le personnage ; le client, qui possède sa physique, s'y place.
+remote.OnClientEvent:Connect(function(kind, cf)
+	if kind ~= "PlaceAt" or typeof(cf) ~= "CFrame" then
+		return
+	end
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return
+	end
+	if hum.Sit then
+		hum.Sit = false
+	end
+	for _ = 1, 3 do -- quelques images : le temps que la soudure du siège disparaisse ici aussi
+		char:PivotTo(cf)
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.AssemblyLinearVelocity = Vector3.zero
+		end
+		task.wait()
+	end
+	hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+end)
+
 local function onSeated(active, seat)
 	local model = nil
 	if active and seat then
@@ -102,12 +184,20 @@ local function onSeated(active, seat)
 			r.LocalOverride = nil
 		end
 	end
+	if occupying ~= model then
+		if occupying then
+			setPromptsHidden(occupying, false)
+		end
+		unbindOccupantActions()
+	end
 	occupying = model
 	if model then
 		local r = Runtime.Attach(model)
 		if r then
 			r.IsLocalOccupant = true
 		end
+		setPromptsHidden(model, true)
+		bindOccupantActions(model)
 	end
 	if model and seat.Name == "DriverSeat" then
 		driving = model

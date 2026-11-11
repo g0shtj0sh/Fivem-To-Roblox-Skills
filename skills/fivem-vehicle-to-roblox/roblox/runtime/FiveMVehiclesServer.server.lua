@@ -2,13 +2,16 @@
 -- FiveMVehiclesServer (Script, ServerScriptService)
 -- Autorité serveur : valide les actions du conducteur (phares, clignotants, klaxon, sirène,
 -- moteur), relaie la télémétrie (régime, accélérateur...) aux autres joueurs via attributs,
--- gère portes / capot / coffre (ProximityPrompt) et applique la custom au démarrage.
+-- gère portes / capot / coffre (ProximityPrompt), monter / descendre (F), stationnement et remise
+-- sur les roues (VehicleAccess), et applique la custom au démarrage.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 
 local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Custom = require(folder:WaitForChild("VehicleCustomization"))
+local Access = require(folder:WaitForChild("VehicleAccess"))
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -79,6 +82,10 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value)
 		end
 		local cur = model:GetAttribute("Door_" .. key) or 0
 		model:SetAttribute("Door_" .. key, cur > 0.5 and 0 or 1)
+	elseif action == "Exit" then
+		Access.Exit(player)
+	elseif action == "Recover" then
+		Access.Recover(player, model)
 	elseif action == "Window" then
 		if type(key) ~= "string" or not isOccupantOrNear(player, model, 6) then
 			return
@@ -111,30 +118,94 @@ telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, br
 	end
 end)
 
+local function enterPrompts(model)
+	local out = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ProximityPrompt") and d:GetAttribute("SeatName") then
+			table.insert(out, d)
+		end
+	end
+	return out
+end
+
+-- Invites « Conduire / Monter » : visibles seulement si la place est libre, le véhicule non
+-- verrouillé et sur ses roues. L'attribut Available garde la vérité serveur (le client masque
+-- localement les invites du véhicule où il est assis, puis revient à Available).
+local function refreshPrompts(model)
+	local locked = model:GetAttribute("Locked") == true
+	local flipped = model:GetAttribute("Flipped") == true
+	local seats = model:FindFirstChild("Seats")
+	for _, prompt in ipairs(enterPrompts(model)) do
+		local seat = seats and seats:FindFirstChild(prompt:GetAttribute("SeatName"))
+		local available = seat ~= nil and seat.Occupant == nil and not locked and not flipped
+		prompt:SetAttribute("Available", available)
+		prompt.Enabled = available
+	end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ProximityPrompt") and d:GetAttribute("Recover") then
+			d.Enabled = flipped
+		end
+	end
+end
+
 local function setupVehicle(model)
-	-- sièges : le moteur démarre quand le conducteur s'assoit (comme GTA)
-	local seat = model:FindFirstChild("DriverSeat", true)
-	if seat then
+	Access.TagCollision(model)
+	Access.Watch(model)
+	local root = model.PrimaryPart
+	if root then
+		model:SetAttribute("Parked", root.Anchored)
+	end
+	for _, seat in ipairs((model:FindFirstChild("Seats") or Instance.new("Folder")):GetChildren()) do
+		if not (seat:IsA("Seat") or seat:IsA("VehicleSeat")) then
+			continue
+		end
+		local isDriver = seat.Name == "DriverSeat"
+		local last = nil -- { humanoid, character }
 		seat:GetPropertyChangedSignal("Occupant"):Connect(function()
 			local hum = seat.Occupant
 			if hum then
-				local plr = game:GetService("Players"):GetPlayerFromCharacter(hum.Parent)
-				model:SetAttribute("DriverUserId", plr and plr.UserId or 0)
-				if model:GetAttribute("AutoStartEngine") ~= false then
-					model:SetAttribute("Engine", true)
+				local char = hum.Parent
+				last = { hum, char }
+				Access.SetOccupantGroup(char, true)
+				if isDriver then
+					local plr = Players:GetPlayerFromCharacter(char)
+					model:SetAttribute("DriverUserId", plr and plr.UserId or 0)
+					Access.OnDriverChanged(model, plr)
+					-- le moteur démarre quand le conducteur s'assoit (comme GTA)
+					if model:GetAttribute("AutoStartEngine") ~= false then
+						model:SetAttribute("Engine", true)
+					end
 				end
 			else
-				model:SetAttribute("DriverUserId", 0)
-				model:SetAttribute("Horn", false)
-				model:SetAttribute("Brake", false)
-				model:SetAttribute("Throttle", 0)
-				model:SetAttribute("Steer", 0)
+				-- descendu par un autre moyen que F (saut, script tiers) : on le pose dehors aussi
+				local prev = last
+				last = nil
+				if prev and prev[1].Parent and prev[1].Health > 0 and not Access.WasPlacedRecently(prev[2]) then
+					Access.EjectOccupant(model, seat, prev[1], prev[2])
+				end
+				if isDriver then
+					model:SetAttribute("DriverUserId", 0)
+					model:SetAttribute("Horn", false)
+					model:SetAttribute("Brake", false)
+					model:SetAttribute("Throttle", 0)
+					model:SetAttribute("Steer", 0)
+					Access.OnDriverChanged(model, nil)
+				end
 			end
+			refreshPrompts(model)
 		end)
 	end
-	-- portes / capot / coffre
+	for _, attr in ipairs({ "Locked", "Flipped" }) do
+		model:GetAttributeChangedSignal(attr):Connect(function()
+			refreshPrompts(model)
+		end)
+	end
+	-- invites : portes / capot / coffre (G), monter (F), remettre sur ses roues (F, maintenu)
 	for _, prompt in ipairs(model:GetDescendants()) do
-		if prompt:IsA("ProximityPrompt") and prompt:GetAttribute("HingeBone") then
+		if not prompt:IsA("ProximityPrompt") then
+			continue
+		end
+		if prompt:GetAttribute("HingeBone") then
 			prompt.Triggered:Connect(function(player)
 				local bone = prompt:GetAttribute("HingeBone")
 				if not isOccupantOrNear(player, model, prompt.MaxActivationDistance + 10) then
@@ -143,8 +214,17 @@ local function setupVehicle(model)
 				local cur = model:GetAttribute("Door_" .. bone) or 0
 				model:SetAttribute("Door_" .. bone, cur > 0.5 and 0 or 1)
 			end)
+		elseif prompt:GetAttribute("SeatName") then
+			prompt.Triggered:Connect(function(player)
+				Access.Enter(player, model, prompt:GetAttribute("SeatName"), prompt)
+			end)
+		elseif prompt:GetAttribute("Recover") then
+			prompt.Triggered:Connect(function(player)
+				Access.Recover(player, model)
+			end)
 		end
 	end
+	refreshPrompts(model)
 	Custom.Apply(model, Custom.Serialize(model))
 end
 
@@ -152,3 +232,4 @@ for _, m in ipairs(CollectionService:GetTagged(TAG)) do
 	task.spawn(setupVehicle, m)
 end
 CollectionService:GetInstanceAddedSignal(TAG):Connect(setupVehicle)
+CollectionService:GetInstanceRemovedSignal(TAG):Connect(Access.Unwatch)

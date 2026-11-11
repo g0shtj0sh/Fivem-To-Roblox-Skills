@@ -179,7 +179,7 @@ def add_collision(frag_path: Path, vb: VehicleBuilder, glb: GlbWriter, parts_cfg
     if any(m.skipped_primitives for m in coll.meshes):
         report.warn("Collision : primitives (boîte / sphère / capsule) dans une géométrie, non converties.")
     return {"Source": "gta", "Pieces": pieces, "Triangles": coll.triangles, "Wheels": wheels,
-            "WheelsCollide": bool(getattr(args, "wheel_collision", False))}
+            "WheelsCollide": not getattr(args, "no_wheel_collision", False)}
 
 
 # ------------------------------------------------------------------ helpers
@@ -642,8 +642,8 @@ def main(argv=None) -> int:
     ap.add_argument("--livery-uv", default="auto", choices=["auto", "uv0", "uv1"])
     ap.add_argument("--no-collision", action="store_true",
                     help="ne pas reprendre la collision du .yft (hitbox = boîte englobante)")
-    ap.add_argument("--wheel-collision", action="store_true",
-                    help="cylindres de roues solides (CanCollide) ; par défaut ils ne servent qu'aux rayons et contacts")
+    ap.add_argument("--no-wheel-collision", action="store_true",
+                    help="cylindres de roues non solides (moteur physique à roues propres) ; par défaut ils portent le véhicule")
     ap.add_argument("--texture-overrides",
                     help="dossier d'images qui remplacent les textures du pack de même nom (rebadge, retouches)")
     ap.add_argument("--sound-ids", help="JSON {fichier: assetId} produit par roblox_upload.py")
