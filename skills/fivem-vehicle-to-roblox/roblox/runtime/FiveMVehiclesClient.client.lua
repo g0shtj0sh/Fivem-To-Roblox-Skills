@@ -12,6 +12,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Runtime = require(folder:WaitForChild("VehicleRuntime"))
 local Input = require(folder:WaitForChild("VehicleInput"))
+local Drive = require(folder:WaitForChild("VehicleDrive"))
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -202,7 +203,12 @@ local function onSeated(active, seat)
 	if model and seat.Name == "DriverSeat" then
 		driving = model
 		Input.Enable()
+		-- moteur de conduite (désactivable : attribut UseBuiltinDrive = false pour brancher son propre châssis)
+		if model:GetAttribute("UseBuiltinDrive") ~= false then
+			Drive.Start(model)
+		end
 	else
+		Drive.Stop()
 		if driving then
 			set("Horn", false)
 		end

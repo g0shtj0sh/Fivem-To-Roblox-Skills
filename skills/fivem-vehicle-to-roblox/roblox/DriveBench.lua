@@ -1,0 +1,225 @@
+--!nonstrict
+--[[
+	DriveBench.lua — banc de mesure de conduite (client du conducteur, en Play).
+	Impose des entrées au moteur de conduite (VehicleDrive.SetOverride) et mesure le véhicule conduit.
+	Renvoie une table de fonctions ; chaque essai renvoie une table de mesures (unités SI : m, m/s, km/h, s, °).
+
+		local Bench = require(module)            -- ModuleScript (client : loadstring y est interdit)
+		Bench.accel(30)                          -- plein gaz : 0-100, 0-max, vitesse de pointe, rapports
+		Bench.brake(100)                         -- 100-0 au frein (ou { handbrake = true })
+		Bench.corner(40, 1)                      -- virage braquage plein à 40 km/h : roulis, lacet, dérive
+		Bench.reverse(4)                         -- marche arrière
+		Bench.trace(seconds, inputs)             -- trace libre, échantillons à chaque image
+
+	Chaque essai commence là où se trouve le véhicule : prévoir une piste dégagée devant lui.
+]]
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Drive = require(ReplicatedStorage:WaitForChild("FiveMVehicles"):WaitForChild("VehicleDrive"))
+
+local Bench = {}
+
+local function active()
+	local a = Drive.Get()
+	assert(a, "aucun véhicule conduit par le joueur local")
+	return a
+end
+
+local function state(a)
+	local root = a.root
+	local spm = a.spm
+	local cf = root.CFrame
+	local vLocal = cf:VectorToObjectSpace(root.AssemblyLinearVelocity) / spm
+	local w = cf:VectorToObjectSpace(root.AssemblyAngularVelocity)
+	local _, _, roll = cf:ToOrientation()
+	local o = a.out or {}
+	return {
+		t = os.clock(),
+		pos = root.Position / spm,
+		speed = -vLocal.Z, -- m/s vers l'avant
+		lat = vLocal.X,
+		yawRate = w.Y,
+		roll = math.deg(math.asin(math.clamp(cf.RightVector.Y, -1, 1))),
+		pitch = math.deg(math.asin(math.clamp(cf.LookVector.Y, -1, 1))),
+		up = cf.UpVector.Y,
+		gear = o.gear,
+		rpm = o.rpm,
+		clutch = o.clutch,
+	}
+end
+
+-- Tenue de ligne (comme un conducteur) : en ligne droite, le volant corrige l'écart latéral et le cap
+-- par rapport à la ligne de départ. Sans elle, une petite dissymétrie (conducteur assis d'un côté)
+-- fait tourner le véhicule sur un très grand rayon (mesuré : ~3,7 km).
+local line = nil
+function Bench.setLine(cf)
+	line = cf
+end
+local function lineSteer(a)
+	if not line then
+		return 0
+	end
+	local cf = a.root.CFrame
+	local off = line:PointToObjectSpace(cf.Position).X / a.spm -- m à droite de la ligne
+	local fwd = line:VectorToObjectSpace(cf.LookVector)
+	local heading = math.atan2(fwd.X, -fwd.Z) -- rad, + = vers la droite
+	return math.clamp(-(off * 0.15 + heading * 3), -0.4, 0.4) -- Steer -1 = gauche : à droite de la ligne, on braque à gauche
+end
+
+local function hold(inputs, seconds, each, keepLine)
+	local a = Drive.Get()
+	local t0 = os.clock()
+	while os.clock() - t0 < seconds do
+		local i = table.clone(inputs)
+		if keepLine and a then
+			i.Steer = lineSteer(a)
+		end
+		Drive.SetOverride(i)
+		RunService.Heartbeat:Wait()
+		if each and each(os.clock() - t0) then
+			break
+		end
+	end
+end
+
+local function settle(a, seconds)
+	hold({ Throttle = 0, Brake = 1, Steer = 0, Handbrake = false }, 0.1, nil, true)
+	local t0 = os.clock()
+	while os.clock() - t0 < (seconds or 6) do
+		RunService.Heartbeat:Wait()
+		Drive.SetOverride({ Throttle = 0, Brake = 1, Steer = lineSteer(a), Handbrake = false })
+		if math.abs(state(a).speed) < 0.2 then
+			break
+		end
+	end
+	hold({ Throttle = 0, Brake = 0, Steer = 0 }, 0.3)
+end
+
+function Bench.accel(maxSeconds)
+	local a = active()
+	settle(a)
+	local r = { shifts = {} }
+	local s0 = state(a)
+	local lastGear = s0.gear
+	local lastV, lastT = 0, os.clock()
+	local plateau = 0
+	hold({ Throttle = 1, Brake = 0, Steer = 0, Handbrake = false }, maxSeconds or 30, function(t)
+		local s = state(a)
+		local kmh = s.speed * 3.6
+		if not r.t60 and kmh >= 60 then
+			r.t60 = t
+		end
+		if not r.t100 and kmh >= 100 then
+			r.t100 = t
+		end
+		if s.gear ~= lastGear then
+			table.insert(r.shifts, string.format("%d->%d à %.0f km/h, régime %.2f, %.2f s", lastGear or 0, s.gear or 0, kmh, s.rpm or 0, t))
+			lastGear = s.gear
+		end
+		r.vmax = math.max(r.vmax or 0, kmh)
+		r.minUp = math.min(r.minUp or 1, s.up)
+		-- plateau : moins de 0,3 km/h gagné en 2 s
+		if os.clock() - lastT >= 2 then
+			plateau = (kmh - lastV < 0.3) and (plateau + 1) or 0
+			lastV, lastT = kmh, os.clock()
+			if plateau >= 1 and kmh > 30 then
+				r.plateauAt = t
+				return true
+			end
+		end
+		return false
+	end, true)
+	r.distance = (state(a).pos - s0.pos).Magnitude
+	r.endGear = state(a).gear
+	settle(a)
+	return r
+end
+
+function Bench.brake(fromKmh, opts)
+	opts = opts or {}
+	local a = active()
+	settle(a)
+	hold({ Throttle = 1, Brake = 0, Steer = 0 }, 40, function()
+		return state(a).speed * 3.6 >= fromKmh
+	end, true)
+	local s0 = state(a)
+	local inputs = opts.handbrake and { Throttle = 0, Brake = 0, Steer = 0, Handbrake = true }
+		or { Throttle = 0, Brake = 1, Steer = 0, Handbrake = false }
+	local r = { from = s0.speed * 3.6 }
+	hold(inputs, 15, function(t)
+		local s = state(a)
+		r.maxYaw = math.max(r.maxYaw or 0, math.abs(math.deg(s.yawRate)))
+		if s.speed < 0.3 then
+			r.time = t
+			return true
+		end
+		return false
+	end, not opts.handbrake)
+	r.distance = (state(a).pos - s0.pos).Magnitude
+	r.decelG = r.time and (s0.speed / r.time / 9.8) or nil
+	settle(a)
+	return r
+end
+
+function Bench.corner(kmh, steer, seconds)
+	local a = active()
+	settle(a)
+	hold({ Throttle = 1, Brake = 0, Steer = 0 }, 30, function()
+		return state(a).speed * 3.6 >= kmh
+	end, true)
+	-- maintient la vitesse (gaz proportionnels) en braquant à fond
+	local r = { kmh = kmh }
+	local t0 = os.clock()
+	Drive.SetOverride({ Throttle = 0.5, Brake = 0, Steer = steer or 1 })
+	while os.clock() - t0 < (seconds or 4) do
+		RunService.Heartbeat:Wait()
+		local s = state(a)
+		local err = kmh / 3.6 - s.speed
+		Drive.SetOverride({ Throttle = math.clamp(0.4 + err * 0.4, 0, 1), Brake = 0, Steer = steer or 1 })
+		r.maxRoll = math.max(r.maxRoll or 0, math.abs(s.roll))
+		r.maxYawRate = math.max(r.maxYawRate or 0, math.abs(math.deg(s.yawRate)))
+		r.minUp = math.min(r.minUp or 1, s.up)
+		if math.abs(s.speed) > 2 then
+			local beta = math.deg(math.atan2(s.lat, math.abs(s.speed)))
+			r.maxSlip = math.max(r.maxSlip or 0, math.abs(beta))
+			-- accélération latérale ≈ v × lacet
+			r.maxLatG = math.max(r.maxLatG or 0, math.abs(s.speed * s.yawRate) / 9.8)
+		end
+	end
+	r.endSpeed = state(a).speed * 3.6
+	r.rolledOver = (r.minUp or 1) < 0.3
+	settle(a)
+	return r
+end
+
+function Bench.reverse(seconds)
+	local a = active()
+	settle(a)
+	local r = {}
+	hold({ Throttle = 0, Brake = 1, Steer = 0 }, seconds or 4, function()
+		local s = state(a)
+		r.minSpeed = math.min(r.minSpeed or 0, s.speed * 3.6)
+		r.gear = s.gear
+		return false
+	end)
+	settle(a)
+	return r
+end
+
+function Bench.trace(seconds, inputs)
+	local a = active()
+	local rows = {}
+	hold(inputs, seconds, function(t)
+		local s = state(a)
+		table.insert(rows, string.format("%.2f;%.2f;%s;%.2f;%.1f;%.1f", t, s.speed * 3.6, tostring(s.gear), s.rpm or 0, s.roll, math.deg(s.yawRate)))
+		return false
+	end)
+	Drive.SetOverride(nil)
+	return rows
+end
+
+function Bench.release()
+	Drive.SetOverride(nil)
+end
+
+return Bench

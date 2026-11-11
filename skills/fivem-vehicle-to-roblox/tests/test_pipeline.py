@@ -84,6 +84,11 @@ def test_pipeline():
         runtime = (sdir / "FiveMRuntime.lua").read_text()
         assert "__RUNTIME_SOURCES__" not in runtime and "VehicleCustomization" in runtime
         assert "VehicleAccess" in runtime and 'SOURCES.VehicleAccess' in runtime
+        # moteur de conduite : modules installés, lest et actionneurs créés par le Setup
+        for mod in ("VehicleDynamics", "VehicleDrive"):
+            assert f"SOURCES.{mod}" in runtime, mod
+        assert '"Ballast"' in compact and '"DriveForce"' in compact and '"DriveTorque"' in compact
+        assert (sdir / "DriveBench.lua").exists()
         # monter / descendre : une invite F par siège, invite de remise sur les roues, attributs
         assert "EnterPrompt" in compact and "Enum.KeyCode.F" in compact and "RecoverPrompt" in compact
         assert "ParkAnchorDelay = 5" in compact and "Locked = false" in compact

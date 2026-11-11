@@ -13,6 +13,7 @@ Fichiers déposés dans <dossier synchronisé>/F2R_Transfer/ :
     <nom>_sound_ids.txt   -> StringValue  (texte de sounds/sound_ids.json, s'il existe)
     Verify.lua            -> ModuleScript (require(...)(opts) -> JSON ; aussi côté client en Play,
                                            où loadstring est interdit)
+    DriveBench.lua        -> ModuleScript (mesures de conduite, client du conducteur en Play)
 Affiche un JSON : chemin Studio du dossier, fichiers, octets.
 Le dossier choisi doit être monté avec "$ignoreUnknownInstances": true (Rojo n'y efface rien d'autre)
 et ignoré par git (rien n'est commité).
@@ -100,6 +101,7 @@ def main() -> int:
         f"{name}_Setup.txt": sdir / f"{name}_Setup.studio.lua",
         "ApplySoundIds.txt": sdir / "ApplySoundIds.lua",
         "Verify.lua": sdir / "Verify.lua",
+        "DriveBench.lua": sdir / "DriveBench.lua",
     }
     ids = vdir / "sounds" / "sound_ids.json"
     if ids.is_file():

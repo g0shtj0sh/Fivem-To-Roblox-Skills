@@ -94,38 +94,89 @@ véhicule sont dans le groupe `FiveMVehicle`, les occupants dans `FiveMVehicleOc
 entre eux). Les cylindres de roues sont solides par défaut (le véhicule désancré repose dessus) ;
 `--no-wheel-collision` les rend non solides pour un moteur à roues propres.
 
-## Brancher ton moteur physique
+## Moteur de conduite intégré (VehicleDynamics + VehicleDrive)
+
+Le véhicule roule tout seul : quand un joueur s'assoit au volant, `FiveMVehiclesClient` lance
+`VehicleDrive.Start(car)` chez lui, le serveur lui confie la physique (`SetNetworkOwner`), puis la reprend à la
+descente (`SetNetworkOwner(nil)`).
+
+- **`VehicleDynamics`** (module pur, sans Instance) : moteur à régime normalisé 0,2 → 1, couple plat jusqu'à
+  0,8 puis 60 % au rupteur, boîte (rapports d'origine du jeu, `DriveMaxFlatVelMs / rapport`, embrayage 0,1 → 1 au
+  taux `ClutchChangeRate`, marche arrière, rupteur, `HARD_REV_LIMIT`, `FREEWHEEL_NO_GAS`, CVT, électrique),
+  transmission `DriveFront/DriveRear`, pneus (courbe Max → Min, pic latéral `TractionCurveLateral × PeakFactor`,
+  `TractionFront/Rear`, `LowSpeedTractionLossMult`), freins (`BrakeFront/Rear`, ABS selon les flags), frein à main
+  arrière, suspension (`SuspensionForce`, amortissements, limites, `Raise`), anti-roulis, centre de roulis,
+  traînée (`DragAccelCoeff`), déportance (`DownforceModifier`), braquage réduit avec la vitesse, contrôle en l'air
+  et redressement doux. Tout en m/s² : la conduite ne dépend pas de la masse du modèle.
+- **`VehicleDrive`** (client du conducteur) : un spherecast par roue (rayon = `Wheels[os].Radius`), une
+  `VectorForce` et un `Torque` monde sur `VehicleRoot` (créés par le Setup : `DriveAttachment`, `DriveForce`,
+  `DriveTorque`), forces × `AssemblyMass` × `StudsPerMeter`, gravité ramenée à `Handling.GravityMs2`, pas fixe
+  `RunService:BindToSimulation` (repli `PreSimulation`), télémétrie `VehicleRuntime.SetTelemetry` à chaque pas.
+- **Masse** : un lest `Ballast` (invisible, sans collision) porte toute la masse au centre de gravité
+  (`Handling.CentreOfMassLocal` + base au-dessus des moyeux) ; la collision devient sans masse. La masse ne sert
+  qu'aux chocs (`MassKg × 0,1`).
+- **Roues de collision** : non solides pendant la conduite (suspension par rayons), solides sinon.
+- **Serveur** : contrôle de vraisemblance (`VehicleAccess.CheckPlausibility`) : vitesse ≤ `RedlineTopGearKmh`
+  × 1,35 + marge, pas de téléportation ; en cas d'écart, retour à la dernière position valide (attribut
+  `DriveViolations`).
 
 ```lua
--- LocalScript (client du conducteur), dans ton propre moteur
-local RS = game:GetService("ReplicatedStorage")
-local FiveM = RS:WaitForChild("FiveMVehicles")
-local Input = require(FiveM.VehicleInput)
-local Runtime = require(FiveM.VehicleRuntime)
-
-game:GetService("RunService").Heartbeat:Connect(function(dt)
-	if not Input.Enabled then return end          -- le joueur n'est pas au volant
-	local c = Input.Controls                       -- Throttle 0..1, Brake 0..1, Steer -1..1, Handbrake
-	local car = myCurrentCar                      -- le modèle conduit
-	local cfg = require(car.VehicleConfig)        -- cfg.Handling (masse, rapports, freinage…), cfg.Wheels
-	-- … ta physique ici …
-	Runtime.SetTelemetry(car, {                    -- facultatif mais recommandé
-		Rpm = rpm, Gear = gear, Throttle = c.Throttle, Speed = speedMs,
-		WheelSpin = { wheel_lf = wLf, wheel_rf = wRf, wheel_lr = wLr, wheel_rr = wRr },   -- rad/s
-		Suspension = { wheel_lf = compLf, ... },   -- mètres (+ = vers le haut)
-		WheelSteer = math.rad(35),                 -- angle de braquage max réel (rad), optionnel
-	})
-end)
-
-Input.Action.Event:Connect(function(name, value)  -- "GearUp", "GearDown", "Horn", "Headlights"...
-	if name == "GearUp" then --[[...]] end
-end)
+-- client du conducteur
+local Drive = require(game.ReplicatedStorage.FiveMVehicles.VehicleDrive)
+Drive.SetOverride({ Throttle = 1, Steer = 0 })  -- entrées imposées (tests, IA, cinématiques) ; nil = joueur
+local a = Drive.Get()                           -- a.sim (P = paramètres, S = état), a.out (dernier pas)
+print(a.out.speed, a.out.gear, a.out.rpm)       -- m/s, rapport (-1 = arrière), régime normalisé
+local Dyn = require(game.ReplicatedStorage.FiveMVehicles.VehicleDynamics)
+print(Dyn.PredictTopSpeed(a.sim) * 3.6)         -- vitesse de pointe théorique (km/h)
 ```
-Sans `SetTelemetry`, le rendu estime le régime et la rotation des roues depuis la vitesse de
-`VehicleRoot` (`AssemblyLinearVelocity`) et `cfg.Handling` (rapports, vitesse max).
 
-Les contrôles sont modifiables : `Input.Bindings.Horn = { Enum.KeyCode.E, Enum.KeyCode.ButtonL3 }`
-(avant que le joueur monte), `Input.SteerSpeed`, `Input.Deadzone`.
+### Réglages (`VehicleDynamics.Tuning`)
+
+Les lois que le jeu ne publie pas sont des réglages, à caler sur des mesures FiveM. Pour un véhicule : table
+`DriveTuning` dans `VehicleConfig` (mêmes noms), ou `Dyn.new(cfg, com, { KMu = 0.7 })`.
+
+| Réglage | Défaut | Rôle |
+|---|---|---|
+| `KMu` | 0,6 | échelle de `TractionCurveMax/Min` en g (adhérence) |
+| `PeakFactor` | 0,5 | pic latéral = `TractionCurveLateral × PeakFactor` (litige 0,5 / 1) |
+| `KappaPeak` | 0,12 | glissement longitudinal du pic |
+| `Falloff` | 1,5 | largeur de la descente Max → Min |
+| `KSpring`, `KArb` | 1 | raideurs de suspension et d'anti-roulis (lois inconnues) |
+| `IwRel` | 0,25 | inertie de roue + transmission (`Iw = IwRel × r² / 4`) |
+| `UpshiftRpm`, `DownshiftRpm`, `DownshiftMargin` | 0,93 / 0,45 / 0,85 | boîte automatique |
+| `EngineBrakeG` | 0,08 | frein moteur au rupteur, gaz relâchés |
+| `LowSpeedFade` | 8 m/s | fin de la perte d'adhérence au démarrage |
+| `SteerFade`, `SteerMinPct`, `SteerPeakGain` | 28 m/s / 0,3 / 1,6 | braquage réduit avec la vitesse |
+| `CounterSteer` | 0 | aide au contre-braquage |
+| `AbsSlip`, `AbsRelease` | 0,18 / 0,35 | ABS |
+| `HandbrakeGripRear` | 0,75 | adhérence latérale arrière au frein à main |
+| `AirPitch`, `AirRoll`, `AirDamp` | 4 / 3 / 1,5 | contrôle en l'air |
+| `RightingK`, `RightingSpeed` | 6 / 3 m/s | redressement doux |
+| `SubSteps` | 8 | sous-pas internes |
+| `CurbBoost` | 0 | effet « curb boost » (désactivé) |
+
+Dans le Setup : `COM_ABOVE_AXLE` (0,1 m, hauteur du centre de gravité au-dessus des moyeux), `MASS_SCALE` (0,1).
+
+### Interface d'adaptation : brancher son propre châssis
+
+Pour utiliser un autre moteur physique à la place de `VehicleDynamics` :
+
+1. Mettre l'attribut `UseBuiltinDrive = false` sur le modèle (le client ne lance plus `VehicleDrive`, les
+   cylindres de roues restent tels quels ; `--no-wheel-collision` à la conversion si ton châssis a ses roues).
+2. Lire les entrées dans `VehicleInput.Controls` (`Throttle` 0..1, `Brake` 0..1, `Steer` -1..1, `Handbrake`) et
+   `VehicleInput.Action` (`GearUp`, `GearDown`, `Horn`…) ; `cfg.Handling` contient tout `handling.meta` converti.
+3. Alimenter le rendu à chaque pas, exactement comme `VehicleDrive` :
+
+```lua
+Runtime.SetTelemetry(car, {
+	Rpm = rpm, Gear = gear, Throttle = c.Throttle, Brake = brakeLights, Reverse = inReverse,
+	Speed = speedMs,                                  -- m/s, + = avant
+	Steer = steer, WheelSteer = maxSteerRad,          -- angle des roues = -Steer × WheelSteer
+	WheelSpin = { wheel_lf = omega, ... },            -- rad/s, + = avant
+	Suspension = { wheel_lf = travel, ... },          -- m, + = vers le haut, relatif au repos
+})
+```
+Sans `SetTelemetry`, le rendu estime le régime et la rotation des roues depuis la vitesse de `VehicleRoot`.
 
 ## Données physiques exportées (`VehicleConfig.Handling` et `VehicleConfig.Physics`)
 

@@ -400,6 +400,9 @@ function Access.Step()
 		end
 		local driverSeat = model:FindFirstChild("DriverSeat", true)
 		local hasDriver = driverSeat and driverSeat.Occupant ~= nil
+		if hasDriver then
+			Access.CheckPlausibility(model)
+		end
 		local still = root.Anchored
 			or (root.AssemblyLinearVelocity.Magnitude < Access.StillSpeed and root.AssemblyAngularVelocity.Magnitude < Access.StillSpin)
 		-- retourné / sur le côté, quasi immobile, depuis FlipDelay s
@@ -428,13 +431,33 @@ function Access.Step()
 	end
 end
 
--- Conducteur assis : le véhicule est libéré (désancré) et sa physique confiée au conducteur.
+-- Cylindres de roues : solides quand personne ne conduit (le véhicule repose dessus), non solides
+-- quand le moteur de conduite tourne (suspension par rayons ; une roue solide la contrarierait).
+local function setWheelColliders(model, solid)
+	local folder = model:FindFirstChild("Collision")
+	local cfg = config(model)
+	local default = not (cfg.Collision and cfg.Collision.WheelsCollide == false)
+	for _, d in ipairs(folder and folder:GetDescendants() or {}) do
+		if d:IsA("BasePart") and d:GetAttribute("Kind") == "collision_wheel" then
+			d.CanCollide = solid and default
+		end
+	end
+end
+Access.SetWheelColliders = setWheelColliders
+
+-- Conducteur assis : le véhicule est libéré (désancré) et sa physique confiée au conducteur ;
+-- conducteur parti : la physique revient au serveur.
+local plausibility = setmetatable({}, { __mode = "k" })
 function Access.OnDriverChanged(model, player)
 	local root = model.PrimaryPart
 	if not root then
 		return
 	end
 	if player then
+		local builtin = model:GetAttribute("UseBuiltinDrive") ~= false
+		if builtin then
+			setWheelColliders(model, false)
+		end
 		if root.Anchored then
 			root.Anchored = false
 		end
@@ -442,11 +465,59 @@ function Access.OnDriverChanged(model, player)
 		pcall(function()
 			root:SetNetworkOwner(player)
 		end)
-	elseif not root.Anchored then
-		pcall(function()
-			root:SetNetworkOwnershipAuto()
-		end)
+		plausibility[model] = { pos = root.Position, t = os.clock(), player = player }
+	else
+		setWheelColliders(model, true)
+		plausibility[model] = nil
+		if not root.Anchored then
+			pcall(function()
+				root:SetNetworkOwner(nil)
+			end)
+		end
 	end
+end
+
+-- Contrôle de vraisemblance du véhicule piloté par un client (le serveur ne voit pas sa physique) :
+-- vitesse <= RedlineTopGearKmh × SpeedMargin, déplacement entre deux contrôles plausible. En cas d'écart,
+-- le serveur reprend la physique, remet le véhicule à sa dernière position valide, puis la rend.
+Access.SpeedMargin = 1.35
+Access.TeleportSlack = 8 -- studs
+function Access.CheckPlausibility(model)
+	local st = plausibility[model]
+	local root = model.PrimaryPart
+	if not st or not root or root.Anchored then
+		return true
+	end
+	local cfg = config(model)
+	local spm = cfg.StudsPerMeter or 3.571
+	local h = cfg.Handling or {}
+	local vmax = ((h.RedlineTopGearKmh or 250) / 3.6) * spm * Access.SpeedMargin + 10
+	local now = os.clock()
+	local dt = math.max(now - st.t, 1e-3)
+	local moved = (root.Position - st.pos).Magnitude
+	local speed = root.AssemblyLinearVelocity.Magnitude
+	if speed > vmax or moved > vmax * dt * 1.5 + Access.TeleportSlack then
+		model:SetAttribute("DriveViolations", (model:GetAttribute("DriveViolations") or 0) + 1)
+		local last = st.cf
+		pcall(function()
+			root:SetNetworkOwner(nil)
+		end)
+		if last then
+			model:PivotTo(last * root.CFrame:ToObjectSpace(model:GetPivot()))
+		end
+		root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+		task.delay(1, function()
+			if plausibility[model] == st and st.player.Parent and not root.Anchored then
+				pcall(function()
+					root:SetNetworkOwner(st.player)
+				end)
+			end
+		end)
+		st.pos, st.t = root.Position, now
+		return false
+	end
+	st.pos, st.t, st.cf = root.Position, now, root.CFrame
+	return true
 end
 
 -- Pièces de collision du véhicule dans le groupe dédié (pour laisser passer ses occupants).

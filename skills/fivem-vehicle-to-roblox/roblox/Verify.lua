@@ -32,6 +32,9 @@
 		lock_play  Locked = true : invites masquées et montée refusée, puis déverrouillage
 		park_play  conducteur à bord : VehicleRoot désancré ; descendu : ancré après ParkAnchorDelay
 		flip_play  retournement forcé : Flipped après 2 s, invite de remise, Recover le remet droit et au sol
+		-- scénario CLIENT en Play, joueur au volant (après seats_play ou Access.Enter côté serveur) :
+		drive_play accélérer 3 s puis freiner : vitesse, rapport, régime cohérent avec la vitesse, arrêt,
+		           véhicule droit et au sol (moteur de conduite VehicleDrive)
 ]]
 
 local HttpService = game:GetService("HttpService")
@@ -762,6 +765,76 @@ function groups.flip_play()
 	model:PivotTo(home)
 	root.Anchored = anchored0
 	model:SetAttribute("Flipped", false)
+end
+
+function groups.drive_play()
+	if context ~= "client" then
+		rec("skip", "drive_play", "scénario client : lancer en Play, execute_luau Client, joueur au volant")
+		return
+	end
+	local okD, Drive = pcall(require, ReplicatedStorage.FiveMVehicles.VehicleDrive)
+	if not okD then
+		rec("fail", "drive_play", "VehicleDrive : " .. tostring(Drive))
+		return
+	end
+	local a = Drive.Get()
+	if not a or a.car ~= model then
+		rec("skip", "drive_play", "le joueur local ne conduit pas ce véhicule")
+		return
+	end
+	check(true, "moteur de conduite actif", "pas : " .. tostring(Drive.StepMode))
+	local function sample()
+		local o = a.out
+		return o and o.speed or 0, o and o.gear or 0, o and o.rpm or 0, o and o.clutch or 1
+	end
+	Drive.SetOverride({ Throttle = 1, Brake = 0, Steer = 0, Handbrake = false })
+	local t0, maxGear, rpmErr, n = os.clock(), 0, 0, 0
+	local t100
+	while os.clock() - t0 < 3 do
+		task.wait()
+		local v, g, rpm, clutch = sample()
+		maxGear = math.max(maxGear, g)
+		if not t100 and v * 3.6 >= 100 then
+			t100 = os.clock() - t0
+		end
+		if g >= 1 and clutch >= 1 and v > 3 then
+			local ratio = a.sim.P.ratios[math.clamp(g, 1, a.sim.P.nGears)]
+			local expect = v / (a.sim.P.flatVel / ratio)
+			rpmErr = math.max(rpmErr, math.abs(rpm - math.max(expect, 0.2)))
+			n += 1
+		end
+	end
+	local v3 = sample()
+	check(v3 > 5, "accélère (3 s plein gaz)", fmt("%.1f km/h, rapport max %d%s", v3 * 3.6, maxGear,
+		t100 and fmt(", 0-100 en %.1f s", t100) or ""))
+	check(n > 0 and rpmErr < 0.25, "régime cohérent avec la vitesse et le rapport",
+		fmt("écart max %.2f (régime normalisé) sur %d échantillons", rpmErr, n))
+	local tel = model:GetAttribute("Gear")
+	check(tel ~= nil and tel >= 1, "rapport publié (attribut Gear)", tostring(tel))
+	Drive.SetOverride({ Throttle = 0, Brake = 1, Steer = 0, Handbrake = false })
+	local tb = os.clock()
+	local stopT
+	while os.clock() - tb < 8 do
+		task.wait()
+		local v = sample()
+		if math.abs(v) < 0.3 then
+			stopT = os.clock() - tb
+			break
+		end
+	end
+	Drive.SetOverride({ Throttle = 0, Brake = 0, Steer = 0 })
+	task.wait(0.3)
+	Drive.SetOverride(nil)
+	check(stopT ~= nil, "s'arrête au freinage", stopT and fmt("arrêt en %.2f s depuis %.1f km/h", stopT, v3 * 3.6) or "pas arrêté en 8 s")
+	local up = root.CFrame.UpVector.Y
+	local grounded = 0
+	local out = a.out
+	for i in ipairs(a.sim.P.wheels) do
+		if out and out.wheels[i] and out.wheels[i].Fz > 0 then
+			grounded += 1
+		end
+	end
+	check(up > 0.95 and grounded >= 3, "reste droit et sur ses roues", fmt("UpVector.Y %.3f, %d roue(s) au sol", up, grounded))
 end
 
 function groups.sounds()

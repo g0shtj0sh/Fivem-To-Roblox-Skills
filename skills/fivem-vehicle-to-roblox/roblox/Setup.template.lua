@@ -493,6 +493,70 @@ else
 	end
 end
 
+-- ------------------------------------------------------------------ 5 bis. masse et actionneurs du moteur de conduite
+-- Toute la masse est portée par un lest bas placé au centre de gravité : Handling.CentreOfMassLocal ajouté
+-- à un point de base (milieu des essieux, COM_ABOVE_AXLE au-dessus des moyeux). La conduite ne dépend pas
+-- de cette masse (forces spécifiques × AssemblyMass) ; elle sert aux collisions entre véhicules.
+local COM_ABOVE_AXLE = 0.1 -- m (réglage : hauteur du centre de gravité au-dessus des moyeux)
+local MASS_SCALE = 0.1 -- unités de masse Roblox par kg (rapports de masse plausibles avec les personnages)
+do
+	local wy, wz, n, xs, zs = 0, 0, 0, {}, {}
+	for _, w in pairs(CONFIG.Wheels or {}) do
+		wy += w.Position[2]
+		wz += w.Position[3]
+		n += 1
+		table.insert(xs, math.abs(w.Position[1]))
+		table.insert(zs, w.Position[3])
+	end
+	if n > 0 then
+		wy, wz = wy / n, wz / n
+		local track = 0
+		for _, x in ipairs(xs) do
+			track = math.max(track, 2 * x)
+		end
+		local wheelbase = math.max(table.unpack(zs)) - math.min(table.unpack(zs))
+		local h = CONFIG.Handling or {}
+		local off = h.CentreOfMassLocal or { 0, 0, 0 }
+		local comLocal = Vector3.new(off[1], wy + COM_ABOVE_AXLE + off[2], wz + off[3])
+		local ballast = Instance.new("Part")
+		ballast.Name = "Ballast"
+		-- boîte à l'empreinte du véhicule : son inertie donne un rayon de giration de voiture (~1,2 m en lacet)
+		ballast.Size = Vector3.new(math.max(track * 1.25, 0.6), 0.35, math.max(wheelbase * 1.3, 1)) * spm
+		ballast.CFrame = VF * CFrame.new(comLocal * spm)
+		ballast.Transparency = 1
+		ballast.CanCollide, ballast.CanQuery, ballast.CanTouch = false, false, false
+		ballast.Massless = false
+		ballast.Anchored = false
+		local mass = math.max((h.MassKg or 1500) * MASS_SCALE, 1)
+		local vol = ballast.Size.X * ballast.Size.Y * ballast.Size.Z
+		ballast.CustomPhysicalProperties = PhysicalProperties.new(math.clamp(mass / vol, 0.01, 100), 0.3, 0.1, 1, 1)
+		ballast.Parent = model
+		local bw = Instance.new("WeldConstraint")
+		bw.Part0, bw.Part1, bw.Parent = root, ballast, ballast
+		-- le lest porte la masse : la collision du véhicule devient sans masse
+		for _, p in ipairs(collisionParts) do
+			p.Massless = true
+		end
+		model:SetAttribute("CentreOfMassLocal", comLocal)
+	end
+	local att = Instance.new("Attachment")
+	att.Name = "DriveAttachment"
+	att.Parent = root
+	local vf = Instance.new("VectorForce")
+	vf.Name = "DriveForce"
+	vf.Attachment0 = att
+	vf.ApplyAtCenterOfMass = true
+	vf.RelativeTo = Enum.ActuatorRelativeTo.World
+	vf.Force = Vector3.zero
+	vf.Parent = root
+	local tq = Instance.new("Torque")
+	tq.Name = "DriveTorque"
+	tq.Attachment0 = att
+	tq.RelativeTo = Enum.ActuatorRelativeTo.World
+	tq.Torque = Vector3.zero
+	tq.Parent = root
+end
+
 -- ------------------------------------------------------------------ 6. livrées
 local liveries = Instance.new("Folder")
 liveries.Name = "Liveries"
@@ -828,6 +892,8 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleCustomization", SOURCES.VehicleCustomization)
 	upsert(folder, "ModuleScript", "VehicleInput", SOURCES.VehicleInput)
 	upsert(folder, "ModuleScript", "VehicleAccess", SOURCES.VehicleAccess)
+	upsert(folder, "ModuleScript", "VehicleDynamics", SOURCES.VehicleDynamics)
+	upsert(folder, "ModuleScript", "VehicleDrive", SOURCES.VehicleDrive)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()
