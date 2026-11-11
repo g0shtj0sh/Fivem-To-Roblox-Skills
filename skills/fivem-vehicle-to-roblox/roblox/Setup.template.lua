@@ -467,7 +467,9 @@ for bone, w in pairs(coll.Wheels or {}) do
 		c.CFrame = VF.Rotation + L2W(w.Center)
 		c.Transparency = 1
 		c.CastShadow = false
-		c.CanCollide = coll.WheelsCollide == true -- par défaut : rayons et contacts seulement
+		-- solides par défaut : le véhicule désancré (conducteur à bord) repose sur ses roues ;
+		-- un moteur physique à roues propres peut les rendre non solides (CanCollide = false)
+		c.CanCollide = coll.WheelsCollide ~= false
 		c.CanQuery, c.CanTouch = true, true
 		c.Massless = true
 		c:SetAttribute("Kind", "collision_wheel")
@@ -580,9 +582,68 @@ for i, s in ipairs(CONFIG.Seats or {}) do
 	seat.Massless = true
 	seat.Anchored = false
 	seat.CFrame = VF.Rotation + L2W(s.Position) - Vector3.new(0, 0.3 * spm, 0)
+	-- côté de la portière (-1 gauche, 1 droite, repère du véhicule) et portière associée
+	local side = (s.Position[1] or 0) < 0 and -1 or 1
+	seat:SetAttribute("Side", side)
+	local door = string.gsub(s.Bone or "", "^seat_", "door_")
+	if not (CONFIG.Hinges and CONFIG.Hinges[door]) then
+		-- portière la plus proche du même côté (sièges arrière sans portière dédiée, noms non standard)
+		door = nil
+		local best = math.huge
+		for bone, h in pairs(CONFIG.Hinges or {}) do
+			local hp = h.Pivot or (CONFIG.Bones[bone] and CONFIG.Bones[bone].Position)
+			if hp and string.find(bone, "^door_") and (hp[1] < 0) == (side < 0) then
+				local d = math.abs(hp[3] - s.Position[3])
+				if d < best then
+					door, best = bone, d
+				end
+			end
+		end
+	end
+	if door then
+		seat:SetAttribute("Door", door)
+	end
 	seat.Parent = seats
 	local w = Instance.new("WeldConstraint")
 	w.Part0, w.Part1, w.Parent = root, seat, seat
+
+	-- invite « Conduire / Monter » (F, manette Y ; bouton à l'écran sur mobile), dehors, côté portière
+	local halfWidth = math.max(math.abs(CONFIG.Bounds.Min[1]), math.abs(CONFIG.Bounds.Max[1]))
+	local a = Instance.new("Attachment")
+	a.Name = "Enter_" .. seat.Name
+	a.Parent = root -- parent d'abord : WorldPosition d'un attachment sans parent devient une position locale
+	a.WorldPosition = L2W({ side * (halfWidth + 0.35), (s.Position[2] or 0) + 0.15, s.Position[3] or 0 })
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "EnterPrompt"
+	prompt.ActionText = s.Driver and "Conduire" or "Monter"
+	prompt.ObjectText = CONFIG.DisplayName or CONFIG.Name
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
+	prompt.GamepadKeyCode = Enum.KeyCode.ButtonY
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = math.max(6, 1.6 * spm)
+	prompt.RequiresLineOfSight = false
+	prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton -- avant / arrière : la plus proche
+	prompt:SetAttribute("SeatName", seat.Name)
+	prompt:SetAttribute("Available", true)
+	prompt.Parent = a
+end
+do -- invite « Remettre sur ses roues » : activée par le serveur quand le véhicule est retourné
+	local a = Instance.new("Attachment")
+	a.Name = "RecoverPrompt"
+	a.Parent = root
+	a.WorldPosition = VF.Position
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "RecoverPrompt"
+	prompt.ActionText = "Remettre sur ses roues"
+	prompt.ObjectText = CONFIG.DisplayName or CONFIG.Name
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
+	prompt.GamepadKeyCode = Enum.KeyCode.ButtonY
+	prompt.HoldDuration = 1
+	prompt.MaxActivationDistance = math.max(10, 3 * spm)
+	prompt.RequiresLineOfSight = false
+	prompt.Enabled = false
+	prompt:SetAttribute("Recover", true)
+	prompt.Parent = a
 end
 
 -- ------------------------------------------------------------------ 9. portes (ProximityPrompt)
@@ -597,8 +658,8 @@ if CONFIG.DoorPrompts ~= false then
 		if pv then
 			local a = Instance.new("Attachment")
 			a.Name = "Prompt_" .. bone
-			a.WorldPosition = L2W(hinge.Center or CONFIG.Bones[bone].Position)
 			a.Parent = pv
+			a.WorldPosition = L2W(hinge.Center or CONFIG.Bones[bone].Position)
 			local prompt = Instance.new("ProximityPrompt")
 			prompt.ActionText = "Ouvrir / fermer"
 			prompt.ObjectText = DOOR_LABELS[bone] or bone
@@ -615,8 +676,8 @@ end
 -- ------------------------------------------------------------------ 10. sons
 local sounds = Instance.new("Attachment")
 sounds.Name = "Sounds"
-sounds.WorldPosition = L2W(CONFIG.EnginePosition or { 0, 0.5, -1.2 })
 sounds.Parent = root
+sounds.WorldPosition = L2W(CONFIG.EnginePosition or { 0, 0.5, -1.2 })
 local missingSounds = 0
 local function makeSound(name, file, volume)
 	local s = Instance.new("Sound")
@@ -724,6 +785,7 @@ local defaults = {
 	HasSiren = CONFIG.HasSiren == true, Horn = false, Brake = false, Reverse = false,
 	Throttle = 0, Steer = 0, Livery = CONFIG.DefaultLivery or 0, PlateText = CONFIG.PlateText or "F2R 000",
 	AutoStartEngine = true, WindowTint = 0.45, Neon = false,
+	Locked = false, ParkAnchorDelay = 5, Parked = true, Flipped = false, RecoverCooldown = 5,
 }
 for k, v in pairs(defaults) do
 	model:SetAttribute(k, v)
@@ -765,6 +827,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleRuntime", SOURCES.VehicleRuntime)
 	upsert(folder, "ModuleScript", "VehicleCustomization", SOURCES.VehicleCustomization)
 	upsert(folder, "ModuleScript", "VehicleInput", SOURCES.VehicleInput)
+	upsert(folder, "ModuleScript", "VehicleAccess", SOURCES.VehicleAccess)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()
