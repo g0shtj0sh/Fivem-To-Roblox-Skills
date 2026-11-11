@@ -83,6 +83,10 @@ def test_pipeline():
         assert (sdir / "Verify.lua").exists() and (sdir / "ApplySoundIds.lua").exists()
         runtime = (sdir / "FiveMRuntime.lua").read_text()
         assert "__RUNTIME_SOURCES__" not in runtime and "VehicleCustomization" in runtime
+        assert "VehicleAccess" in runtime and 'SOURCES.VehicleAccess' in runtime
+        # monter / descendre : une invite F par siège, invite de remise sur les roues, attributs
+        assert "EnterPrompt" in compact and "Enum.KeyCode.F" in compact and "RecoverPrompt" in compact
+        assert "ParkAnchorDelay = 5" in compact and "Locked = false" in compact
         # chaque étape découpée doit se recomposer exactement en sa source
         import re
         for step, src in (("FiveMRuntime", runtime), ("testcar_Setup", compact)):

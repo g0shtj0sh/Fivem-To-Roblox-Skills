@@ -23,6 +23,15 @@
 		joints     Motor6D qui bougent (roues, volant, portes, capot, coffre) — client en Play (runtime actif)
 		lights     chaque LightRole passe en Neon selon Headlights / Brake / Indicator / Reverse / Engine / Siren — client en Play
 		audio      les boucles moteur jouent quand Engine = true — client en Play
+		access     invites « Conduire / Monter » (F, manette Y) par siège, côté portière, dehors ;
+		           invite « Remettre sur ses roues » ; attributs Locked / ParkAnchorDelay
+		-- scénarios SERVEUR en Play, avec un joueur (opts.player, sinon le premier) :
+		seats_play monter puis descendre à chaque place (opts.seat pour une seule) : assis, portière
+		           ouverte puis refermée, regard vers l'avant, tête et jambes hors de la carrosserie,
+		           invite masquée, puis posé au sol côté portière, hors de la collision
+		lock_play  Locked = true : invites masquées et montée refusée, puis déverrouillage
+		park_play  conducteur à bord : VehicleRoot désancré ; descendu : ancré après ParkAnchorDelay
+		flip_play  retournement forcé : Flipped après 2 s, invite de remise, Recover le remet droit et au sol
 ]]
 
 local HttpService = game:GetService("HttpService")
@@ -39,8 +48,8 @@ _G.F2R_VERIFY = nil
 
 local context = (not RunService:IsRunning()) and "edit" or (RunService:IsClient() and "client" or "server")
 local DEFAULTS = {
-	edit = { "runtime", "structure", "wheels", "collision", "sounds", "custom" },
-	server = { "runtime", "structure", "wheels", "collision", "sounds", "custom" },
+	edit = { "runtime", "structure", "wheels", "collision", "access", "sounds", "custom" },
+	server = { "runtime", "structure", "wheels", "collision", "access", "sounds", "custom" },
 	client = { "joints", "lights", "sounds", "audio" },
 }
 
@@ -156,7 +165,7 @@ local groups = {}
 function groups.runtime()
 	local folder = ReplicatedStorage:FindFirstChild("FiveMVehicles")
 	check(folder ~= nil, "ReplicatedStorage.FiveMVehicles", folder and ("RuntimeVersion " .. tostring(folder:GetAttribute("RuntimeVersion"))) or "absent")
-	for _, n in ipairs({ "VehicleRuntime", "VehicleCustomization", "VehicleInput", "VehicleEvent", "VehicleTelemetry" }) do
+	for _, n in ipairs({ "VehicleRuntime", "VehicleCustomization", "VehicleInput", "VehicleAccess", "VehicleEvent", "VehicleTelemetry" }) do
 		local o = folder and folder:FindFirstChild(n)
 		check(o ~= nil, "FiveMVehicles." .. n, o and o.ClassName or "absent")
 	end
@@ -442,6 +451,317 @@ function groups.collision()
 	check(c.agree / nV >= 0.8, "hitbox fidèle à la carrosserie",
 		fmt("%d %% des %d rayons à moins de %.2f stud (ancienne boîte : %d %%) ; trop large %d %%, trop juste %d %% (boîte : %d %% / %d %%)",
 			pct(c.agree), nV, tol, pct(b.agree), pct(c.big), pct(c.small), pct(b.big), pct(b.small)))
+end
+
+function groups.access()
+	local seatsFolder = model:FindFirstChild("Seats")
+	local seats = {}
+	for _, s in ipairs(seatsFolder and seatsFolder:GetChildren() or {}) do
+		if s:IsA("Seat") or s:IsA("VehicleSeat") then
+			table.insert(seats, s)
+		end
+	end
+	check(#seats > 0 and model:FindFirstChild("DriverSeat", true) ~= nil, "sièges", fmt("%d place(s), dont DriverSeat", #seats))
+	local lo, hi = v3(CONFIG.Bounds.Min) * spm, v3(CONFIG.Bounds.Max) * spm
+	for _, seat in ipairs(seats) do
+		local a = root and root:FindFirstChild("Enter_" .. seat.Name)
+		local prompt = a and a:FindFirstChildOfClass("ProximityPrompt")
+		if not prompt then
+			rec("fail", "invite " .. seat.Name, "absente (Enter_" .. seat.Name .. ")")
+		else
+			local lp = root.CFrame:PointToObjectSpace(a.WorldPosition)
+			local side = seat:GetAttribute("Side")
+			local outside = lp.X < lo.X or lp.X > hi.X
+			local rightSide = side ~= nil and ((side < 0) == (lp.X < 0))
+			local wantText = seat.Name == "DriverSeat" and "Conduire" or "Monter"
+			check(prompt.KeyboardKeyCode == Enum.KeyCode.F and prompt.GamepadKeyCode == Enum.KeyCode.ButtonY
+				and prompt.ActionText == wantText and outside and rightSide,
+				"invite " .. seat.Name,
+				fmt("« %s » %s / %s, %s, côté %s, portière %s", prompt.ActionText, prompt.KeyboardKeyCode.Name,
+					prompt.GamepadKeyCode.Name, outside and "dehors" or "DANS la carrosserie",
+					tostring(side), tostring(seat:GetAttribute("Door"))))
+		end
+		local look = seat.CFrame.LookVector:Dot(root.CFrame.LookVector)
+		check(look > 0.99, "siège " .. seat.Name .. " tourné vers l'avant", fmt("%.3f", look))
+	end
+	-- tout attachment (invites, lumières, sons) doit être sur le véhicule : un WorldPosition réglé
+	-- avant le parent le projette des milliers de studs plus loin (défaut corrigé le 2026-11-11)
+	local far = {}
+	local margin = 1 * spm
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Attachment") then
+			local lp = root.CFrame:PointToObjectSpace(d.WorldPosition)
+			if lp.X < lo.X - margin or lp.X > hi.X + margin or lp.Y < lo.Y - margin or lp.Y > hi.Y + margin
+				or lp.Z < lo.Z - margin or lp.Z > hi.Z + margin then
+				table.insert(far, d.Name)
+			end
+		end
+	end
+	check(#far == 0, "invites, lumières et sons placés sur le véhicule",
+		#far > 0 and ("hors du véhicule : " .. table.concat(far, ", ", 1, math.min(#far, 8))) or "ok")
+	local rp = root and root:FindFirstChild("RecoverPrompt")
+	check(rp ~= nil and rp:FindFirstChildOfClass("ProximityPrompt") ~= nil, "invite « Remettre sur ses roues »", rp and "présente" or "absente")
+	check(model:GetAttribute("Locked") ~= nil and model:GetAttribute("ParkAnchorDelay") ~= nil, "attributs Locked / ParkAnchorDelay",
+		fmt("Locked %s, ParkAnchorDelay %s", tostring(model:GetAttribute("Locked")), tostring(model:GetAttribute("ParkAnchorDelay"))))
+end
+
+-- ------------------------------------------------------------------ scénarios serveur (Play)
+local function playContext(name)
+	if context ~= "server" then
+		rec("skip", name, "scénario serveur : lancer en Play, execute_luau Server")
+		return nil
+	end
+	local Players = game:GetService("Players")
+	local player = opts.player or Players:GetPlayers()[1]
+	local char = player and player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		rec("skip", name, "aucun joueur avec un personnage")
+		return nil
+	end
+	local ok, Access = pcall(require, ReplicatedStorage.FiveMVehicles.VehicleAccess)
+	if not ok then
+		rec("fail", name, "VehicleAccess : " .. tostring(Access))
+		return nil
+	end
+	return Access, player, char, hum
+end
+
+local function collisionParts()
+	local out = {}
+	local f = model:FindFirstChild("Collision")
+	for _, d in ipairs(f and f:GetDescendants() or {}) do
+		if d:IsA("BasePart") and d.CanCollide then
+			table.insert(out, d)
+		end
+	end
+	local hb = model:FindFirstChild("Hitbox")
+	if hb and hb.CanCollide then
+		table.insert(out, hb)
+	end
+	return out
+end
+
+local function overlapsVehicle(part, list)
+	local op = OverlapParams.new()
+	op.FilterType = Enum.RaycastFilterType.Include
+	op.FilterDescendantsInstances = list
+	op.CollisionGroup = "Default"
+	return #workspace:GetPartsInPart(part, op) > 0
+end
+
+function groups.seats_play()
+	local Access, player, char, hum = playContext("seats_play")
+	if not Access then
+		return
+	end
+	local list = collisionParts()
+	local seatsFolder = model:FindFirstChild("Seats")
+	for _, seat in ipairs(seatsFolder and seatsFolder:GetChildren() or {}) do
+		if not (seat:IsA("Seat") or seat:IsA("VehicleSeat")) or (opts.seat and seat.Name ~= opts.seat) then
+			continue
+		end
+		local a = root:FindFirstChild("Enter_" .. seat.Name)
+		local prompt = a and a:FindFirstChildOfClass("ProximityPrompt")
+		local door = seat:GetAttribute("Door")
+		-- le joueur se tient à l'invite, comme s'il venait d'appuyer sur F
+		if hum.SeatPart then
+			Access.Exit(player)
+			task.wait(0.3)
+		end
+		char:PivotTo(CFrame.new(a.WorldPosition + Vector3.new(0, 1, 0)))
+		task.wait(0.2)
+		local doorMax = 0
+		local conn = door and model:GetAttributeChangedSignal("Door_" .. door):Connect(function()
+			doorMax = math.max(doorMax, model:GetAttribute("Door_" .. door) or 0)
+		end)
+		local okEnter, why = Access.Enter(player, model, seat.Name, prompt)
+		task.wait(0.4)
+		local seated = seat.Occupant == hum
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local facing = hrp and hrp.CFrame.LookVector:Dot(root.CFrame.LookVector) or 0
+		-- tête sous le toit, jambes au-dessus du plancher : mesuré contre la carrosserie VISIBLE
+		-- (la collision GTA est un volume plein : un passager y est toujours « dedans »)
+		local visual = partsWhere(function(p)
+			return p:GetAttribute("Kind") ~= "collision" and p.Transparency < 1 and not p:GetAttribute("LightRole")
+		end)
+		local savedQ = {}
+		for _, p in ipairs(visual) do
+			savedQ[p] = p.CanQuery
+			p.CanQuery = true
+		end
+		local rpv = RaycastParams.new()
+		rpv.FilterType = Enum.RaycastFilterType.Include
+		rpv.FilterDescendantsInstances = visual
+		local head = char:FindFirstChild("Head")
+		local headRoom = math.huge
+		if head then
+			local up = workspace:Raycast(head.Position, Vector3.new(0, 10, 0), rpv)
+			headRoom = up and (up.Position.Y - (head.Position.Y + head.Size.Y / 2)) or math.huge
+		end
+		local legRoom = math.huge
+		for _, n in ipairs({ "Left Leg", "Right Leg", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot" }) do
+			local leg = char:FindFirstChild(n)
+			if leg then
+				-- point le plus bas de la pièce (jambes à l'horizontale une fois assis), rayon depuis son centre
+				local bottom = math.huge
+				for _, sx in ipairs({ -1, 1 }) do
+					for _, sy in ipairs({ -1, 1 }) do
+						for _, sz in ipairs({ -1, 1 }) do
+							bottom = math.min(bottom, (leg.CFrame * CFrame.new(leg.Size * Vector3.new(sx, sy, sz) / 2)).Position.Y)
+						end
+					end
+				end
+				local down = workspace:Raycast(leg.Position, Vector3.new(0, -10, 0), rpv)
+				if down then
+					legRoom = math.min(legRoom, bottom - down.Position.Y)
+				end
+			end
+		end
+		for p, q in pairs(savedQ) do
+			p.CanQuery = q
+		end
+		local hidden = prompt ~= nil and prompt.Enabled == false
+		local group = hrp and hrp.CollisionGroup or "?"
+		-- échelle conseillée pour que la tête passe avec 0,25 stud de marge : la hauteur utile au-dessus
+		-- de l'assise grandit avec l'échelle du véhicule, pas l'avatar
+		local advice = ""
+		if head and headRoom < 0.25 and headRoom ~= math.huge then
+			local span = (head.Position.Y + head.Size.Y / 2) - (seat.Position.Y + seat.Size.Y / 2)
+			if span > 0.5 then
+				local factor = (span + 0.25) / math.max(span + headRoom, 0.1)
+				advice = fmt(" ; pour cet avatar : échelle ×%.2f (--studs-per-meter %.2f)", factor, spm * factor)
+			end
+		end
+		check(headRoom > -0.05 and legRoom > -0.15, seat.Name .. " : tête sous le toit, jambes au-dessus du plancher",
+			fmt("garde au toit %s, aux pieds %s (studs ; négatif = traverse)%s",
+				headRoom == math.huge and "aucun toit trouvé" or fmt("%+.2f", headRoom),
+				legRoom == math.huge and "?" or fmt("%+.2f", legRoom), advice), "warn")
+		check(hidden, seat.Name .. " : invite masquée pendant l'occupation", prompt and tostring(prompt.Enabled) or "absente")
+		check(group == Access.OccupantGroup, seat.Name .. " : occupant sans collision avec le véhicule", group)
+		if seat.Name == "DriverSeat" then
+			check(model:GetAttribute("Engine") == true, "moteur démarré à la montée du conducteur", tostring(model:GetAttribute("Engine")))
+		end
+		-- descendre
+		local side = seat:GetAttribute("Side") or 1
+		local okExit, where = Access.Exit(player)
+		task.wait(0.6) -- le client se pose lui-même (PlaceAt), puis réplique
+		local lp = hrp and root.CFrame:PointToObjectSpace(hrp.Position) or Vector3.zero
+		local rp = RaycastParams.new()
+		rp.FilterType = Enum.RaycastFilterType.Exclude
+		rp.FilterDescendantsInstances = { char }
+		local below = hrp and workspace:Raycast(hrp.Position, Vector3.new(0, -12, 0), rp)
+		local feetGap = below and (hrp.Position.Y - below.Position.Y) or math.huge
+		local inBody = false
+		for _, p in ipairs(char:GetChildren()) do
+			if p:IsA("BasePart") and overlapsVehicle(p, list) then
+				inBody = true
+			end
+		end
+		check(okExit and seat.Occupant == nil and hum.SeatPart == nil, seat.Name .. " : descendre", okExit and tostring(where) or "refusé")
+		check(where == "door" and (side < 0) == (lp.X < 0), seat.Name .. " : posé côté portière",
+			fmt("%s, x local %.1f (côté attendu %d)", tostring(where), lp.X, side))
+		check(feetGap < 6 and not inBody and below and not below.Instance:IsDescendantOf(model), seat.Name .. " : au sol, hors du véhicule",
+			fmt("%.2f stud au-dessus de %s, %s", feetGap, below and below.Instance.Name or "rien", inBody and "DANS la collision" or "libre"))
+		if door then
+			task.wait(Access.DoorCloseDelay + Access.DoorOpenTime + 0.3)
+			check(doorMax >= 1 and (model:GetAttribute("Door_" .. door) or 0) == 0, seat.Name .. " : portière ouverte puis refermée",
+				fmt("%s : max %.1f, fin %.1f", door, doorMax, model:GetAttribute("Door_" .. door) or 0))
+		end
+		if conn then
+			conn:Disconnect()
+		end
+		task.wait(Access.OccupantGrace + 0.1)
+		check(hrp and hrp.CollisionGroup ~= Access.OccupantGroup, seat.Name .. " : collision rendue après la descente", hrp and hrp.CollisionGroup or "?")
+	end
+end
+
+function groups.lock_play()
+	local Access, player, char = playContext("lock_play")
+	if not Access then
+		return
+	end
+	local a = root:FindFirstChild("Enter_DriverSeat")
+	local prompt = a and a:FindFirstChildOfClass("ProximityPrompt")
+	char:PivotTo(CFrame.new(a.WorldPosition + Vector3.new(0, 1, 0)))
+	Access.SetLocked(model, true)
+	task.wait(0.2)
+	local ok, why = Access.Enter(player, model, "DriverSeat", prompt)
+	check(prompt.Enabled == false and not ok and why == "locked", "verrouillé : invite masquée, montée refusée",
+		fmt("invite %s, montée %s (%s)", tostring(prompt.Enabled), tostring(ok), tostring(why)))
+	Access.SetLocked(model, false)
+	task.wait(0.2)
+	check(prompt.Enabled == true, "déverrouillé : invite de retour", tostring(prompt.Enabled))
+end
+
+function groups.park_play()
+	local Access, player, char, hum = playContext("park_play")
+	if not Access then
+		return
+	end
+	local delay0 = model:GetAttribute("ParkAnchorDelay")
+	model:SetAttribute("ParkAnchorDelay", 1.5)
+	local a = root:FindFirstChild("Enter_DriverSeat")
+	char:PivotTo(CFrame.new(a.WorldPosition + Vector3.new(0, 1, 0)))
+	task.wait(0.2)
+	Access.Enter(player, model, "DriverSeat", a:FindFirstChildOfClass("ProximityPrompt"))
+	task.wait(0.5)
+	check(root.Anchored == false and model:GetAttribute("Parked") == false, "conducteur à bord : véhicule libéré",
+		fmt("Anchored %s, Parked %s", tostring(root.Anchored), tostring(model:GetAttribute("Parked"))))
+	Access.Exit(player)
+	local t0 = os.clock()
+	while not root.Anchored and os.clock() - t0 < 6 do
+		task.wait(0.1)
+	end
+	check(root.Anchored and model:GetAttribute("Parked") == true, "sans conducteur : ancré après le délai",
+		fmt("ancré après %.1f s (délai 1,5 s)", os.clock() - t0))
+	model:SetAttribute("ParkAnchorDelay", delay0)
+end
+
+function groups.flip_play()
+	local Access, player, char = playContext("flip_play")
+	if not Access then
+		return
+	end
+	local home = model:GetPivot()
+	local anchored0 = root.Anchored
+	root.Anchored = true
+	model:PivotTo(home * CFrame.new(0, 3 * spm, 0) * CFrame.Angles(0, 0, math.pi))
+	local t0 = os.clock()
+	while model:GetAttribute("Flipped") ~= true and os.clock() - t0 < 5 do
+		task.wait(0.1)
+	end
+	local flippedAfter = os.clock() - t0
+	local rprompt = root:FindFirstChild("RecoverPrompt") and root.RecoverPrompt:FindFirstChildOfClass("ProximityPrompt")
+	local enterP = root:FindFirstChild("Enter_DriverSeat") and root.Enter_DriverSeat:FindFirstChildOfClass("ProximityPrompt")
+	task.wait(0.2)
+	check(model:GetAttribute("Flipped") == true and flippedAfter >= 1.8, "retourné détecté après ~2 s", fmt("%.1f s", flippedAfter))
+	check(rprompt and rprompt.Enabled and enterP and not enterP.Enabled, "invite de remise affichée, montée masquée",
+		fmt("remise %s, montée %s", tostring(rprompt and rprompt.Enabled), tostring(enterP and enterP.Enabled)))
+	char:PivotTo(CFrame.new(root.Position + root.CFrame.RightVector * 6 + Vector3.new(0, 4, 0)))
+	task.wait(0.2)
+	local ok, why = Access.Recover(player, model)
+	task.wait(0.3)
+	local up = root.CFrame.UpVector.Y
+	-- au sol : bas des roues sur la surface dessous
+	local lowest = math.huge
+	for _, w in pairs(CONFIG.Wheels or {}) do
+		lowest = math.min(lowest, (w.Position[2] - (w.Radius or 0.35)) * spm)
+	end
+	local rp = RaycastParams.new()
+	rp.FilterType = Enum.RaycastFilterType.Exclude
+	rp.FilterDescendantsInstances = { model, char }
+	local hit = workspace:Raycast(root.Position + Vector3.new(0, 2, 0), Vector3.new(0, -60, 0), rp)
+	local gap = hit and (root.Position.Y + lowest - hit.Position.Y) or math.huge
+	check(ok and up > 0.99 and math.abs(gap) < 0.3, "remis sur ses roues",
+		ok and fmt("UpVector.Y %.3f, roues à %+.2f stud du sol", up, gap) or ("refusé : " .. tostring(why)))
+	-- second retournement aussitôt : la remise doit être refusée (délai RecoverCooldown)
+	model:PivotTo(model:GetPivot() * CFrame.Angles(0, 0, math.pi))
+	local again, why2 = Access.Recover(player, model)
+	check(not again and why2 == "cooldown", "délai entre deux remises", fmt("%s (%s)", tostring(again), tostring(why2)))
+	model:PivotTo(home)
+	root.Anchored = anchored0
+	model:SetAttribute("Flipped", false)
 end
 
 function groups.sounds()
