@@ -25,6 +25,8 @@ Dyn.Tuning = {
 	VMin = 1.0, -- m/s : plancher de vitesse pour les glissements (anti-tremblement)
 	KSpring = 1.0, -- k = SuspensionForce × biais × g / course × KSpring (hypothèse)
 	BumpK = 400, -- m/s² par m au-delà de la butée de compression
+	DampVMax = 1.0, -- m/s : vitesse d'amortisseur plafonnée (clapets haute vitesse, souplesse du pneu).
+	--                 Sans plafond, une bordure de 15 cm à 20 km/h (5,4 m/s en une image) fait décoller l'avant.
 	KArb = 1.0, -- anti-roulis : kA = AntiRollBarForce × biais × g / course × KArb (loi inconnue)
 	IwRel = 0.25, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
 	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g)
@@ -232,6 +234,18 @@ function Dyn.new(cfg, comLocal, overrides)
 	return { P = P, S = S, T = T }
 end
 
+-- Remet l'état dynamique au repos (roues arrêtées, ralenti, 1re) : après un téléport, une remise sur
+-- les roues ou une chute rattrapée, sinon les roues lancées en l'air relancent le véhicule.
+function Dyn.reset(sim)
+	local S, P = sim.S, sim.P
+	S.rpm, S.gear, S.clutch, S.shiftDir, S.reverseTimer = 0.2, 1, 1, 0, 0
+	for i, w in ipairs(P.wheels) do
+		S.omega[i] = 0
+		S.x[i] = w.x0
+		S.slip[i] = 0
+	end
+end
+
 -- ------------------------------------------------------------------ morceaux du modèle
 local function torqueCurve(rpm, gear)
 	if gear == 1 or rpm <= 0.8 then
@@ -356,7 +370,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			local zeta = (xdot > 0) and P.zetaComp or P.zetaReb
 			local cd = zeta * 2 * math.sqrt(w.k * mc)
 			cd = cd / (1 + cd * dt / mc) -- amortisseur semi-implicite
-			local F = w.load + w.k * (x - w.x0) + cd * xdot
+			local F = w.load + w.k * (x - w.x0) + cd * math.clamp(xdot, -T.DampVMax, T.DampVMax)
 			if x > P.travel then
 				F += T.BumpK * (x - P.travel)
 			end

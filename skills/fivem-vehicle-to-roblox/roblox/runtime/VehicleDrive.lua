@@ -98,9 +98,19 @@ local function step(a, dt)
 		return
 	end
 	if root.Anchored then
+		-- stationné, ou déplacé par le serveur (Access.Teleport) : forces coupées, état remis au repos
 		a.vf.Force, a.tq.Torque = Vector3.zero, Vector3.zero
+		-- une pièce ancrée garde sa vitesse et la reprend au désancrage (mesuré : véhicule rattrapé
+		-- d'une chute à 166 studs/s puis projeté à 60 studs de haut) : on l'annule chez le propriétaire
+		root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+		if not a.wasAnchored then
+			a.wasAnchored = true
+			Dyn.reset(sim)
+			a.xPrev = {}
+		end
 		return
 	end
+	a.wasAnchored = false
 	a.filterAge += dt
 	if a.filterAge > 1 then
 		a.filterAge = 0
@@ -164,6 +174,7 @@ local function step(a, dt)
 	}
 	local out = Dyn.step(sim, inp, contacts, dt, ctx)
 	a.out = out
+	a.contacts = contacts
 
 	-- forces spécifiques (m/s², local) -> forces Roblox (monde) : × StudsPerMeter × AssemblyMass
 	local m = root.AssemblyMass

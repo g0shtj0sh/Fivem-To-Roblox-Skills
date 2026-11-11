@@ -32,6 +32,8 @@
 		lock_play  Locked = true : invites masquées et montée refusée, puis déverrouillage
 		park_play  conducteur à bord : VehicleRoot désancré ; descendu : ancré après ParkAnchorDelay
 		flip_play  retournement forcé : Flipped après 2 s, invite de remise, Recover le remet droit et au sol
+		void_play  chute dans le vide : remis à sa dernière position sûre avant FallenPartsDestroyHeight,
+		           aucune pièce détruite (VehicleAccess.RecoverFromVoid)
 		-- scénario CLIENT en Play, joueur au volant (après seats_play ou Access.Enter côté serveur) :
 		drive_play accélérer 3 s puis freiner : vitesse, rapport, régime cohérent avec la vitesse, arrêt,
 		           véhicule droit et au sol (moteur de conduite VehicleDrive)
@@ -765,6 +767,47 @@ function groups.flip_play()
 	model:PivotTo(home)
 	root.Anchored = anchored0
 	model:SetAttribute("Flipped", false)
+end
+
+function groups.void_play()
+	local Access = playContext("void_play")
+	if not Access then
+		return
+	end
+	local home = model:GetPivot()
+	local anchored0 = root.Anchored
+	local count0 = 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			count0 += 1
+		end
+	end
+	local n0 = model:GetAttribute("VoidRecoveries") or 0
+	-- position sûre = position actuelle (au sol) : on laisse VehicleAccess l'enregistrer
+	root.Anchored = true
+	task.wait(0.6)
+	root.Anchored = false
+	local floor = workspace.FallenPartsDestroyHeight + (model:GetAttribute("VoidMargin") or 60)
+	model:PivotTo(home - home.Position + Vector3.new(home.X, floor - 20, home.Z))
+	local t0 = os.clock()
+	while (model:GetAttribute("VoidRecoveries") or 0) == n0 and os.clock() - t0 < 3 do
+		task.wait()
+	end
+	local after = os.clock() - t0
+	task.wait(0.3)
+	local count1 = 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			count1 += 1
+		end
+	end
+	local back = (model:GetPivot().Position - home.Position).Magnitude
+	check((model:GetAttribute("VoidRecoveries") or 0) == n0 + 1 and back < 3 and root.CFrame.UpVector.Y > 0.95,
+		"tombé dans le vide : remis à sa position sûre", fmt("%.2f s, %.2f studs de la position sûre, UpVector.Y %.2f", after, back, root.CFrame.UpVector.Y))
+	check(count1 == count0 and model.Parent ~= nil, "aucune pièce détruite", fmt("%d / %d pièces", count1, count0))
+	model:PivotTo(home)
+	root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+	root.Anchored = anchored0
 end
 
 function groups.drive_play()

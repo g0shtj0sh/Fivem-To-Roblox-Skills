@@ -88,7 +88,9 @@ def test_pipeline():
         for mod in ("VehicleDynamics", "VehicleDrive"):
             assert f"SOURCES.{mod}" in runtime, mod
         assert '"Ballast"' in compact and '"DriveForce"' in compact and '"DriveTorque"' in compact
-        assert (sdir / "DriveBench.lua").exists()
+        assert (sdir / "DriveBench.lua").exists() and (sdir / "TestTrack.lua").exists()
+        access = (ROOT / "roblox" / "runtime" / "VehicleAccess.lua").read_text()
+        assert "function Access.RecoverFromVoid" in access and "function Access.PlaceOnGround" in access
         # monter / descendre : une invite F par siège, invite de remise sur les roues, attributs
         assert "EnterPrompt" in compact and "Enum.KeyCode.F" in compact and "RecoverPrompt" in compact
         assert "ParkAnchorDelay = 5" in compact and "Locked = false" in compact

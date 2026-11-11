@@ -8,6 +8,9 @@
 --   Access.Exit(player)                       --> true | false, raison
 --   Access.Recover(player, car)               --> true | false, raison
 --   Access.SetLocked(car, true)
+--   Access.PlaceOnGround(car, position, look) -- pose droit, roues au sol (garage, essais)
+--   Access.Teleport(car, pivot)               -- déplacer un véhicule (même conduit) depuis le serveur
+--   Access.MarkMoved(car, grace)              -- après un déplacement fait autrement par ton code serveur
 --
 -- Attributs du modèle :
 --   Locked (bool)            invites masquées et montée refusée (on peut toujours descendre)
@@ -15,6 +18,11 @@
 --   Parked (bool)            VehicleRoot ancré par le stationnement
 --   Flipped (bool)           retourné ou sur le côté depuis plus de FLIP_DELAY s, quasi immobile
 --   RecoverCooldown (s, 5)   délai entre deux remises sur les roues
+--   VoidMargin (studs, 60)   tombé dans le vide : remis à sa dernière position sûre avant d'atteindre
+--                            Workspace.FallenPartsDestroyHeight + VoidMargin (sinon Roblox le détruit)
+--   VoidRecoveries (int)     nombre de remises après une chute (lecture)
+--   TeleportGraceUntil       heure serveur jusqu'à laquelle le contrôle de vraisemblance tolère un saut
+--                            (posé par Access.Teleport / MarkMoved)
 -- Attributs des sièges (posés par le Setup) : Side (-1 gauche / 1 droite), Door (os de portière).
 
 local Players = game:GetService("Players")
@@ -37,8 +45,67 @@ Access.FlipUp = 0.5 -- UpVector.Y en dessous duquel le véhicule est « retourn�
 Access.FlipDelay = 2
 Access.StillSpeed = 0.4 -- studs/s : « quasi immobile »
 Access.StillSpin = 0.3 -- rad/s
+Access.VoidLookahead = 0.5 -- s : position prévue (vitesse de chute) comparée au seuil de destruction
+Access.SafeEvery = 0.5 -- s entre deux enregistrements de la position sûre
 
 local groupsReady = false
+local plausibility = setmetatable({}, { __mode = "k" }) -- [model] = { pos, t, cf, player }
+
+-- À appeler après tout déplacement du véhicule par le serveur (garage, téléport, remise) : sinon le
+-- contrôle de vraisemblance prend le saut pour de la triche et remet le véhicule à son ancienne place.
+-- La tolérance est un attribut (TeleportGraceUntil, heure serveur) : elle vaut aussi quand le
+-- déplacement vient d'un autre contexte Luau (Actor, autre script qui a son propre require).
+function Access.MarkMoved(model, grace)
+	local pl = plausibility[model]
+	local root = model.PrimaryPart
+	if pl and root then
+		pl.pos, pl.t, pl.cf = root.Position, os.clock(), root.CFrame
+	end
+	local untilT = Workspace:GetServerTimeNow() + (grace or 1)
+	if untilT > (model:GetAttribute("TeleportGraceUntil") or 0) then
+		model:SetAttribute("TeleportGraceUntil", untilT)
+	end
+end
+
+local function driverOf(model)
+	local seat = model:FindFirstChild("DriverSeat", true)
+	local occ = seat and seat.Occupant
+	return occ and Players:GetPlayerFromCharacter(occ.Parent)
+end
+
+-- Déplace le véhicule (pivot du modèle) depuis le serveur, même conduit. Un simple PivotTo serveur
+-- ne suffit pas quand un client possède la physique : il renvoie son ancienne position (mesuré : le
+-- véhicule revient en arrière, penché). On ancre VehicleRoot (le serveur reprend la main, le moteur
+-- de conduite se met en pause), on déplace, puis on désancre et on rend la physique au conducteur.
+Access.TeleportHold = 0.25 -- s ancré
+function Access.Teleport(model, pivot)
+	local root = model.PrimaryPart
+	if not root then
+		return false
+	end
+	local wasAnchored = root.Anchored
+	Access.MarkMoved(model, 1.5)
+	-- vitesses annulées avant l'ancrage : une pièce ancrée garde sa vitesse et la reprend ensuite
+	root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+	root.Anchored = true
+	model:PivotTo(pivot)
+	Access.MarkMoved(model, 1.5)
+	if not wasAnchored then
+		task.delay(Access.TeleportHold, function()
+			if not model.Parent or not root.Parent then
+				return
+			end
+			root.Anchored = false
+			root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+			Access.MarkMoved(model, 1)
+			local driver = driverOf(model)
+			pcall(function()
+				root:SetNetworkOwner(driver)
+			end)
+		end)
+	end
+	return true
+end
 local function ensureGroups()
 	if groupsReady then
 		return
@@ -329,7 +396,8 @@ function Access.Recover(player, model)
 	if not Access.IsUpsideDown(model) then
 		return false, "not_flipped"
 	end
-	if root.AssemblyLinearVelocity.Magnitude > 3 then
+	-- (une pièce ancrée garde la dernière vitesse lue : on ne la compte pas)
+	if not root.Anchored and root.AssemblyLinearVelocity.Magnitude > 3 then
 		return false, "moving"
 	end
 	local cooldown = model:GetAttribute("RecoverCooldown") or 5
@@ -348,8 +416,6 @@ function Access.Recover(player, model)
 		end
 	end
 	lastRecover[model] = os.clock()
-	local cfg = config(model)
-	local spm = cfg.StudsPerMeter or 3.571
 	-- cap conservé, véhicule remis droit, puis posé : bas des roues sur la surface dessous
 	local look = root.CFrame.LookVector
 	local flat = Vector3.new(look.X, 0, look.Z)
@@ -357,6 +423,21 @@ function Access.Recover(player, model)
 		local up = root.CFrame.UpVector
 		flat = Vector3.new(-up.X, 0, -up.Z) -- véhicule debout sur le nez / l'arrière
 	end
+	Access.PlaceOnGround(model, root.Position, flat)
+	model:SetAttribute("Flipped", false)
+	return true
+end
+
+-- Pose le véhicule droit, cap `look` (horizontal), roues sur la surface sous `pos` (studs, monde).
+-- Vitesses remises à zéro. Sert à la remise sur les roues, aux essais et à ton propre code (garage…).
+function Access.PlaceOnGround(model, pos, look)
+	local root = model.PrimaryPart
+	if not root then
+		return false
+	end
+	local cfg = config(model)
+	local spm = cfg.StudsPerMeter or 3.571
+	local flat = look and Vector3.new(look.X, 0, look.Z) or Vector3.new(0, 0, -1)
 	flat = flat.Magnitude > 1e-3 and flat.Unit or Vector3.new(0, 0, -1)
 	local lowest = math.huge
 	for _, w in pairs(cfg.Wheels or {}) do
@@ -368,22 +449,62 @@ function Access.Recover(player, model)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { model }
-	local pos = root.Position
 	local hit = Workspace:Raycast(pos + Vector3.new(0, 20, 0), Vector3.new(0, -60, 0), params)
 	local y = hit and (hit.Position.Y - lowest + 0.05) or (pos.Y + 4)
 	local target = CFrame.lookAlong(Vector3.new(pos.X, y, pos.Z), flat)
-	model:PivotTo(target * root.CFrame:ToObjectSpace(model:GetPivot()))
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
+	Access.Teleport(model, target * root.CFrame:ToObjectSpace(model:GetPivot()))
+	return hit ~= nil
+end
+
+-- ------------------------------------------------------------------ stationnement + état « retourné »
+local watch = {} -- [model] = { stillSince, flipSince, safe, safeAt }
+
+function Access.Watch(model)
+	watch[model] = watch[model] or { safe = model:GetPivot(), safeAt = 0 }
+end
+
+-- Chute dans le vide : avant que Roblox ne détruise les pièces sous FallenPartsDestroyHeight, le
+-- serveur reprend la physique, remet le véhicule (et ses occupants, soudés aux sièges) à sa dernière
+-- position sûre, vitesses nulles, puis rend la physique au conducteur.
+function Access.RecoverFromVoid(model)
+	local st = watch[model]
+	local root = model.PrimaryPart
+	if not st or not root then
+		return false
+	end
+	Access.Teleport(model, st.safe + Vector3.new(0, 0.3, 0))
+	model:SetAttribute("VoidRecoveries", (model:GetAttribute("VoidRecoveries") or 0) + 1)
 	model:SetAttribute("Flipped", false)
 	return true
 end
 
--- ------------------------------------------------------------------ stationnement + état « retourné »
-local watch = {} -- [model] = { stillSince, flipSince }
+local function inVoid(model, root)
+	local floor = Workspace.FallenPartsDestroyHeight + (model:GetAttribute("VoidMargin") or 60)
+	local vy = math.min(root.AssemblyLinearVelocity.Y, 0)
+	return root.Position.Y + vy * Access.VoidLookahead < floor
+end
 
-function Access.Watch(model)
-	watch[model] = watch[model] or {}
+local safeParams = RaycastParams.new()
+safeParams.FilterType = Enum.RaycastFilterType.Exclude
+local function trackSafe(model, root, st, now)
+	if root.Anchored then
+		st.safe = model:GetPivot()
+		return
+	end
+	if now - (st.safeAt or 0) < Access.SafeEvery then
+		return
+	end
+	-- droit, sans grande vitesse verticale, sol à moins de ~3 m sous le centre
+	if root.CFrame.UpVector.Y < 0.85 or math.abs(root.AssemblyLinearVelocity.Y) > 10 then
+		return
+	end
+	safeParams.FilterDescendantsInstances = { model }
+	local spm = config(model).StudsPerMeter or 3.571
+	if Workspace:Raycast(root.Position, Vector3.new(0, -3 * spm, 0), safeParams) then
+		st.safe, st.safeAt = model:GetPivot(), now
+	end
 end
 
 function Access.Unwatch(model)
@@ -398,6 +519,11 @@ function Access.Step()
 			watch[model] = nil
 			continue
 		end
+		if not root.Anchored and inVoid(model, root) then
+			Access.RecoverFromVoid(model)
+			continue
+		end
+		trackSafe(model, root, st, now)
 		local driverSeat = model:FindFirstChild("DriverSeat", true)
 		local hasDriver = driverSeat and driverSeat.Occupant ~= nil
 		if hasDriver then
@@ -447,7 +573,6 @@ Access.SetWheelColliders = setWheelColliders
 
 -- Conducteur assis : le véhicule est libéré (désancré) et sa physique confiée au conducteur ;
 -- conducteur parti : la physique revient au serveur.
-local plausibility = setmetatable({}, { __mode = "k" })
 function Access.OnDriverChanged(model, player)
 	local root = model.PrimaryPart
 	if not root then
@@ -486,6 +611,11 @@ function Access.CheckPlausibility(model)
 	local st = plausibility[model]
 	local root = model.PrimaryPart
 	if not st or not root or root.Anchored then
+		return true
+	end
+	local grace = model:GetAttribute("TeleportGraceUntil")
+	if grace and Workspace:GetServerTimeNow() < grace then
+		st.pos, st.t, st.cf = root.Position, os.clock(), root.CFrame
 		return true
 	end
 	local cfg = config(model)
