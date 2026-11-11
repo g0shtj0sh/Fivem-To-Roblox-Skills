@@ -132,7 +132,12 @@ boîte : ≥ 80 % à moins de 15 cm) ;
 SoundId renseignés ; SetColor / SetMod / SetLivery / SetExtra / SetNeon / SetPlate et
 Serialize → Apply qui restaure l'état.
 
-**Play** (le runtime de rendu ne tourne que côté client ; `loadstring` y est interdit) :
+**Play, serveur** (`execute_luau` Server, un joueur) — `require(…Verify)({ model = …, checks = {…} })` :
+`seats_play` (monter puis descendre à chaque place ; `seat = "<nom>"` pour une seule), `lock_play`,
+`park_play`, `flip_play`. Refaire `seats_play` le véhicule posé sur une pente légère (plateforme inclinée
+temporaire dans le dossier de travail).
+
+**Play, client** (le runtime de rendu ne tourne que côté client ; `loadstring` y est interdit) :
 1. `start_stop_play` (is_start = true).
 2. `execute_luau` Client :
    `require(game.ReplicatedStorage.rbxts_include.F2R_Transfer.Verify)({ model = workspace.F2R_ImportTest:WaitForChild("<nom>"), checks = {"joints","lights","sounds","audio"} })`
@@ -162,6 +167,9 @@ Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) 
 | hitbox : précision `Default` | `ApplyMesh` refusé (mesh non chargé, droits) | relancer le Setup ; vérifier que le GLB est un asset du propriétaire de la place |
 | hitbox fidèle < 80 % | collision du mod grossière ou absente | lire « trop large / trop juste » ; mod sans `Physics` → boîte (signaler) |
 | rendu non attaché par FiveMVehiclesClient | runtime d'avant le correctif du 2026-11-10 | réinstaller `FiveMRuntime` (nouvelle version) |
+| invites / sons « hors du véhicule » | Setup d'avant le 2026-11-11 (WorldPosition réglé avant le parent) | réinstaller le véhicule (§ 4b à 6) |
+| descente : posé sur le toit | aucun espace libre des deux côtés (mur, autre véhicule) | normal ; sinon vérifier la pente et les pièces voisines |
+| tête dans le toit (avertissement) | avatar trop grand pour l'échelle | reconvertir avec l'échelle conseillée par `seats_play` |
 
 Après une correction du skill : reconvertir, réinstaller (supprimer le modèle, § 4b à 6) et revérifier.
 Une modification du runtime se propage par `FiveMRuntime` (version = empreinte des sources).
@@ -182,8 +190,21 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   (`DriverSeat`…), `Liveries/`, `Neons/`, sons, lumières, `VehicleConfig` (ModuleScript), tag `FiveMVehicle`.
 - `ReplicatedStorage.FiveMVehicles` : `VehicleInput` (contrôles), `VehicleRuntime` (rendu client),
   `VehicleCustomization` (API custom serveur), remotes ; `FiveMVehiclesServer` ; `FiveMVehiclesClient`.
-- Contrôles par défaut (GTA-like) : W/S/A/D, Espace frein à main, E klaxon, H phares (off/codes/pleins),
-  ←/→ clignotants, ↓ warnings, Q sirène, R tonalité, Z moteur, G portes (ProximityPrompt), manette et mobile.
+- Contrôles par défaut (GTA-like) : **F monter / descendre** (invite par siège, côté portière ; manette Y ;
+  bouton à l'écran sur mobile), W/S/A/D, Espace frein à main (un passager qui saute descend aussi), E klaxon,
+  H phares (off/codes/pleins), ←/→ clignotants, ↓ warnings, Q sirène, R tonalité, Z moteur, G portes,
+  X remettre sur ses roues (manette : croix bas), Maj / Ctrl rapports (manette : croix haut / X).
+- **Monter / descendre** (`VehicleAccess`, serveur) : distance, place libre et verrou (`Locked`) vérifiés,
+  portière ouverte puis refermée, joueur assis sans marcher ; à la descente il est posé au sol à côté de **sa**
+  portière, dans un espace libre (sinon l'autre côté, sinon le toit). Le client se pose lui-même : c'est lui
+  qui possède la physique de son personnage. Les occupants ne heurtent pas la collision du véhicule
+  (groupes `FiveMVehicle` / `FiveMVehicleOccupant`) jusqu'à la fermeture de la portière.
+- **Stationnement** : sans conducteur et à l'arrêt depuis `ParkAnchorDelay` s (5), `VehicleRoot` est ancré
+  (`Parked`) ; il est désancré et confié au conducteur quand celui-ci monte. **Remise sur les roues** :
+  retourné ou sur le côté plus de 2 s et quasi immobile → `Flipped`, invite « Remettre sur ses roues »
+  (F maintenu) ou X à bord ; délai `RecoverCooldown` (5 s).
+- **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
+  Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 
 ## Sans Studio connecté (livraison manuelle)
 

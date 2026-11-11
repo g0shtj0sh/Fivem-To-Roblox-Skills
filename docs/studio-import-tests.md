@@ -168,6 +168,39 @@ Demande : une hitbox « accurate » à la voiture, au lieu de la boîte engloban
   `ModelStreamingMode = Atomic`.
 - Passage final propre (place sans runtime) : Edit 42 réussis / 0 échec ; client 23/23.
 
+## Monter, descendre, stationnement, remise sur les roues (2026-11-11)
+
+Essais en Play, un joueur (avatar R6), véhicule converti à 3,571 studs/m, dans un dossier de travail.
+
+| Essai | Résultat |
+|---|---|
+| Verify `access` (Edit) | 51 réussis, 0 échec (invites F / Y côté portière, dehors ; sièges vers l'avant ; tous les attachments sur le véhicule) |
+| `seats_play` à plat, 2 places | 0 échec : assis, portière ouverte puis refermée, invite masquée, occupant sans collision, moteur démarré (conducteur) ; descente côté portière à ±6,0 studs du centre, au sol, hors de la collision |
+| `seats_play` en pente (plateforme inclinée de 6° en travers, 4° en long) | 0 échec : descente côté portière (−6,5 / +6,8) |
+| `lock_play` | invite masquée et montée refusée (« locked »), puis invite de retour |
+| `park_play` (délai réglé à 1,5 s) | désancré à la montée du conducteur ; ancré 1,6 s après la descente |
+| `flip_play` | « Flipped » après 2,4 s ; invite de remise affichée, montée masquée ; remis droit (UpVector.Y 1,000), roues à +0,05 stud du sol ; seconde remise immédiate refusée (« cooldown ») |
+| Vraies touches (`player_input`) | F près de la portière → assis au volant, véhicule libéré, moteur allumé ; F → posé à −6,0 / 0,0, véhicule déplacé de 0,02 stud ; côté passager : F → « Monter », Espace (saut) → posé côté passager |
+| Ajustement de l'avatar | à 3,571 studs/m : garde au toit −0,07 stud (la tête touche) ; Verify conseille ×1,10 ; à 3,92 studs/m : +0,28 stud. Jambes d'un R6 assis (tendues à l'horizontale) dans la planche de bord : avertissement à toutes les échelles essayées |
+
+Défauts trouvés et corrigés pendant ces essais :
+- **Invites des portières, de montée et point des sons placés à des milliers de studs** : `WorldPosition`
+  d'un attachment réglé avant son parent devient une position locale. Défaut antérieur (invites G, sons),
+  invisible jusque-là. Verify contrôle désormais tous les attachments.
+- **Descente annulée** : la téléportation faite par le serveur seul était écrasée par le client, propriétaire
+  du personnage (joueur resté au siège) → le client se pose lui-même sur ordre du serveur.
+- **Joueur et véhicule poussés** (3 studs de glissade, 2° de lacet) : la portière encore ouverte, animée côté
+  client, balayait le joueur dès le retour de sa collision → pas de collision avec le véhicule jusqu'à la
+  fermeture de la portière.
+- **Portière qui ne s'ouvrait pas** à la montée : attribut `Door_<os>` absent tant qu'on ne l'a jamais
+  touché.
+- **Pente** : boîte de test d'espace libre trop basse (ses coins touchaient le sol incliné).
+
+Non testé : manette et mobile réels (Studio ne simule pas fidèlement la manette ; les invites passent en
+bouton sur écran tactile d'après la documentation Roblox), deux joueurs (invite masquée pour l'un, visible
+pour l'autre : seule la vérité serveur `Available` a été contrôlée), vrai retournement par la physique
+(retournement forcé seulement).
+
 ## Reproduire
 
 ```bash

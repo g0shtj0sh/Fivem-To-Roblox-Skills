@@ -47,6 +47,11 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | Attribut | Type | Rôle |
 |---|---|---|
 | `CollisionSource` | "gta"/"box" | origine de la hitbox (collision officielle du .yft, ou boîte englobante) |
+| `Locked` | bool | verrouillé : invites « Conduire / Monter » masquées, montée refusée (descendre reste possible) |
+| `ParkAnchorDelay` | s (5) | délai sans conducteur et à l'arrêt avant l'ancrage de `VehicleRoot` |
+| `Parked` | bool | `VehicleRoot` ancré par le stationnement |
+| `Flipped` | bool | retourné ou sur le côté depuis plus de 2 s, quasi immobile |
+| `RecoverCooldown` | s (5) | délai entre deux remises sur les roues |
 | `Engine` | bool | moteur allumé (auto au passage du conducteur, `AutoStartEngine`) |
 | `Headlights` | 0/1/2 | éteint / codes / pleins phares |
 | `Indicator` | "Off"/"Left"/"Right"/"Hazard" | clignotants |
@@ -55,6 +60,39 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | `Rpm`, `Throttle`, `Steer`, `Gear` | number | télémétrie relayée aux autres joueurs (10 Hz) |
 | `Door_<os>` | 0..1 | ouverture porte / capot / coffre |
 | `Mod_<Slot>`, `Color_<Couche>`, `Livery`, `Extra_<n>`, `WindowTint`, `Neon`, `NeonColor`, `XenonColor`, `PlateText`, `Perf_<Slot>` | | custom (voir API) |
+
+## Touches
+
+| Touche | Manette | Action |
+|---|---|---|
+| **F** | Y | monter (invite « Conduire » / « Monter » côté portière) ; à bord : descendre |
+| F maintenu | Y maintenu | dehors, véhicule retourné : « Remettre sur ses roues » |
+| X | croix bas | à bord, véhicule retourné : remettre sur ses roues |
+| E | L3 | klaxon |
+| G | — | ouvrir / fermer portière, capot, coffre (invite) |
+| Z | — | couper / rallumer le moteur (il démarre à la montée du conducteur) |
+| H | croix droite | phares : éteints / codes / pleins |
+| ← / → / ↓ | — | clignotant gauche / droit / warnings |
+| Q / R | croix gauche / — | sirène / tonalité |
+| W A S D, Espace | gâchettes, stick, R1 | conduite, frein à main (lus par ton moteur via `VehicleInput.Controls`) |
+| Maj / Ctrl | croix haut / X | rapport + / − (`Input.Action`) |
+
+Mobile : les invites s'affichent en bouton ; à bord, bouton « Descendre ».
+
+## Monter, descendre, stationnement (serveur)
+
+```lua
+local Access = require(game.ReplicatedStorage.FiveMVehicles.VehicleAccess)
+Access.Enter(player, car, "DriverSeat")   -- true | false, "locked" / "occupied" / "too_far" / "flipped"…
+Access.Exit(player)                       -- true, "door" | "other_side" | "roof"
+Access.SetLocked(car, true)
+Access.Recover(player, car)               -- true | false, "not_flipped" / "cooldown" / "too_far"
+```
+Chaque siège porte `Side` (-1 gauche, 1 droite) et `Door` (os de la portière), et son invite
+`VehicleRoot/Enter_<siège>/EnterPrompt` (attributs `SeatName`, `Available`). Les pièces de collision du
+véhicule sont dans le groupe `FiveMVehicle`, les occupants dans `FiveMVehicleOccupant` (non collisionnables
+entre eux). Les cylindres de roues sont solides par défaut (le véhicule désancré repose dessus) ;
+`--no-wheel-collision` les rend non solides pour un moteur à roues propres.
 
 ## Brancher ton moteur physique
 
