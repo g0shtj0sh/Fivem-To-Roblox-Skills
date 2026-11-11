@@ -134,7 +134,7 @@ Serialize → Apply qui restaure l'état.
 
 **Play, serveur** (`execute_luau` Server, un joueur) — `require(…Verify)({ model = …, checks = {…} })` :
 `seats_play` (monter puis descendre à chaque place ; `seat = "<nom>"` pour une seule), `lock_play`,
-`park_play`, `flip_play`. Refaire `seats_play` le véhicule posé sur une pente légère (plateforme inclinée
+`park_play`, `flip_play`, `void_play` (chute dans le vide rattrapée). Refaire `seats_play` le véhicule posé sur une pente légère (plateforme inclinée
 temporaire dans le dossier de travail).
 
 **Play, client** (le runtime de rendu ne tourne que côté client ; `loadstring` y est interdit) :
@@ -148,7 +148,13 @@ temporaire dans le dossier de travail).
 3. Conduite : `execute_luau` Server — asseoir le joueur (`seat:Sit(humanoid)` sur `Seats.DriverSeat`)
    et écouter l'attribut `Horn` ; `player_input` H puis E (maintenu 700 ms) ; `execute_luau` Server —
    attendre `Engine = true`, `Headlights = 1`, `Horn` vu `true` puis revenu `false`.
-4. `start_stop_play` (is_start = false). Toujours arrêter le Play avant de rendre la main.
+4. Moteur de conduite : joueur au volant (`VehicleAccess.Enter` côté serveur), puis `execute_luau` Client
+   `require(…Verify)({ model = …, checks = {"drive_play"} })` (accélère, régime cohérent, s'arrête, reste
+   droit). Mesures complètes (0-100, freinage, virages, bordure, côte, marche arrière) : piste
+   `TestTrack.lua` créée en Play loin de la carte, banc `DriveBench.lua`, voir
+   `references/roblox-integration.md` (« Essais de conduite ») ; essais longs en `task.spawn`.
+5. `start_stop_play` (is_start = false). Toujours arrêter le Play avant de rendre la main ; un Play sans
+   appel Studio pendant 3 min est arrêté par VibeStarter.
 
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
@@ -180,8 +186,8 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 - Laisser le véhicule dans `Workspace.F2R_ImportTest`, Play arrêté, caméra rendue.
 - **Rapport final court, en français** : ce qui marche (Verify : réussis / échecs / sans objet, test de
   conduite), avertissements (textures ou sons non repris du jeu, rôles sans pièce, licence et marques),
-  ce qui reste à faire (brancher le moteur physique, déplacer le modèle dans `ServerStorage`, sons
-  manquants…). Joindre une capture du véhicule.
+  ce qui reste à faire (calibrer la conduite sur des mesures FiveM, déplacer le modèle dans
+  `ServerStorage`, sons manquants…). Joindre une capture du véhicule.
 
 ## Ce que l'utilisateur obtient dans Roblox
 
@@ -202,7 +208,11 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 - **Stationnement** : sans conducteur et à l'arrêt depuis `ParkAnchorDelay` s (5), `VehicleRoot` est ancré
   (`Parked`) ; il est désancré et confié au conducteur quand celui-ci monte. **Remise sur les roues** :
   retourné ou sur le côté plus de 2 s et quasi immobile → `Flipped`, invite « Remettre sur ses roues »
-  (F maintenu) ou X à bord ; délai `RecoverCooldown` (5 s).
+  (F maintenu) ou X à bord ; délai `RecoverCooldown` (5 s). **Chute dans le vide** : remis à sa dernière
+  position sûre avant que Roblox ne détruise ses pièces (occupants compris, `VoidRecoveries`).
+- **Conduite** (`VehicleDynamics` + `VehicleDrive`, client du conducteur) : le véhicule roule dès qu'un joueur
+  prend le volant (boîte, freins, ABS, frein à main, suspension par rayons, son et compte-tours) ;
+  `UseBuiltinDrive = false` pour brancher un autre châssis. Mesures : `docs/drive-tests.md` du dépôt.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 
@@ -211,7 +221,8 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 Livrer `<sortie>/<nom>/` (sans `_work/`) zippé, avec :
 1. *Importer 3D* → `<nom>.glb` ;
 2. sélectionner le modèle importé → *Modèle › Exécuter un script* → `<nom>_Setup.lua` (version complète, runtime inclus) ;
-3. brancher le moteur physique (`references/roblox-integration.md`).
+3. le moteur de conduite est inclus ; pour un autre châssis : `references/roblox-integration.md`
+   (« Interface d'adaptation »).
 Résumer : pièces/triangles, mods, livrées, sons, avertissements.
 
 ## Références (à lire au besoin)

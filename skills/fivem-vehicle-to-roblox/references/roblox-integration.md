@@ -87,7 +87,20 @@ Access.Enter(player, car, "DriverSeat")   -- true | false, "locked" / "occupied"
 Access.Exit(player)                       -- true, "door" | "other_side" | "roof"
 Access.SetLocked(car, true)
 Access.Recover(player, car)               -- true | false, "not_flipped" / "cooldown" / "too_far"
+Access.PlaceOnGround(car, position, look) -- pose droit, roues sur la surface sous `position` (garage, essais)
+Access.Teleport(car, pivot)               -- déplace le véhicule, même conduit (ancrage 0,25 s, physique rendue)
+Access.MarkMoved(car, grace)              -- après un déplacement fait par ton propre code serveur
+Access.RecoverFromVoid(car)               -- remet à la dernière position sûre (appelé tout seul)
 ```
+**Déplacer un véhicule conduit depuis le serveur** : jamais un simple `PivotTo`. Le client propriétaire de
+la physique renvoie son ancienne position et le contrôle de vraisemblance prend le saut pour une triche
+(retour en arrière, `DriveViolations` +1). Utiliser `Access.Teleport` (ou `PlaceOnGround`), qui pose
+l'attribut `TeleportGraceUntil` lu par tous les exemplaires du module (Actors, code lancé à part).
+
+**Chute dans le vide** : toutes les 0,25 s, un véhicule non ancré dont la position prévue à 0,5 s passe sous
+`Workspace.FallenPartsDestroyHeight + VoidMargin` (60 studs) est remis à sa dernière position sûre
+(enregistrée toutes les 0,5 s quand il est droit, sol à moins de 3 m), occupants compris, avant que Roblox ne
+détruise ses pièces. Attributs : `VoidMargin`, `VoidRecoveries` (compteur).
 Chaque siège porte `Side` (-1 gauche, 1 droite) et `Door` (os de la portière), et son invite
 `VehicleRoot/Enter_<siège>/EnterPrompt` (attributs `SeatName`, `Available`). Les pièces de collision du
 véhicule sont dans le groupe `FiveMVehicle`, les occupants dans `FiveMVehicleOccupant` (non collisionnables
@@ -128,7 +141,28 @@ local a = Drive.Get()                           -- a.sim (P = paramètres, S = �
 print(a.out.speed, a.out.gear, a.out.rpm)       -- m/s, rapport (-1 = arrière), régime normalisé
 local Dyn = require(game.ReplicatedStorage.FiveMVehicles.VehicleDynamics)
 print(Dyn.PredictTopSpeed(a.sim) * 3.6)         -- vitesse de pointe théorique (km/h)
+Dyn.reset(a.sim)                                -- état au repos (fait tout seul quand VehicleRoot est ancré)
 ```
+Quand `VehicleRoot` est ancré (stationnement, `Access.Teleport`), `VehicleDrive` coupe les forces, annule les
+vitesses chez le conducteur (une pièce ancrée garde sa vitesse et la reprendrait au désancrage) et remet la
+simulation au repos (sinon les roues lancées en l'air relancent le véhicule).
+
+### Essais de conduite (`TestTrack.lua`, `DriveBench.lua`)
+
+Fournis dans `studio/` et déposés par `studio_stage.py`. Mesures et protocole : `docs/drive-tests.md` du dépôt.
+```lua
+-- serveur, en Play seulement (rien n'est enregistré)
+local Track = require(T.TestTrack)
+local t = Track.build(workspace.F2R_ImportTest)       -- plaque 2048 × 6144 studs loin de la carte
+Track.place(car, t.lanes.straight, player)            -- voies : straight, curb (bordure 0,15 m), hill (15 %)
+-- client du conducteur
+local Bench = require(T.DriveBench)
+Bench.setLine(car.PrimaryPart.CFrame)                  -- tenue de ligne
+Bench.accel(45) ; Bench.brake(100) ; Bench.brake(60, { handbrake = true })
+Bench.corner(40, 1, 5) ; Bench.curb(20, 150) ; Bench.hill(20) ; Bench.reverse(4)
+```
+Un appel `execute_luau` est coupé vers 14 s : lancer les essais longs en `task.spawn` et relever le résultat.
+Un Play est une copie de la place : relancer le Play après une mise à jour d'un module.
 
 ### Réglages (`VehicleDynamics.Tuning`)
 
@@ -153,6 +187,7 @@ Les lois que le jeu ne publie pas sont des réglages, à caler sur des mesures F
 | `AirPitch`, `AirRoll`, `AirDamp` | 4 / 3 / 1,5 | contrôle en l'air |
 | `RightingK`, `RightingSpeed` | 6 / 3 m/s | redressement doux |
 | `SubSteps` | 8 | sous-pas internes |
+| `DampVMax` | 1 m/s | vitesse d'amortisseur plafonnée (clapets, souplesse du pneu) : sans elle une bordure de 15 cm à 20 km/h fait décoller l'avant |
 | `CurbBoost` | 0 | effet « curb boost » (désactivé) |
 
 Dans le Setup : `COM_ABOVE_AXLE` (0,1 m, hauteur du centre de gravité au-dessus des moyeux), `MASS_SCALE` (0,1).

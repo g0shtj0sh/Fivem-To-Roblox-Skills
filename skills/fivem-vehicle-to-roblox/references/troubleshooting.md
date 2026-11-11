@@ -56,3 +56,16 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 | Descente refusée des deux côtés en pente | boîte de test d'espace libre qui touche le sol incliné | la boîte commence 0,6 stud au-dessus du sol (tolère ~15°) |
 | Invites des portières, de montée ou sons très loin du véhicule | `Attachment.WorldPosition` réglé avant `Parent` (devient une position locale) | parent d'abord ; Verify `access` contrôle tous les attachments |
 | Tête de l'avatar dans le pavillon | véhicule à l'échelle réelle, avatar Roblox grand | échelle conseillée par Verify `seats_play` |
+| Véhicule conduit replacé par le serveur qui revient à son ancienne place, `DriveViolations` +1 | `PivotTo` serveur : le client propriétaire renvoie l'ancienne position, le contrôle de vraisemblance voit un saut | `VehicleAccess.Teleport` / `PlaceOnGround` (ancrage 0,25 s + attribut `TeleportGraceUntil`) |
+| Tolérance de téléport sans effet quand le déplacement vient d'`execute_luau` serveur | ce code a son propre exemplaire du module (tables séparées) | tolérance portée par un attribut du modèle (corrigé) |
+| Véhicule rattrapé d'une chute puis projeté en l'air | une pièce ancrée garde sa vitesse et la reprend au désancrage | vitesses annulées avant l'ancrage et pendant (corrigé) |
+| Véhicule qui repart seul après une remise | roues encore lancées dans la simulation | `VehicleDynamics.reset` dès que `VehicleRoot` est ancré (corrigé) |
+| Véhicule disparu après une sortie de carte | pièces détruites sous `FallenPartsDestroyHeight` | remise automatique (`VoidMargin`, `VoidRecoveries`) ; Verify `void_play` |
+| Bordure : l'avant décolle à basse vitesse | amortisseur sans plafond (5 m/s en une image) | `DampVMax` (1 m/s par défaut) |
+| Accélération molle (0,26 g), patinage bloqué loin du pic | inertie de roue trop forte (`IwRel` 1,5) | `IwRel` 0,25 et 8 sous-pas |
+| Boîte qui pompe 1 ↔ 2 | après la montée, le régime tombe sous le seuil de descente | hystérésis : descente seulement si le rapport inférieur resterait sous 0,85 × seuil de montée |
+| Ligne droite volant lâché : virage de très grand rayon (~3,7 km) | légère dissymétrie (conducteur assis d'un côté) | normal ; le banc tient sa ligne (`Bench.setLine`) |
+| Essai long coupé, résultat perdu | `execute_luau` coupé vers 14 s ; Play arrêté après 3 min sans appel Studio | essais en `task.spawn`, relevés toutes les ~10 s ; ne pas laisser le Play sans appel |
+| Module mis à jour sans effet pendant un Play | le Play tourne sur une copie de la place | relancer le Play |
+| Essai de conduite : véhicule qui tombe de la plaque ou bute sur un autre véhicule | piste trop courte, décor sur le passage | `TestTrack.lua` : plaque dédiée loin de la carte |
+| Manette / tactile : aucun effet avec `player_input` | VirtualInput n'envoie ni axe de gâchette ni toucher | essai manuel |
