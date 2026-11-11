@@ -42,6 +42,21 @@ WINDOW_RE = re.compile(r"^window_[lr][fmr]\d?$|^windscreen(_r)?$")
 EXTRA_RE = re.compile(r"^extra_(\d+)$")
 SIREN_RE = re.compile(r"^siren(\d+)$")
 SIREN_GLASS_RE = re.compile(r"^siren_glass(\d+)$")
+# Pièces qui suivent une roue sans tourner avec elle : étrier de frein (`hub_*` : braquage +
+# suspension) et bras / ressort (`suspension_*` : suspension seulement).
+HUB_RE = re.compile(r"^hub_([lr](?:f|r|m\d))$")
+SUSPENSION_RE = re.compile(r"^suspension_([lr](?:f|r|m\d))$")
+
+
+def follower_wheel(bone: str) -> tuple[str, str] | None:
+    """(kind, wheel bone) for a bone that follows a wheel, else None."""
+    m = HUB_RE.match(bone)
+    if m:
+        return "hub", "wheel_" + m.group(1)
+    m = SUSPENSION_RE.match(bone)
+    if m:
+        return "suspension", "wheel_" + m.group(1)
+    return None
 
 
 @dataclass
@@ -292,13 +307,15 @@ class VehicleBuilder:
         for b in self.skel.bones:
             n = b.name
             if (n in WHEEL_BONES or n in HINGED_BONES or n in STEERING_BONES or WINDOW_RE.match(n)
-                    or EXTRA_RE.match(n) or SIREN_RE.match(n) or SIREN_GLASS_RE.match(n)):
+                    or EXTRA_RE.match(n) or SIREN_RE.match(n) or SIREN_GLASS_RE.match(n)
+                    or follower_wheel(n)):
                 self.keep.add(n)
 
     # -- hiérarchie
     def owner_of(self, bone: str) -> str:
         for a in self.skel.ancestors(bone):
-            if a in WHEEL_BONES or a in HINGED_BONES or a in STEERING_BONES or SIREN_RE.match(a):
+            if (a in WHEEL_BONES or a in HINGED_BONES or a in STEERING_BONES or SIREN_RE.match(a)
+                    or follower_wheel(a)):
                 return a
         return self.skel.root_name
 
@@ -500,6 +517,27 @@ class VehicleBuilder:
         lo = np.min([p.bbox()[0] for p in body], axis=0)
         hi = np.max([p.bbox()[1] for p in body], axis=0)
         return lo, hi
+
+    def wheel_followers(self) -> dict:
+        """Bones carried by a wheel without spinning with it (brake caliper, suspension).
+
+        `Offset` = wheel centre minus the bone, in metres (output axes): the runtime steers a hub
+        about the wheel's own vertical axis, not about the hub bone.
+        """
+        out = {}
+        for b in self.skel.bones:
+            fw = follower_wheel(b.name)
+            if fw is None:
+                continue
+            kind, wb = fw
+            pos, wpos = self.skel.world_pos_local(b.name), self.skel.world_pos_local(wb)
+            if pos is None or wpos is None:
+                continue
+            if not any(p.owner == b.name for p in self.parts):
+                continue  # os sans géométrie : rien à animer
+            out[b.name] = {"Wheel": wb, "Kind": kind, "Steer": kind == "hub" and wb in ("wheel_lf", "wheel_rf"),
+                           "Offset": (wpos - pos).round(4).tolist()}
+        return out
 
     def wheel_info(self) -> dict:
         out = {}

@@ -592,6 +592,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Colors": {"Default": default_colors(variation),
                    "Variations": [c["indices"] for c in variation.get("colors", [])]},
         "Wheels": wheels,
+        "WheelFollowers": vb.wheel_followers(),
         "Hinges": hinges,
         "SteeringWheel": steering,
         "Lights": lights,
@@ -731,6 +732,8 @@ def main(argv=None) -> int:
             game = gamelib.GameAssets.discover(report)
         except Exception as exc:  # noqa: BLE001
             report.info(f"Serveur d'assets GTA V indisponible ({exc}).")
+        if game is None:
+            game = gamelib.GameAssets.offline(report)
 
     results = []
     try:

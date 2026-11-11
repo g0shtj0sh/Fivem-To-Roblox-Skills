@@ -30,7 +30,7 @@ Mesures, choix et pièges : [`docs/studio-import-tests.md`](../../docs/studio-im
 |---|---|---|
 | Python 3.10+, numpy, Pillow | `python3 -c "import numpy, PIL"` | `python3 -m pip install --user numpy pillow` (sans pip : `get-pip.py --user`) |
 | .NET 8 (fichiers binaires .yft/.ytd/.awc) | `dotnet --version` ou `~/.dotnet/dotnet` | `dotnet-install.sh --channel 8.0 --install-dir ~/.dotnet` ; le convertisseur trouve `~/.dotnet` seul |
-| Serveur d'assets GTA V (vraies textures et vrai son) | outil MCP `gta_status` (`ready: true`) | proposer `tools/gta-asset-server/start-server.bat` sur le PC + déclaration dans *My MCP servers* ; sinon la conversion continue (couleur unie, son synthétisé) |
+| Serveur d'assets GTA V (vraies textures et vrai son) | outil MCP `gta_status` (`ready: true`) | proposer `tools/gta-asset-server/start-server.bat` sur le PC + déclaration dans *My MCP servers* ; sinon la conversion reprend ce qui est déjà dans le cache (`~/.cache/fivem2roblox`), et seulement à défaut couleur unie / son synthétisé |
 | Studio connecté | `studio_connection_status` (plugin attaché), `list_roblox_studios` | livrer le dossier + étapes manuelles |
 | Upload Roblox | VibeStarter : outils `upload_file` + `asset_publish` ; ailleurs : `ROBLOX_API_KEY` présent dans l'environnement (ne jamais l'afficher) | dernier recours : une seule action manuelle, *Importer 3D* (§ 4c) |
 
@@ -142,7 +142,8 @@ temporaire dans le dossier de travail).
 2. `execute_luau` Client :
    `require(game.ReplicatedStorage.rbxts_include.F2R_Transfer.Verify)({ model = workspace.F2R_ImportTest:WaitForChild("<nom>"), checks = {"joints","lights","sounds","audio"} })`
    → rendu attaché **tout seul** par `FiveMVehiclesClient` (sinon : véhicule inerte en jeu),
-   portes/capot/coffre à l'angle de `Hinges` via `Door_*`, roues et volant via la télémétrie, chaque
+   portes/capot/coffre à l'angle de `Hinges` via `Door_*`, roues et volant via la télémétrie,
+   étriers (`hub_*`) qui braquent sans tourner, bras de suspension (`suspension_*`) fixes en rotation, chaque
    LightRole en Neon (ou sa lumière allumée) pour Headlights 1/2, Brake, Reverse, Indicator
    Left/Right/Hazard, Engine, Siren ; sons chargés ; moteur audible.
 3. Conduite : `execute_luau` Server — asseoir le joueur (`seat:Sit(humanoid)` sur `Seats.DriverSeat`)
@@ -173,6 +174,7 @@ Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) 
 | hitbox : précision `Default` | `ApplyMesh` refusé (mesh non chargé, droits) | relancer le Setup ; vérifier que le GLB est un asset du propriétaire de la place |
 | hitbox fidèle < 80 % | collision du mod grossière ou absente | lire « trop large / trop juste » ; mod sans `Physics` → boîte (signaler) |
 | rendu non attaché par FiveMVehiclesClient | runtime d'avant le correctif du 2026-11-10 | réinstaller `FiveMRuntime` (nouvelle version) |
+| étrier figé quand la roue braque | conversion d'avant le 2026-11-11 (os `hub_*` ignoré) | reconvertir et réinstaller (§ 4b à 6) |
 | invites / sons « hors du véhicule » | Setup d'avant le 2026-11-11 (WorldPosition réglé avant le parent) | réinstaller le véhicule (§ 4b à 6) |
 | descente : posé sur le toit | aucun espace libre des deux côtés (mur, autre véhicule) | normal ; sinon vérifier la pente et les pièces voisines |
 | tête dans le toit (avertissement) | avatar trop grand pour l'échelle | reconvertir avec l'échelle conseillée par `seats_play` |

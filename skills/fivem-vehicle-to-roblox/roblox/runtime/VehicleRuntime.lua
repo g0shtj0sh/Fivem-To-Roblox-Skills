@@ -196,6 +196,19 @@ function Runtime:_updateJoints(dt, s)
 			j.Transform = CFrame.new(0, susp, 0) * CFrame.Angles(0, steer, 0) * CFrame.Angles(self.SpinAngle[bone], 0, 0)
 		end
 	end
+	-- étriers (hub_*) et bras de suspension (suspension_*) : suivent leur roue sans tourner avec elle ;
+	-- le braquage pivote autour de l'axe vertical de la roue (Offset = centre de roue - os, en mètres)
+	for bone, f in pairs(cfg.WheelFollowers or {}) do
+		local j = self.Joints[bone]
+		local w = cfg.Wheels and cfg.Wheels[f.Wheel]
+		if j and w then
+			local susp = (s.Suspension and s.Suspension[f.Wheel] or 0) * self.Spm
+			local steer = (f.Steer and w.Steer) and (-(s.Steer or 0) * (s.WheelSteer or lock)) or 0
+			local o = f.Offset or { 0, 0, 0 }
+			local d = Vector3.new(o[1], o[2], o[3]) * self.Spm
+			j.Transform = CFrame.new(0, susp, 0) * CFrame.new(d) * CFrame.Angles(0, steer, 0) * CFrame.new(-d)
+		end
+	end
 	for bone, hinge in pairs(cfg.Hinges or {}) do
 		local j = self.Joints[bone]
 		if j then

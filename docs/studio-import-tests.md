@@ -219,3 +219,26 @@ vérifiée le 2026-11-10 (passage final complet depuis une place sans runtime ni
 - Physique non testée (hors périmètre du skill : la voiture reste ancrée).
 - Un seul véhicule réel ; téléphone et multijoueur non testés.
 - Le canal Rojo dépend d'un projet synchronisé avec la place ouverte ; ailleurs, morceaux `execute_luau`.
+
+## Étriers de frein et suspension (2026-11-11)
+
+- **Défaut signalé** : roue et disque tournent, mais l'étrier rouge reste figé et traverse la jante
+  quand la roue braque.
+- **Cause démontrée** : dans le `.yft` de test, la géométrie de l'étrier (et son logo) est liée aux os
+  `hub_lf/rf/lr/rr` (154 / 152 / 246 / 251 sommets), le bras / ressort aux os `suspension_*` ; le
+  convertisseur ne connaissait pas ces os : leurs triangles étaient rangés avec la carrosserie.
+- **Correction** : `hub_*` et `suspension_*` deviennent des pivots (`WheelFollowers` : roue suivie,
+  braquage oui / non, `Offset` = centre de roue − os) ; le runtime leur applique la course de
+  suspension et, pour `hub_*` avant, le braquage autour de l'axe vertical de la roue, jamais la rotation.
+- **Mesures** (Studio PC, véhicule de test, un passage) : 123 → 135 pièces visuelles (14 pièces
+  `hub_*` / `suspension_*`), 8 Motor6D de plus ; Verify Edit 51 réussis / 0 échec / 3 sans objet ;
+  Verify Play client `joints` 18/18 : `hub_lf` / `hub_rf` braqués de 35,0° (= `SteeringLockDeg`),
+  rotation parasite 0,0° ; arrière et suspension : 0,0° / 0,0°. Capture roue braquée en rotation :
+  étrier à l'intérieur de la jante (observé par l'agent).
+- **Piège de mesure** : `CFrame:ToEulerAnglesYXZ()` renvoie (X, Y, Z), pas (Y, X, Z) ; la première
+  version du contrôle inversait braquage et rotation (2 échecs faux).
+- **Non vérifié** : vrai mouvement GTA des os `suspension_*` (ici course verticale seule) ; rendu jugé
+  par l'utilisateur ; conduite réelle sur bosses.
+- **Cache seul** : avec le serveur d'assets injoignable, la conversion reprend maintenant les textures
+  et sons déjà en cache au lieu de passer en couleur unie / son synthétisé (même résultat mesuré :
+  2 textures du jeu, 7 flux audio, vrai son).

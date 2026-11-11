@@ -69,3 +69,12 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 | Module mis à jour sans effet pendant un Play | le Play tourne sur une copie de la place | relancer le Play |
 | Essai de conduite : véhicule qui tombe de la plaque ou bute sur un autre véhicule | piste trop courte, décor sur le passage | `TestTrack.lua` : plaque dédiée loin de la carte |
 | Manette / tactile : aucun effet avec `player_input` | VirtualInput n'envoie ni axe de gâchette ni toucher | essai manuel |
+
+## Étrier de frein immobile pendant que la roue braque (ou qui traverse la jante)
+
+- **Cause** (corrigée le 2026-11-11) : l'étrier est porté par l'os `hub_*`, ignoré jusque-là : il était
+  soudé à la carrosserie et restait droit quand la roue braquait ou montait.
+- **Correction** : les os `hub_*` et `suspension_*` sont des pivots (`CONFIG.WheelFollowers`), animés par
+  `VehicleRuntime` à partir de leur roue (braquage autour de l'axe de la roue pour `hub_*`, course de
+  suspension pour les deux, jamais la rotation de la roue). Reconvertir et réinstaller le véhicule.
+- **Contrôle** : Verify Play client, groupe `joints` : « hub_lf braque avec wheel_lf sans tourner ».

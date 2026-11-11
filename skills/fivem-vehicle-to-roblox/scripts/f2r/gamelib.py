@@ -336,7 +336,7 @@ def _read_json(p: Path, default):
 class GameAssets:
     """Accès aux ressources du jeu de base, via le serveur d'assets du PC."""
 
-    def __init__(self, client: McpClient, report: Report):
+    def __init__(self, client: "McpClient | None", report: Report):
         self.client = client
         self.report = report
         self.server_status: dict = {}
@@ -380,8 +380,21 @@ class GameAssets:
             report.info("Aucun serveur d'assets GTA V joignable (" + " ; ".join(tried[:4]) + ").")
         return None
 
+    @classmethod
+    def offline(cls, report: Report) -> "GameAssets | None":
+        """Cache seul (serveur injoignable) : textures et sons déjà reçus restent utilisés.
+
+        Renvoie None si le cache est vide.
+        """
+        root = cache_root()
+        if not any((root / k).is_dir() and any((root / k).rglob("*.*")) for k in ("textures", "audio")):
+            return None
+        report.info(f"Serveur d'assets GTA V injoignable : textures et sons du jeu repris du cache ({root}).")
+        return cls(None, report)
+
     def close(self) -> None:
-        self.client.close()
+        if self.client is not None:
+            self.client.close()
         try:
             self._neg_file.parent.mkdir(parents=True, exist_ok=True)
             self._neg_file.write_text(json.dumps(sorted(self._neg_tex)), encoding="utf-8")
@@ -460,6 +473,9 @@ class GameAssets:
                 todo.append(n)
         if not todo:
             return out
+        if self.client is None:                  # cache seul
+            self.report.warn("Textures du jeu absentes du cache (serveur injoignable) : " + ", ".join(todo[:8]))
+            return out
 
         t0 = time.monotonic()
         try:
@@ -498,6 +514,9 @@ class GameAssets:
             self.stats["audio"]["cached"] += len(cached)
             return cached
 
+        if self.client is None:                  # cache seul
+            self.report.warn(f"Son vanilla « {audio_name} » absent du cache (serveur injoignable).")
+            return {}
         t0 = time.monotonic()
         try:
             man = self.client.call("gta_prepare_audio", audio_name=audio_name)

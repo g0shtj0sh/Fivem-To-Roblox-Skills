@@ -1177,6 +1177,13 @@ function groups.joints()
 	for bone in pairs(CONFIG.Wheels or {}) do
 		spin[bone] = 4
 	end
+	local followRest = {}
+	for bone in pairs(CONFIG.WheelFollowers or {}) do
+		local pv = pivotOf(bone)
+		if pv then
+			followRest[bone] = localCF(pv)
+		end
+	end
 	local t0 = os.clock()
 	while os.clock() - t0 < 0.4 do
 		Runtime.SetTelemetry(model, { WheelSpin = spin, Steer = 1, Speed = 0 })
@@ -1187,6 +1194,26 @@ function groups.joints()
 		if pv and rest[bone] then
 			local ang = angleBetween(rest[bone], localCF(pv))
 			check(ang > 5, bone .. " tourne" .. (w.Steer and " et braque" or ""), fmt("%.1f° de rotation", ang))
+		end
+	end
+	-- étriers / suspension : suivent la roue (braquage) sans tourner avec elle
+	for bone, f in pairs(CONFIG.WheelFollowers or {}) do
+		local pv = pivotOf(bone)
+		if not (pv and followRest[bone]) then
+			check(false, bone .. " suit " .. f.Wheel, "pas de pivot (pièce soudée à la carrosserie ?)")
+		else
+			local rel = followRest[bone]:ToObjectSpace(localCF(pv))
+			local rx, ry, rz = rel:ToEulerAnglesYXZ() -- renvoie X, Y, Z (ordre d'application Y, X, Z)
+			local spinDeg = math.deg(math.max(math.abs(rx), math.abs(rz)))
+			local steerDeg = math.deg(math.abs(ry))
+			local w = CONFIG.Wheels and CONFIG.Wheels[f.Wheel]
+			if f.Steer and w and w.Steer then
+				check(spinDeg < 2 and steerDeg > 5, bone .. " braque avec " .. f.Wheel .. " sans tourner",
+					fmt("braquage %.1f°, rotation parasite %.1f°", steerDeg, spinDeg))
+			else
+				check(spinDeg < 2 and steerDeg < 2, bone .. " ne tourne pas avec " .. f.Wheel,
+					fmt("braquage %.1f°, rotation parasite %.1f°", steerDeg, spinDeg))
+			end
 		end
 	end
 	if swPv then

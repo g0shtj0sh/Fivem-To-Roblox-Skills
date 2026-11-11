@@ -30,6 +30,8 @@ Les addons solo arrivent souvent en `dlc.rpf` : `gta-extract` le parcourt (sauf 
 |---|---|
 | `chassis` (racine), `bodyshell` | carrosserie fixe (soudée à `VehicleRoot`) |
 | `wheel_lf/rf/lr/rr`, `wheel_lm1..3/rm1..3` | pivots Motor6D (rotation X, braquage Y, suspension) |
+| `hub_lf/rf/lr/rr` | étrier de frein (et son logo) : suit sa roue (braquage + suspension) **sans tourner avec elle** ; braquage autour de l'axe vertical de la roue |
+| `suspension_lf/rf/lr/rr` | bras / ressort : suit la course verticale de sa roue, ni braquage ni rotation (approximation : le vrai mouvement GTA de ces os n'est pas vérifié) |
 | `door_dside_f/r`, `door_pside_f/r` | charnières (axe Z de l'os, sens calculé pour s'ouvrir vers l'extérieur) |
 | `bonnet`, `boot`, `boot_2` | charnières (axe X de l'os, sens vers le haut) |
 | `steeringwheel` | volant (axe = colonne, ±270°) |
