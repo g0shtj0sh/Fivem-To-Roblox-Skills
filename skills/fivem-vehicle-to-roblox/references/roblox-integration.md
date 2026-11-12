@@ -79,6 +79,21 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 
 Mobile : les invites s'affichent en bouton ; à bord, bouton « Descendre ».
 
+## Pièces mobiles : ce qui est monté dessus les suit
+
+Le convertisseur répartit les triangles par os (`group_of`). Certains mods pondèrent sur un os du châssis
+des pièces montées dans une portière ou le coffre : sur le m422, les feux arrière intérieurs (émissif, verre,
+boîtier) et la lampe de plaque sont pondérés sur `taillight_l/r`, `misc_a`, `misc_b`, `misc_platelight`,
+enfants du châssis, et restaient en l'air quand le coffre s'ouvrait. `VehicleBuilder._attach_to_hinged`
+rattache un îlot (triangles connexes) d'une géométrie non peinte du châssis à une pièce de `ATTACH_PARTS`
+(portières, coffre) quand les trois conditions sont réunies, mesurées sur la **peau extérieure peinte** :
+75 % de ses sommets reposent (à 8 cm) sur la peau de cette pièce, il n'est pas enfoui dessous (profondeur
+médiane ≤ 4 cm) et cette peau l'entoure (7 secteurs sur 12). Le rapport liste chaque rattachement
+(« Rattachement : … »). **Le capot est exclu** : sa peau plonge à l'avant et entoure calandre, phares et
+compartiment moteur (essai rejeté sur le m422 : calandre et optiques rattachées au capot). Test :
+`tests/test_attach.py`. Sur le m422 : feux intérieurs, verres et lampe de plaque → coffre ; poignées →
+portières ; rien d'autre.
+
 ## Feux (`VehicleLights.Rig`, état par `VehicleRuntime`)
 
 Les optiques sont les maillages du shader GTA `vehicle_lightsemissive`, une pièce par feu (`LightRole`). GTA les

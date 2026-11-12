@@ -340,7 +340,8 @@ class VehicleBuilder:
                 offset: np.ndarray | None = None, bone_remap=None) -> list[Part]:
         skel = skel or self.skel
         shaders = shaders or drawable.shaders
-        buckets: dict[tuple, _Bucket] = {}
+        # 1re passe : triangles de chaque géométrie, avec leur groupe (os conservé) et leur feu
+        geoms = []
         for model in drawable.models:
             for geom in model.geometries:
                 if len(geom.indices) < 3:
@@ -373,22 +374,182 @@ class VehicleBuilder:
                 ub, binv = np.unique(tri_bone.astype(str), return_inverse=True)
                 groups = np.array([self.group_of(b) if mod is None else b for b in ub], dtype=object)
                 tri_group = groups[binv.reshape(-1)]
-                combo = np.array([f"{g}|{l}" for g, l in zip(tri_group, tri_light)])
-                ukeys, kinv = np.unique(combo, return_inverse=True)
-                kinv = kinv.reshape(-1)
-                for ki, k in enumerate(ukeys):
-                    gb, lid_s = k.rsplit("|", 1)
-                    lid = int(lid_s)
-                    light = LIGHT_IDS.get(lid, "always_on") if kind == "light" else None
-                    key = (gb, id(sh), light)
-                    bk = buckets.get(key)
-                    if bk is None:
-                        bk = buckets[key] = _Bucket(sh, kind, paint, custom, light, gb, livery=livery)
-                    bk.add(P, N, uv, tris[kinv == ki])
+                geoms.append(dict(sh=sh, kind=kind, paint=paint, custom=custom, P=P, N=N, uv=uv, tris=tris,
+                                  tri_group=tri_group, tri_light=tri_light, livery=livery))
+        # 2e passe : ce qui est posé sur une pièce mobile la suit, même pondéré sur un os du châssis
+        if mod is None and forced_bone is None:
+            self._attach_to_hinged(geoms)
+        # 3e passe : un seau par (groupe, shader, feu)
+        buckets: dict[tuple, _Bucket] = {}
+        for g in geoms:
+            sh, kind = g["sh"], g["kind"]
+            combo = np.array([f"{gr}|{l}" for gr, l in zip(g["tri_group"], g["tri_light"])])
+            ukeys, kinv = np.unique(combo, return_inverse=True)
+            kinv = kinv.reshape(-1)
+            for ki, k in enumerate(ukeys):
+                gb, lid_s = k.rsplit("|", 1)
+                lid = int(lid_s)
+                light = LIGHT_IDS.get(lid, "always_on") if kind == "light" else None
+                key = (gb, id(sh), light)
+                bk = buckets.get(key)
+                if bk is None:
+                    bk = buckets[key] = _Bucket(sh, kind, g["paint"], g["custom"], light, gb, livery=g["livery"])
+                bk.add(g["P"], g["N"], g["uv"], g["tris"][kinv == ki])
         out = []
         for bk in buckets.values():
             out.extend(self._bucket_to_parts(bk, mod))
         return out
+
+    # Réglages du rattachement aux pièces mobiles (voir _attach_to_hinged)
+    ATTACH_REACH = 0.08  # m : distance maximale entre un sommet et la peau qui le porte
+    ATTACH_SHARE = 0.75  # part minimale des sommets posés sur la même pièce mobile
+    ATTACH_MIN_VOTES = 3
+    ATTACH_DEPTH = 0.04  # m : profondeur maximale (médiane) sous la peau extérieure de la pièce
+    ATTACH_SECTORS = 7  # sur 12 : la peau de la pièce doit entourer l'îlot de ce nombre de côtés au moins
+    attach_debug: list | None = None  # liste à remplir pour relire chaque décision (diagnostic)
+    # Pièces concernées. PAS le capot : sa peau plonge à l'avant et entoure la calandre, les internes des
+    # phares et le compartiment moteur ; sur le m422 la règle y rattachait la calandre et des optiques
+    # (essai rejeté, 2026-11-12). Coffre et portières : seuls les feux intérieurs, les verres et les
+    # poignées passaient les trois conditions, ce qui est juste.
+    ATTACH_PARTS = ("door_dside_f", "door_pside_f", "door_dside_r", "door_pside_r", "boot", "boot_2")
+
+    def _attach_to_hinged(self, geoms: list[dict]) -> None:
+        """Rattache à une pièce mobile (portière, coffre ; voir ATTACH_PARTS) les îlots de géométrie pondérés sur un os
+        du châssis mais MONTÉS DANS la peau de cette pièce.
+
+        Cas réel (m422, 2026-11-12) : les feux arrière du mod sont pondérés sur `taillight_l/r`, `misc_a`,
+        `misc_b` et `misc_platelight`, enfants du châssis, alors que leur partie intérieure est montée dans
+        le couvercle du coffre : le coffre s'ouvrait et ces morceaux restaient en l'air.
+
+        Trois conditions, toutes mesurées sur la PEAU EXTÉRIEURE peinte (sommets peints dont la normale
+        s'éloigne du centre du véhicule ; la doublure intérieure d'un capot regarde le moteur et rendait
+        « posé dessus » tout le compartiment moteur — essai rejeté, 12 262 triangles rattachés au capot) :
+        1. au moins ATTACH_SHARE des sommets de l'îlot ont pour peau la plus proche (à ATTACH_REACH près)
+           celle d'une même pièce mobile ;
+        2. l'îlot n'est pas enfoui sous cette peau (profondeur médiane ≤ ATTACH_DEPTH le long de la
+           normale) : ce que le capot recouvre est dessous, ce qui est monté dans le coffre affleure ;
+        3. la peau de la pièce l'entoure (au moins ATTACH_SECTORS secteurs sur 12 autour de lui, dans le
+           plan de la peau) : un phare logé SOUS le bord du capot n'a de capot que d'un côté.
+        Les pièces peintes elles-mêmes ne bougent pas.
+        """
+        root = self.skel.root_name
+        hinged = set(self.ATTACH_PARTS) & set(HINGED_BONES)
+        cell = 0.04
+        # peau extérieure peinte : sommets, normales, groupe
+        allp = [g["P"][np.unique(g["tris"].ravel())] for g in geoms if g["kind"] == "paint"]
+        if not allp:
+            return
+        center = np.concatenate(allp).mean(axis=0)
+        skin_p, skin_n, skin_g = [], [], []
+        for g in geoms:
+            if g["kind"] != "paint":
+                continue
+            for gr in np.unique(g["tri_group"]):
+                vs = np.unique(g["tris"][g["tri_group"] == gr].ravel())
+                pts, nrm = g["P"][vs], g["N"][vs]
+                out = ((pts - center) * nrm).sum(axis=1) > 0
+                skin_p.append(pts[out])
+                skin_n.append(nrm[out])
+                skin_g.extend([gr] * int(out.sum()))
+        skin_p = np.concatenate(skin_p)
+        skin_n = np.concatenate(skin_n)
+        skin_n = skin_n / np.maximum(np.linalg.norm(skin_n, axis=1, keepdims=True), 1e-9)
+        skin_g = np.array(skin_g, dtype=object)
+        if not any(gr in hinged for gr in set(skin_g)):
+            return
+        grid: dict[tuple, list] = {}
+        for i, k in enumerate(map(tuple, np.floor(skin_p / cell).astype(np.int64))):
+            grid.setdefault(k, []).append(i)
+        r = int(np.ceil(self.ATTACH_REACH / cell))
+
+        def nearest(p):
+            c = np.floor(p / cell).astype(np.int64)
+            idx = []
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    for dz in range(-r, r + 1):
+                        idx.extend(grid.get((c[0] + dx, c[1] + dy, c[2] + dz), ()))
+            if not idx:
+                return None
+            idx = np.array(idx)
+            d = np.linalg.norm(skin_p[idx] - p, axis=1)
+            j = int(d.argmin())
+            return int(idx[j]) if d[j] <= self.ATTACH_REACH else None
+
+        moved: dict[tuple, int] = {}
+        for g in geoms:
+            if g["kind"] == "paint":
+                continue
+            cand = np.where(g["tri_group"] == root)[0]
+            if len(cand) == 0:
+                continue
+            P, tris = g["P"], g["tris"]
+            weld: dict[tuple, int] = {}
+            vid = {}
+            for v in np.unique(tris[cand].ravel()):
+                vid[int(v)] = weld.setdefault(tuple(np.rint(P[v] * 1000).astype(np.int64)), len(weld))
+            parent = list(range(len(weld)))
+
+            def find(a):
+                while parent[a] != a:
+                    parent[a] = parent[parent[a]]
+                    a = parent[a]
+                return a
+
+            for t in tris[cand]:
+                a = find(vid[int(t[0])])
+                for v in t[1:]:
+                    b = find(vid[int(v)])
+                    if a != b:
+                        parent[b] = a
+            islands: dict[int, list] = {}
+            for ti in cand:
+                islands.setdefault(find(vid[int(tris[ti][0])]), []).append(ti)
+            for tl in islands.values():
+                vs = np.unique(tris[tl].ravel())
+                sample = P[vs[:: max(1, len(vs) // 60)]]
+                near = [nearest(p) for p in sample]
+                votes: dict[str, int] = {}
+                for j in near:
+                    if j is not None:
+                        votes[skin_g[j]] = votes.get(skin_g[j], 0) + 1
+                if not votes:
+                    continue
+                gr, n = max(votes.items(), key=lambda kv: kv[1])
+                if gr not in hinged or n < self.ATTACH_MIN_VOTES or n < self.ATTACH_SHARE * len(sample):
+                    continue
+                # 2. profondeur sous la peau de la pièce
+                js = [j for j in near if j is not None and skin_g[j] == gr]
+                ptsj = np.array([p for p, j in zip(sample, near) if j is not None and skin_g[j] == gr])
+                depth = -np.median(((ptsj - skin_p[js]) * skin_n[js]).sum(axis=1))
+                # 3. la peau de la pièce entoure-t-elle l'îlot ?
+                c = sample.mean(axis=0)
+                nm = skin_n[js].mean(axis=0)
+                nm = nm / max(np.linalg.norm(nm), 1e-9)
+                rad = float(np.linalg.norm(sample - c, axis=1).max())
+                mine = skin_p[skin_g == gr]
+                ring = mine[np.linalg.norm(mine - c, axis=1) < rad + 0.10] - c
+                ring = ring - np.outer(ring @ nm, nm)
+                ring = ring[np.linalg.norm(ring, axis=1) > 0.6 * rad]
+                ax = np.cross(nm, [0.0, 1.0, 0.0])
+                if np.linalg.norm(ax) < 0.1:
+                    ax = np.cross(nm, [1.0, 0.0, 0.0])
+                ax = ax / np.linalg.norm(ax)
+                bx = np.cross(nm, ax)
+                ang = np.arctan2(ring @ bx, ring @ ax)
+                sectors = len(set((((ang + np.pi) / (2 * np.pi) * 12).astype(int) % 12).tolist()))
+                ok = depth <= self.ATTACH_DEPTH and sectors >= self.ATTACH_SECTORS
+                if self.attach_debug is not None:
+                    self.attach_debug.append(dict(shader=g["sh"].name, to=gr, tris=len(tl), center=c.round(2).tolist(),
+                                                  share=round(n / len(sample), 2), depth=round(float(depth), 3),
+                                                  sectors=sectors, moved=bool(ok)))
+                if ok:
+                    g["tri_group"][tl] = gr
+                    key = (g["sh"].name, gr)
+                    moved[key] = moved.get(key, 0) + len(tl)
+        for (shader, gr), n in sorted(moved.items()):
+            self.report.info(f"Rattachement : {n} triangle(s) {shader} pondérés sur le châssis mais montés dans "
+                             f"« {gr} » suivent désormais cette pièce.")
 
     def _nearest_light_ids(self, P, tris):
         names = [(lid, self.skel.world_pos_local(n)) for lid, n in LIGHT_IDS.items() if lid > 0]
