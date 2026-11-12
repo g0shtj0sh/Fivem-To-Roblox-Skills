@@ -144,6 +144,7 @@ Par priorité :
   vers le serveur).
 - **Zone morte de l'axe GTA (0,25)** : les essais FiveM ont été enregistrés avec des consignes brutes ; `DriveBench` passe au moteur la demande effective (`Bench.gtaAxis` : créneau 0,5 → 1/3, slalom écrêté). Sans elle, créneau et slalom braquent 1,5 fois trop.
 - Un virage qui « décroche » peut être la boîte : relever le rapport (`gear`) avant d'accuser le pneu (2026-11-12 : rétrogradage 2→1 à 36 km/h en virage serré, corrigé par `DownshiftRpmThrottle`).
+- **L'accélération latérale d'un transitoire ne se lit pas sur `v × wz`** : il manque `d(vLat)/dt`. Sur un essai où la dérive de caisse croît encore (virage 80, slalom), `v × wz` surévalue de 8 à 11 %. Une cible qui dépasse `fTractionCurveMax` est le signe qu'on mesure mal, pas que le véhicule dépasse son adhérence.
 - Le frein à main se mesure depuis un départ propre sur la ligne : enchaîné après le slalom, il est
   entré en correction de cap et a donné 36,5 °/s de lacet au lieu de 1,4.
 

@@ -24,7 +24,7 @@ Dyn.Tuning = {
 	-- moyenne et 2,09–2,14 g de pic pour fTractionCurveMax = 1,90 → le champ EST une accélération en g.
 	PeakFactor = 0.55, -- pic latéral = TractionCurveLateral × PeakFactor. REBALAYÉ EN 3D (2026-11-12, après la
 	-- direction mesurée, banc avec zone morte, DownshiftRpm 0,35) de 0,4 à 1,0 : 0,55 tient le virage 40 km/h
-	-- établi à 1,675 g / 6,37 m / dérive de caisse 4,35 ° (GTA 1,694 g / 6,29 m / 4,44 °) et ses pneus à
+	-- établi à 1,675 g / 6,37 m / dérive de caisse 4,35 ° (GTA 1,690 g / 6,29 m / 4,44 °) et ses pneus à
 	-- 9,5 ° avant / 8,3 ° arrière (GTA 9,35 / 8,35). Dérive des pneus = braquage − angle de la vitesse à
 	-- l'essieu, l'essieu avant allant à vLat − a·wz (x à DROITE dans la télémétrie FiveM) : le « vLat + a·wz »
 	-- qui donnait 13,7–17,2 ° et poussait vers 0,8–1,0 inversait ce signe (il donne 34 ° avec le braquage

@@ -96,6 +96,25 @@ local function lateral(g, r)
 	return lat, slip
 end
 
+-- Accélération latérale (g) de la caisse. En repère tournant a = dv/dt + ω × v, donc la composante
+-- latérale vaut d(vLat)/dt − wz · vFwd : le terme v · wz seul n'est l'accélération latérale qu'en régime
+-- ÉTABLI. MESURÉ contre l'accélération dérivée du repère MONDE (px, py, heading) : v · wz suffit au virage
+-- 40 et au créneau (≤ 0,6 %) mais surévalue de +8,9 à +10,8 % au virage 80 et de +8,2 % au slalom, qui
+-- sont des transitoires où la dérive de caisse croît encore. La formule complète tombe à 0,2 % partout.
+-- Différence centrée ; aux deux bouts de la trace on retombe sur v · wz.
+local function lateralG(g, rows, i)
+	local r = rows[i]
+	local v, wz = g(r, "vFwd"), g(r, "wz")
+	local p, n = rows[i - 1], rows[i + 1]
+	if p and n then
+		local dt = (g(n, "t") - g(p, "t")) / 1000
+		if dt > 0 then
+			return math.abs((g(n, "vLat") - g(p, "vLat")) / dt - wz * v) / 9.81
+		end
+	end
+	return math.abs(v * wz) / 9.81
+end
+
 -- braquage de roue (°, positif à GAUCHE comme GTA) : moyenne des deux roues avant de la télémétrie FiveM
 -- (w0str, w1str en rad) ou angle unique du moteur Roblox (steerDeg, DriveBench)
 local function wheelSteerDeg(g, r)
@@ -137,7 +156,8 @@ local function manoeuvre(test, g, rows, opts)
 	for i = i0, i1 do
 		local r = rows[i]
 		local t = (g(r, "t") - t0) / 1000
-		local lat, slip = lateral(g, r)
+		local _, slip = lateral(g, r)
+		local lat = lateralG(g, rows, i)
 		maxRoll = math.max(maxRoll, math.abs(g(r, "roll")))
 		maxYaw = math.max(maxYaw, math.abs(deg(g(r, "wz"))))
 		minWheels = math.min(minWheels, g(r, "wheelsOnGround") or 4)

@@ -173,13 +173,13 @@ celles marquées **mesuré** ci-dessous en viennent. Pour un véhicule : table `
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `KMu` | **1,0** | échelle de `TractionCurveMax/Min` en g — **mesuré** : le champ du jeu *est* l'accélération en g |
+| `KMu` | **1,0** | échelle de `TractionCurveMax/Min` en g — **mesuré sur les deux axes** : le champ du jeu *est* l'accélération en g (freinage roues bloquées 1,88 g, et pic latéral 1,898 g ± 0,003 au virage le plus fort, pour `fTractionCurveMax` = 1,90) |
 | `PeakFactor` | **0,55** | pic latéral = `TractionCurveLateral × PeakFactor` — **rebalayé en Studio** (0,4 à 1,0, direction mesurée) : tient le virage 40 km/h établi de GTA à 2 % près (rayon, dérive de caisse, pneus à 9,5 / 8,3 ° contre 9,35 / 8,34). Un seul pic ne tient pas aussi le créneau (qui voudrait 0,4) : le pneu Roblox est linéaire jusqu'au pic. Dérive de pneu : vitesse latérale à l'essieu avant = `vLat − a·wz` (x à droite) |
 | `KappaPeak` | 0,12 | glissement longitudinal du pic |
 | `Falloff` | 1,5 | largeur de la descente Max → Min |
 | `FalloffKappa` | **0,1** | poids du glissement **longitudinal** dans cette descente — **mesuré** : une roue bloquée garde son pic ; dans GTA la chute est pilotée par la dérive. 1 = ancien comportement |
 | `KSpring`, `KArb` | 1 | raideurs de suspension et d'anti-roulis (lois inconnues) |
-| `RollCentreScale` | **0,25** | × hauteur des centres de roulis, là où `VehicleDrive` applique les forces latérales : c'est **elle** qui règle le roulis (bras de levier = centre de gravité − centre de roulis). Mesuré en Studio : 0,22 °/g à 1, 0,76 °/g à 0,25, 0,94 °/g à 0 (GTA ≈ 1,0). Sous 0,25 la roue arrière intérieure délestée patine et le virage serré perd sa motricité |
+| `RollCentreScale` | **0,25** | × hauteur des centres de roulis, là où `VehicleDrive` applique les forces latérales : c'est **elle** qui règle le roulis (bras de levier = centre de gravité − centre de roulis). Mesuré en Studio : 0,22 °/g à 1, 0,76 °/g à 0,25, 0,94 °/g à 0. Cible GTA **1,0 °/g**, linéaire de 0,83 à 1,84 g (1,014 / 1,030 / 1,002 °/g sur les trois essais). Sous 0,25 la roue arrière intérieure délestée patine et le virage serré perd sa motricité |
 | `IwRel` | **0,03** | inertie de roue + transmission (`Iw = IwRel × r² / 4`) — **calé** : 0,25 interdisait de tenir à la fois le 0-100 et la vitesse de pointe |
 | `KDrag` | **2,1** | multiplie le coefficient de traînée issu du chargement (`DragCoeff × 1e-4`), dont le facteur n'était qu'une hypothèse — **mesuré** sur le plateau de vitesse |
 | `FirstGearForce` | **1,5** | gain de poussée de la 1ʳᵉ **et de la marche arrière** (même rapport) — **mesuré** : 10,5 à 12,4 m/s² là où la loi donne 6,53 |

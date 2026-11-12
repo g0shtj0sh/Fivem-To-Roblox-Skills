@@ -347,6 +347,9 @@ Studio sur les traces Roblox (mêmes colonnes, mêmes fenêtres).
   créneau (`stepsteer`) et le slalom (`slalom`) avec les lois de `tools/fivem-telemetry`.
 - Les cibles GTA du créneau, du slalom et du virage 80 sont **corrigées** : voir l'encadré ⚠ sous
   « Résultats ». Le comparateur coupe les traces avant la marche du tablier.
+- Les accélérations latérales de ce tableau viennent de `v × wz`, corrigé depuis : voir « Correction de
+  l'instrument » plus bas. Les deux colonnes étant calculées de la même façon, leur comparaison tient,
+  mais les valeurs du virage 80 et du slalom sont surévaluées de 8 à 11 %.
 
 **Répétabilité.** Le moteur Roblox est déterministe sur ce banc : deux passes identiques donnent les mêmes
 chiffres au centième (virage 40 : 1,76 g / 7,74 ° / 6,85 m deux fois ; marche à 20 km/h : 4,91 ° puis
@@ -619,9 +622,9 @@ pas de la direction. Rien d'autre en cause : on a pu continuer.
 
 | Essai (fenêtre établie) | Braquage de roue | Pneu avant | Pneu arrière | Latéral |
 |---|---|---|---|---|
-| Créneau (1,0–1,8 s) | 5,00 ° | **3,17 °** | **3,05 °** | 0,832 g |
-| Virage 40 (2–4 s) | 25,90 ° | **9,35 °** | **8,34 °** | 1,694 g |
-| Virage 80 (1,0–1,27 s, transitoire) | **8,27 °** | 11,55 ° | 11,62 ° | 2,026 g |
+| Créneau (1,0–1,8 s) | 5,00 ° | **3,17 °** | **3,05 °** | 0,834 g |
+| Virage 40 (2–4 s) | 25,90 ° | **9,35 °** | **8,34 °** | 1,690 g |
+| Virage 80 (1,0–1,27 s, transitoire) | **8,27 °** | 11,55 ° | 11,62 ° | 1,844 g |
 
 `a` = 1,38 m, `b` = 1,41 m (centre de gravité du m422 converti) ; 3 passes, σ ≤ 0,2 °. Deux lectures :
 le pneu de GTA est plus raide au début (0,27 g/° à 3 °) qu'à 9 ° (0,18 g/°) — une courbe qui s'infléchit
@@ -644,9 +647,9 @@ vaut 4,3 ° dans les deux cas, au signe de β près. Il faut une grandeur prise 
   établi.
 - **Le point de fonctionnement du pneu.** Le modèle monte linéairement jusqu'au pic : la part du pic
   d'adhérence tenue doit donc égaler la part du pic de dérive atteinte. À `PeakFactor` 0,55 le pic est à
-  19 × 0,55 = 10,45 °. GTA tient 1,694 g sur 1,90, soit **89,2 % du pic d'adhérence**, avec 9,47 ° de
-  dérive, soit **90,6 % du pic de dérive** : 1,4 point d'écart. Avec l'autre signe la voiture serait à
-  **3,2 fois** son pic de dérive, donc très au-delà du décrochage, tout en tenant 1,694 g. Ce contrôle
+  19 × 0,55 = 10,45 °. GTA tient 1,690 g sur 1,90, soit **88,9 % du pic d'adhérence**, avec 9,47 ° de
+  dérive, soit **90,6 % du pic de dérive** : 1,7 point d'écart. Avec l'autre signe la voiture serait à
+  **3,2 fois** son pic de dérive, donc très au-delà du décrochage, tout en tenant 1,690 g. Ce contrôle
   confirme du même coup la valeur 0,55 par un chemin qui ne passe pas par le balayage.
 
 ### 3. Une cause parasite : la boîte rétrogradait en virage
@@ -666,7 +669,7 @@ Virage 40 avec la boîte corrigée (`RollCentreScale` 1) :
 
 | `PeakFactor` | Latéral établi | Rayon | Dérive caisse | Pneus av. / arr. | Vitesse établie |
 |---|---|---|---|---|---|
-| **GTA** | **1,694 g** | **6,288 m** | **4,44 °** | **9,35 / 8,34 °** | **36,5 km/h** |
+| **GTA** | **1,690 g** | **6,288 m** | **4,44 °** | **9,35 / 8,34 °** | **36,5 km/h** |
 | 0,5 (boîte 0,45) | 1,684 | 6,48 | 4,87 | 9,06 / 7,55 | 37,2 |
 | **0,55** | **1,675** | **6,37** | **4,35** | **9,54 / 8,26** | **36,8** |
 | 0,6 | 1,667 | 6,27 | 3,85 | 10,02 / 8,95 | 36,5 |
@@ -677,7 +680,7 @@ Autres essais, boîte d'origine (`DownshiftRpm` 0,45), `RollCentreScale` 1 :
 
 | `PeakFactor` | Créneau : dérive caisse, pneus av./arr. | Virage 80 : latéral, rayon | Slalom : lacet max |
 |---|---|---|---|
-| **GTA** | **0,59 °, 3,17 / 3,05 °** | **2,026 g, 18,8 m** | **25,16 °/s** |
+| **GTA** | **0,59 °, 3,17 / 3,05 °** | **1,844 g, 18,8 m** | **25,16 °/s** |
 | 0,4 | 0,73 °, 3,26 / 3,23 ° | 1,197 g, 34,0 m | 28,1 |
 | 0,45 | 1,13 °, 3,67 / 3,63 ° | 1,312 g, 30,1 m | 27,8 |
 | 0,5 | 1,53 °, 4,08 / 4,04 ° | 1,465 g, 26,4 m | 27,4 |
@@ -705,7 +708,7 @@ braquage en glisse (§ 2).
 
 | `RollCentreScale` | Virage 40 : roulis, latéral, rayon, vitesse | Créneau : roulis, latéral | Virage 80 : roulis, latéral, rayon |
 |---|---|---|---|
-| **GTA** | **1,714 °, 1,694 g, 6,29 m, 36,5 km/h** | **0,859 °, 0,832 g** | **1,848 °, 2,026 g, 18,8 m** |
+| **GTA** | **1,714 °, 1,690 g, 6,29 m, 36,5 km/h** | **0,859 °, 0,834 g** | **1,848 °, 1,844 g, 18,8 m** |
 | 1 | 0,38 °, 1,675 g, 6,37 m, 36,8 | 0,20 °, 0,878 g | 0,39 °, 1,536 g, 24,6 m |
 | 0,5 | 0,97 °, 1,659 g, 6,26 m, 36,3 | 0,52 °, 0,861 g | 1,00 °, 1,568 g, 26,6 m |
 | **0,25** | **1,26 °, 1,650 g, 6,14 m, 35,9** | **0,67 °, 0,853 g** | **1,25 °, 1,625 g, 26,1 m** |
@@ -729,7 +732,7 @@ balayage).
 
 | Essai | Mesure | GTA | Avant | Après |
 |---|---|---|---|---|
-| Virage 40 | latéral établi / pic | 1,694 / 1,829 g | 1,684 / 1,709 g | 1,650 / 1,711 g |
+| Virage 40 | latéral établi / pic | 1,690 / 1,829 g | 1,684 / 1,709 g | 1,650 / 1,711 g |
 | | rayon | 6,288 m | 6,48 m | 6,14 m |
 | | lacet max | 97,3 °/s | 91,5 °/s | 93,0 °/s |
 | | roulis établi / max | 1,714 / 1,891 ° | 0,38 / 0,38 ° | **1,26 / 1,28 °** |
@@ -737,12 +740,12 @@ balayage).
 | | pneus av. / arr. | 9,35 / 8,34 ° | 9,06 / 7,55 ° | 9,89 / 9,05 ° |
 | | **braquage de roue appliqué** | 25,90 ° | 25,66 ° | **26,33 °** (35,9 km/h) |
 | | vitesse en fin | 38,23 km/h | 37,2 km/h | 35,9 km/h |
-| Virage 80 (0–1,27 s) | latéral établi / pic | 2,026 / 2,244 g | 1,465 / 2,58 g | 1,596 / 2,48 g |
+| Virage 80 (0–1,27 s) | latéral établi / pic | **1,844 / 1,898 g** | 1,465 / 2,58 g ⚠ | 1,596 / 2,48 g ⚠ |
 | | rayon | 18,82 m | 26,39 m | 26,59 m |
 | | lacet max | 60,7 °/s | 66,8 °/s | 64,4 °/s |
 | | roulis établi / max | 1,848 / 1,887 ° | 0,39 / 0,43 ° | **1,25 / 1,40 °** |
 | | **braquage de roue appliqué** | 8,27 ° | 11,53 ° (max 11,82) | **10,56 °** (max 10,68, 73,5 km/h) |
-| Créneau 60 (1/3) | latéral établi | 0,832 g | 0,879 g | 0,853 g |
+| Créneau 60 (1/3) | latéral établi | 0,834 g | 0,879 g | 0,853 g |
 | | rayon | 32,76 m | 32,14 m | 33,04 m |
 | | lacet max | 29,30 °/s | 29,7 °/s | 28,9 °/s |
 | | roulis établi | 0,859 ° | 0,20 ° | **0,67 °** |
@@ -750,7 +753,7 @@ balayage).
 | | **braquage de roue appliqué** | 5,00 ° | 5,01 ° | **5,02 °** (59,9 km/h) |
 | Slalom 60 (écrêté) | lacet max | 25,16 °/s | 27,4 °/s | 26,6 °/s |
 | | roulis max | 0,675 ° | 0,15 ° | 0,49 ° |
-| | pic latéral | 0,737 g | 0,818 g | 0,798 g |
+| | pic latéral | **0,594 g** | 0,818 g ⚠ | 0,798 g ⚠ |
 | | **braquage de roue max** | 4,95 ° | 4,94 ° | **4,93 °** |
 | Frein à main 60-0 | distance, décélération | 20,0 m, 0,71 g | 15,7 m (matin) | **17,96 m, 0,77 g** |
 | | lacet max | 0,13 °/s | 1,4–2,0 °/s (matin) | 1,03 °/s |
@@ -775,6 +778,66 @@ séparément.
   Repro : scripts disponibles (`DriveBench.lua`, `TestTrack.lua`, `tools/drive-compare/`), ≈ 1 min de
   Play par point de balayage. Reproduction vérifiée pour la passe finale (valeurs par défaut = valeurs du
   balayage au centième).
+
+## Correction de l'instrument : `v × wz` n'est pas l'accélération latérale en transitoire
+
+Découvert le 2026-11-12 en vérifiant pourquoi la cible du virage 80 (2,026 g) dépassait
+`fTractionCurveMax` (1,90 g) : **aucun réglage de pneu ne peut atteindre une cible qui dépasse
+l'adhérence maximale du modèle.** La cible était fausse.
+
+L'analyseur calculait l'accélération latérale par `|vFwd × wz|`, qui n'est la bonne valeur qu'en régime
+**établi**. En repère tournant, `a = dv/dt + ω × v`, donc la composante latérale vaut :
+
+```
+a_lat = d(vLat)/dt − wz · vFwd
+```
+
+Le terme manquant n'est nul que si la dérive de caisse ne bouge plus. Contrôle contre l'accélération
+dérivée du repère **monde** (`px`, `py`, `heading`, différence centrée), 3 passes par essai :
+
+| Essai | `v × wz` | Formule complète | Vérité monde |
+|---|---|---|---|
+| Virage 40 (établi) | 1,69 g (**−0,2 à +0,6 %**) | 1,689 g (0,0 %) | 1,690 g |
+| Créneau (établi) | 0,83 g (**−0,4 à −0,2 %**) | 0,834 g (−0,1 %) | 0,835 g |
+| Virage 80 (transitoire) | 2,03 g (**+8,9 à +10,8 %**) | 1,846 g (+0,1 %) | 1,845 g |
+| Slalom (transitoire) | 0,366 g (**+8,2 %**) | 0,338 g (+0,1 %) | 0,338 g |
+
+Corrigé dans [`tools/drive-compare/analyze.luau`](../../tools/drive-compare/analyze.luau) (donc des deux
+côtés : traces FiveM **et** traces `DriveBench`) et dans le résumé en jeu de
+[`tools/fivem-telemetry`](../../tools/fivem-telemetry). Les traces enregistrées ne sont pas touchées :
+elles contiennent les échantillons bruts, pas des grandeurs calculées.
+
+### Ce que ça change
+
+| Cible GTA | Avant | Après |
+|---|---|---|
+| Virage 80, latéral établi | 2,026 g | **1,844 g** (σ 0,003) |
+| Virage 80, pic latéral | 2,244 g | **1,898 g** (σ 0,003) |
+| Virage 80, roulis par g | 0,912 °/g | **1,002 °/g** |
+| Slalom, pic latéral | 0,737 g | **0,594 g** (σ 0,001) |
+| Virage 40, latéral établi | 1,694 g | 1,690 g |
+| Créneau, latéral établi | 0,832 g | 0,834 g |
+
+Les essais établis ne bougent pas (0,2 %, mais hors répétabilité : σ = 0 sur 3 passes). Deux
+conséquences, toutes deux dans le bon sens :
+
+1. **`fTractionCurveMax` est bien le plafond d'adhérence latérale, à 0,1 % près.** Le virage 80 est le
+   seul essai qui atteigne la limite : son pic corrigé vaut **1,898 g** (σ 0,003) pour un champ déclaré à
+   **1,90**. `KMu` = 1,0 n'était vérifié que sur l'axe du freinage (1,88 g roues bloquées) ; il l'est
+   maintenant aussi sur l'axe latéral, par un essai indépendant.
+2. **Le roulis de GTA est linéaire sur toute la plage mesurée.** 1,014 °/g au virage 40 (1,69 g),
+   1,030 au créneau (0,83 g), **1,002** au virage 80 (1,84 g). C'est l'ancienne valeur de 0,912 °/g au
+   virage 80 qui faisait croire à un tassement au-delà de 1 g. Cible de `RollCentreScale` : **1,0 °/g**,
+   sans réserve.
+
+### Ce qui reste à rejouer
+
+Les colonnes Roblox marquées ⚠ dans « 6. Avant / après » (virage 80 latéral établi et pic, slalom pic
+latéral) ont été mesurées avec l'ancienne formule : elles sont surévaluées du même ordre, mais pas du même
+montant, et ne sont donc plus comparables à la colonne GTA corrigée. Les traces `DriveBench` n'étant pas
+dans le dépôt, il faut **une passe en Studio** avec l'analyseur corrigé pour les remplacer. Les essais
+établis (virage 40, créneau) et tout ce qui ne dépend pas de l'accélération latérale (lacet, rayon,
+roulis, braquage, dérives de pneu) restent valables.
 
 ## Limites de cette campagne
 

@@ -418,6 +418,13 @@ function Tests.corner(v, p)
 
     local res = { kmh = kmh, steer = steer }
     local p0 = GetEntityCoords(v)
+    -- memoire d'une image pour l'acceleration laterale : en repere tournant a_lat = d(vLat)/dt - wz*vFwd.
+    -- Le terme -wz*vFwd seul ne vaut qu'en regime ETABLI ; il surevalue de 9 a 11 % un virage pris en
+    -- transitoire (mesure : virage 80, slalom). Voir tools/drive-compare/analyze.luau.
+    -- Ici la derivee porte sur UNE image (l'analyseur, lui, centre sur deux) : le bruit gonfle le maximum
+    -- de 0,1 a 2,2 % sur les traces, contre 8 a 15 % d'erreur enlevee. La premiere image retombe sur
+    -- -wz*vFwd, faute de precedente.
+    local prevLat, prevT = nil, nil
     hold(v, function()
         local err = kmh / 3.6 - fwdSpeed(v)
         return { throttle = math.max(0.0, math.min(1.0, 0.4 + err * 0.4)), steer = steer }
@@ -425,13 +432,20 @@ function Tests.corner(v, p)
         local rot = GetEntityRotation(v, 2)
         local sv = GetEntitySpeedVector(v, true)
         local wz = GetEntityRotationVelocity(v).z
+        local now = GetGameTimer()
+        local dLat = nil
+        if prevLat and prevT and now > prevT then
+            dLat = (sv.x - prevLat) / ((now - prevT) / 1000.0)
+        end
+        prevLat, prevT = sv.x, now
         res.maxRoll = math.max(res.maxRoll or 0, math.abs(rot.y))
         res.maxYawRate = math.max(res.maxYawRate or 0, math.abs(wz) * 180.0 / math.pi)
         res.minWheels = math.min(res.minWheels or 4, wheelsOnGround(v))
         if math.abs(sv.y) > 2 then
             res.maxSlip = math.max(res.maxSlip or 0,
                 math.abs(math.deg(math.atan(sv.x, math.abs(sv.y)))))
-            res.maxLatG = math.max(res.maxLatG or 0, math.abs(sv.y * wz) / 9.81)
+            res.maxLatG = math.max(res.maxLatG or 0,
+                math.abs((dLat or 0.0) - wz * sv.y) / 9.81)
         end
         return false
     end, false)

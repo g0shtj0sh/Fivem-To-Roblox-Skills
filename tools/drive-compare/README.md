@@ -65,7 +65,10 @@ Chaque essai a donc une fenêtre `clean` (`A.Windows`) appliquée aux deux trace
 
 ## Définitions
 
-- **Accélération latérale** : `|vFwd × wz| / 9,81`, comme dans les résumés FiveM.
+- **Accélération latérale** : `|d(vLat)/dt − wz × vFwd| / 9,81` (différence centrée). Le terme `vFwd × wz`
+  seul, utilisé jusqu'au 2026-11-12, n'est l'accélération latérale qu'en régime **établi** : il surévalue
+  de 8 à 11 % un essai où la dérive de caisse croît encore (virage 80, slalom). Voir
+  `calibration/m422/README.md`, « Correction de l'instrument ».
 - **Dérive** : angle de la vitesse de la caisse, `atan(vLat / |vFwd|)`. C'est la dérive **de la caisse**
   à l'origine du véhicule, pas celle des pneus (voir `calibration/m422/README.md`, « Vérification en 3D »).
 - **Établi** : moyenne sur la fenêtre `steady` (virage 40 : 2 à 4 s ; créneau : 1,0 à 1,8 s).
