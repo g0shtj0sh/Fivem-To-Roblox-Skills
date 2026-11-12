@@ -171,6 +171,14 @@ SetHttpHandler(function(req, res)
                 if target then TriggerClientEvent('vt:stop', target) end
                 state.busy = false
                 json_response(res, { ok = true })
+            elseif path == '/reset' then
+                -- Debloque un etat « occupe » reste coince apres une deconnexion du client en
+                -- plein essai, et jette les lots en attente. Sans cela, plus aucun essai ne peut
+                -- etre lance : c'est arrive apres chaque ejection.
+                local target = firstPlayer()
+                if target then TriggerClientEvent('vt:stop', target) end
+                state.busy, state.label, state.test, state.pending = false, nil, nil, {}
+                json_response(res, { ok = true, reset = true })
             elseif path == '/probe' then
                 handleProbe(body, res, 'probe')
             elseif path == '/curbscan' then

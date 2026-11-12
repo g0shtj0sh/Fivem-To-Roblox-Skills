@@ -357,12 +357,20 @@ local function record(v)
     samples[#samples + 1] = true
 end
 
--- 250 lignes par lot, et PAS PLUS. MESURE : a 5000, le client est ejecte avec « Malformed network
--- event payload » — un lot de cette taille depasse la limite d'un evenement reseau FiveM. A 80
--- images par seconde, 250 lignes font un envoi toutes les 3 secondes environ, ce qui est tres en
--- dessous de la limite de debit : les ejections « rate limit » observees pendant l'essai de vol
--- venaient de la synchronisation d'entite pendant la culbute, pas de l'enregistreur.
-local CHUNK <const> = 250
+-- TAILLE du lot, pas sa frequence : c'est elle qui ejecte le client.
+--
+-- MESURE (2026-11-12) : avec les 63 colonnes d'origine, 250 lignes pesaient ~104 Ko et passaient.
+-- Les dix canaux ajoutes portent la ligne a 79 colonnes, donc le MEME lot a ~130 Ko — au-dela de
+-- ce qu'accepte un evenement reseau FiveM. Le client est alors ejecte, « for going over a rate
+-- limit » dans le journal du serveur et « Malformed network event payload » a l'ecran, exactement
+-- quand part le deuxieme lot (essai lance a 17:50:17, ejection a 17:50:23, et 250 lignes font
+-- 3,1 s a 80 images par seconde). A 5000 lignes (2,5 Mo) c'est immediat.
+--
+-- Le lot n'est donc PLUS une constante ecrite a la main : il se calcule a partir du nombre de
+-- colonnes, pour viser ~40 Ko quoi qu'on ajoute. Ajouter un canal ne peut plus faire deborder
+-- l'evenement — c'est exactement ce qui vient d'arriver, deux fois.
+--   ~7 octets par valeur (nombre + separateur), marge de 2 pour les traces a grandes valeurs.
+local CHUNK = math.max(20, math.floor(40000 / (#COLUMNS * 7 * 2)))
 local curLabel = nil
 
 local function flush(force)
@@ -2077,6 +2085,18 @@ RegisterNetEvent('vt:run', function(label, testName, params)
             print('[vehicle-telemetry] ' .. tostring(err))
         end
     end)
+end)
+
+-- Au demarrage de la ressource, on jette tout tampon herite : apres un rechargement a chaud, un
+-- essai lance AVANT la modification pouvait encore vider le sien, avec l'ancienne taille de lot —
+-- ce qui a ejecte le client une fois de plus alors que la correction etait deja en place.
+AddEventHandler('onClientResourceStart', function(res)
+    if res ~= GetCurrentResourceName() then return end
+    pendingRows, samples = {}, {}
+    running, abortFlag = false, true
+    cur.throttle, cur.brake, cur.handbrake, cur.steer, cur.pitch = 0.0, 0.0, false, 0.0, 0.0
+    print(('[vehicle-telemetry] demarre ; lot reseau = %d lignes pour %d colonnes')
+        :format(CHUNK, #COLUMNS))
 end)
 
 RegisterNetEvent('vt:stop', function()
