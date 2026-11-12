@@ -125,6 +125,21 @@ Dyn.Tuning = {
 	-- ni survirage dans cette plage : si le braquage est juste, le lacet suit. C'est le critère de
 	-- vérification en 3D.
 	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée
+	-- Réduction du braquage quand l'ARRIÈRE glisse, appliquée au braquage disponible APRÈS le fondu en
+	-- vitesse et le plancher, mais AVANT la butée mécanique. MESURÉ (2026-11-12) sur 7972 images et
+	-- 27 traces (18 cercles à consigne constante `skidpad` + virage 40, virage 80, créneau, slalom) :
+	--   réduction = borne(1 − SteerSlideK × (|vLat + b·lacet| − SteerSlideV0), SteerSlideMin, 1)
+	-- écart quadratique moyen 0,066 sur un rapport qui descend jusqu'à 0,30 ; résidu par essai : virage 40
+	-- −0,002, cercles +0,007, virage 80 +0,027, créneau −0,064 (ce dernier est le résidu de la loi de base
+	-- à 60 km/h, pas de la réduction). Le prédicteur est la vitesse latérale de l'essieu ARRIÈRE : c'est le
+	-- seul des bons candidats qui ne dépende pas de l'angle de roue (la dérive du pneu AVANT se calcule à
+	-- partir de lui, donc la prendre comme prédicteur serait circulaire), et c'est lui qui laisse le moins
+	-- de dépendance résiduelle à la vitesse (0,069 contre 0,087 pour l'angle de dérive arrière).
+	-- Ce que ça remplace : la note « GTA réduit le braquage quand le véhicule glisse, non calé ». Ce n'était
+	-- pas une loi de glisse mais ceci, et le virage 80 s'explique entièrement par là.
+	SteerSlideV0 = 1.8, -- m/s : seuil, en dessous duquel rien n'est réduit
+	SteerSlideK = 0.18, -- par m/s au-delà du seuil
+	SteerSlideMin = 0.30, -- plancher de la réduction
 	AbsSlip = 0.18, -- ABS : glissement au-delà duquel le frein est relâché
 	AbsRelease = 0.35, -- ABS : fraction du freinage gardée quand il relâche
 	HandbrakeGripRear = 1.0, -- adhérence latérale arrière frein à main serré. MESURÉ : à 60 km/h volant droit
@@ -290,6 +305,9 @@ function Dyn.new(cfg, comLocal, overrides)
 	end
 	local base = math.max(zR - zF, 0.5)
 	local fracF = math.clamp((zR - comLocal.Z) / base, 0.15, 0.85)
+	-- distance du centre de gravité à l'essieu ARRIÈRE (m) : sert à la vitesse latérale de
+	-- l'arrière, vLat + b·lacet, qui pilote la réduction du braquage en glisse (voir Dyn.Tuning)
+	P.axleRear = math.clamp(zR - comLocal.Z, 0.3, base)
 	for _, w in ipairs(wheels) do
 		w.load = P.g * (w.front and fracF / math.max(nF, 1) or (1 - fracF) / math.max(nR, 1)) -- N spécifique au repos
 		w.massFrac = w.load / P.g
@@ -447,7 +465,15 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	local cap = P.steerLock * T.SteerLockMeanPct
 	local floor = math.min(math.max(P.alphaPeak * T.SteerPeakGain, P.steerLock * T.SteerMinPct), cap)
 	local fade = 1 + (math.abs(vf) / T.SteerFade) ^ T.SteerFadePower
-	local lock = math.clamp(math.max(P.steerLock / fade, floor), 0, cap)
+	-- quand l'arrière glisse, le braquage obtenu tombe (MESURÉ ; voir Dyn.Tuning). Le prédicteur est la
+	-- vitesse latérale de l'essieu arrière, et la réduction s'applique AVANT la butée : à basse vitesse la
+	-- demande dépasse la butée, donc une réduction de 30 % n'y change encore rien — ce que la mesure montre.
+	local wYaw = (ctx.wBody or Vector3.zero).Y
+	local vRear = vBody.X + P.axleRear * wYaw
+	local slide = math.max(0, math.abs(vRear) - T.SteerSlideV0)
+	local slideCut = math.clamp(1 - T.SteerSlideK * slide, T.SteerSlideMin, 1)
+	S.steerSlideCut = slideCut
+	local lock = math.clamp(math.max(P.steerLock / fade, floor) * slideCut, 0, cap)
 	local beta = (math.abs(vf) > 2) and math.atan2(vBody.X, math.abs(vf)) or 0
 	S.lock = lock
 	S.steerAngle = math.clamp(-(inp.Steer or 0) * lock + T.CounterSteer * beta, -cap, cap)

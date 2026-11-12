@@ -575,7 +575,8 @@ Ce qui reste : −13 % vers 90 km/h, loin des essais de virage, et −5 % à 30 
 60, 57 pour 75 et 58 pour 90. Le véhicule ne tient pas un régime établi, la mesure n'en est donc pas une
 (ces points sont marqués `retenu: false` dans le JSON, avec le motif). Pire, à 90 km/h et 0,80 de consigne
 le braquage **redescend** à 3,57 ° alors que le lacet bondit à 72,8 °/s : GTA réduit l'angle de roue quand
-le véhicule glisse. Cette réduction-là reste à caler, et demanderait une piste large.
+l'arrière glisse. **Cette réduction est maintenant mesurée et calée** : voir « La direction a deux étages »
+plus bas. Elle ne demandait pas une piste plus large, mais un essai en **cercle**.
 5. **Vitesse perdue sur la marche à 20 km/h** : 1,9–2,0 km/h (GTA 0,06). Une part vient sans doute du
    régulateur de vitesse du banc (entrée à 21 km/h pour 20 demandés) : à confirmer avec une chute
    image par image (Roblox 0,7 km/h par image, GTA 0,13).
@@ -629,9 +630,10 @@ pas de la direction. Rien d'autre en cause : on a pu continuer.
 `a` = 1,38 m, `b` = 1,41 m (centre de gravité du m422 converti) ; 3 passes, σ ≤ 0,2 °. Deux lectures :
 le pneu de GTA est plus raide au début (0,27 g/° à 3 °) qu'à 9 ° (0,18 g/°) — une courbe qui s'infléchit
 tôt — et au virage 80 GTA **ne braque que 8,3 °** à 70 km/h, là où la loi à consigne constante donne
-11,6 ° : c'est la réduction du braquage en glisse (non modélisée, voir « Ce que la pleine butée ne permet
-pas de mesurer »). Le virage 80 ne peut donc pas servir à régler `PeakFactor` tant que ce comportement
-manque : Roblox y braque 10,6–11,8 ° et ses pneus avant passent le pic.
+11,6 ° : c'est la réduction du braquage quand l'arrière glisse, **mesurée et calée depuis** (voir « La
+direction a deux étages »). À l'époque de ce balayage elle manquait, et le virage 80 ne pouvait donc pas
+servir à régler `PeakFactor` : Roblox y braquait 10,6–11,8 ° et ses pneus avant passaient le pic. Le moteur
+y est maintenant à 2,3 ° d'écart au lieu de 11,1 °, donc le virage 80 redevient utilisable — à rejouer.
 
 **Deux contrôles extérieurs au calcul.** La fermeture géométrique du modèle bicyclette ne peut pas
 départager les deux signes : β, `b/R` et α_arrière sont liés algébriquement, et `|atan(b/R) − α_arrière|`
@@ -699,8 +701,8 @@ il fallait au contraire **rester sous 0,6**.
 **Ce qu'aucune valeur ne tient** : le créneau voudrait 0,4 (pneus à 3,2 ° pour 0,83 g), le virage 40
 0,55. Le pneu Roblox est linéaire jusqu'au pic puis décroît (`F = fmax × min(s, 1)`) ; celui de GTA
 s'infléchit tôt. Un seul `PeakFactor` ne peut pas reproduire les deux pentes : il faudrait une courbe de
-pneu à inflexion progressive. Le virage 80 voudrait 0,9, mais il est faussé par l'absence de réduction du
-braquage en glisse (§ 2).
+pneu à inflexion progressive. Le virage 80 voudrait 0,9, mais à l'époque de ce balayage il était faussé par
+l'absence de réduction du braquage en glisse (§ 2) ; celle-ci étant désormais calée, ce point est à rejouer.
 
 ### 5. `RollCentreScale`
 
@@ -771,8 +773,8 @@ séparément.
 ### 7. Ce qui reste
 
 - **Forme du pneu** : un seul `PeakFactor` ne tient pas à la fois le créneau (0,4) et le virage 40 (0,55).
-- **Réduction du braquage en glisse** (GTA : 8,3 ° au virage 80 au lieu de 11,6 °) : tant qu'elle manque,
-  le virage 80 Roblox sous-vire (rayon 26,6 m contre 18,8) et ne peut pas servir au calage.
+- ~~**Réduction du braquage en glisse**~~ : **mesurée et calée** le 2026-11-12 après-midi, voir « La
+  direction a deux étages ». Le virage 80 redevient utilisable au calage ; à rejouer en 3D.
 - **Roulis à 0,76 °/g** au lieu de 1,0 : bloqué par le patinage de la roue intérieure délestée (§ 5).
 - **Limites** : PC Studio, un joueur, une passe par point (moteur déterministe), un seul véhicule.
   Repro : scripts disponibles (`DriveBench.lua`, `TestTrack.lua`, `tools/drive-compare/`), ≈ 1 min de
@@ -838,6 +840,132 @@ montant, et ne sont donc plus comparables à la colonne GTA corrigée. Les trace
 dans le dépôt, il faut **une passe en Studio** avec l'analyseur corrigé pour les remplacer. Les essais
 établis (virage 40, créneau) et tout ce qui ne dépend pas de l'accélération latérale (lacet, rayon,
 roulis, braquage, dérives de pneu) restent valables.
+
+## La direction a deux étages (cercles à consigne constante, 2026-11-12)
+
+La note « GTA réduit le braquage quand le véhicule glisse, reste à caler, demanderait une piste large »
+était ouverte depuis la campagne de direction. Elle est fermée, et elle disait deux choses fausses : ce
+n'était pas une loi de **glisse** au sens où je le croyais, et il ne fallait pas une piste plus large mais
+un essai d'une autre **forme**.
+
+### Pourquoi le virage 80 ne pouvait rien identifier
+
+Dans le virage 80, la vitesse tombe, la dérive monte et le temps avance **ensemble** : les prédicteurs
+candidats sont colinéaires, et n'importe quelle fonction décroissante colle aux données. Deux hypothèses
+tirées de cette seule manœuvre sont d'ailleurs mortes à la vérification :
+
+- « l'écart suit la dérive de caisse, −1,035 ° par degré au-delà de 4 ° » : magnifique sur le virage 80 à
+  0,3 ° près, mais de **signe opposé** sur les images en glisse des essais `steerfade` ;
+- « il y a une butée de vitesse de braquage à 37 °/s » : morte, la roue atteint **575 °/s** ailleurs.
+
+### L'essai qui sépare les variables : le cercle
+
+[`skidpad`](../../tools/fivem-telemetry/README.md) tient une consigne **fixe** et une vitesse **tenue par
+le régulateur** : la dérive s'établit à une valeur qui ne dépend plus du temps, et on balaye consigne et
+vitesse l'une à l'autre fixée. Il faut pour cela un **carré** plat, pas un couloir.
+
+**Le site.** [`gridprobe`](../../tools/fivem-telemetry/README.md) relève le sol au rayon sur une grille de
+120 m de côté ([`tablier-grille.json`](tablier-grille.json)). Le critère de platitude est le résidu autour
+d'un plan ajusté **sur le disque testé** : l'ajuster sur toute la grille laisse la périphérie corrompre le
+plan et pollue jusqu'au centre (c'est ce qui m'a d'abord fait conclure « aucune zone plate »). Résultat :
+un disque de **24 m de rayon** centré sur (−1205, −3032), résidu maximal **19 mm**, pente nulle.
+
+Et une propriété commode : si le virage est déclenché sur le **bord** du disque, un cercle de rayon R y est
+inscrit **exactement**, quel que soit R ≤ 24 m — la distance du centre du disque au centre du cercle vaut
+|R − 24|, donc le point le plus éloigné est à |R − 24| + R = 24 m. Une seule géométrie suffit donc pour
+toutes les vitesses : ligne droite depuis (−1115, −3056) cap 90, virage à droite déclenché à (−1205, −3056).
+
+### Étage 1 : la commande vers les roues
+
+La trace contient deux grandeurs que je n'avais jamais comparées : `steerAngle`, la **commande** (le volant,
+0 à 35 °), et `w0str`/`w1str`, l'angle des **roues**. Au virage 80, la commande monte à 35 ° et **y reste** :
+ce ne sont pas les ordres qui baissent, ce sont les roues qui ne suivent pas.
+
+Sur les 18 cercles, le rapport roues/commande ne dépend que de la **vitesse**, pas de la commande : à
+40 km/h il vaut 0,696 / 0,701 / 0,729 / 0,727 pour des commandes de 14 / 21 / 28 / 35 °. Et il colle à la
+loi mesurée à consigne constante, donc le cercle **confirme cette loi par une manœuvre entièrement
+différente**.
+
+Un point d'ordre, que le cercle tranche : **GTA plafonne à la butée AVANT de multiplier par la consigne.**
+À 15 km/h la loi non plafonnée donnerait 49,8 ° ; si le plafond venait après, une demi-consigne donnerait
+16,6 ° et le rapport mesuré vaudrait 1,63. Il vaut 1,12. (J'avais d'abord ajusté la réduction avec la loi
+non plafonnée : l'erreur fausse toutes les images sous 22 km/h.)
+
+### Étage 2 : la réponse à l'échelon
+
+La commande et les roues montent à des vitesses **différentes**, les roues plus vite :
+
+| | 0,1 s | 0,2 s | 0,4 s |
+|---|---|---|---|
+| commande (fraction de l'établi) | 0,58 à 0,65 | 0,78 à 0,86 | 0,95 à 0,98 |
+| roues (fraction de l'établi) | 0,62 à 0,82 | 0,85 à 1,05 | 1,00 à 1,12 |
+
+D'où un rapport roues/commande qui **dépasse transitoirement 1,5 fois** sa valeur établie à 68 km/h — ce
+qui est un artefact de rapport, pas un dépassement de la direction. L'angle de roue lui-même ne dépasse que
+de 4 à 13 % (1,050 à 30 km/h, 1,062 à 40, 1,115 à 50, 1,110 à 60, 1,092 à 70) et atteint 90 % de l'établi
+en **0,14 à 0,24 s**. Non modélisé : le moteur applique la valeur établie sans délai.
+
+### La réduction quand l'arrière glisse
+
+Le prédicteur retenu est la **vitesse latérale de l'essieu arrière**, `vLat + b·lacet` :
+
+```
+réduction = borne(1 − 0,18 × (|vLat + b·lacet| − 1,8 m/s), 0,30, 1)
+```
+
+appliquée au braquage disponible après le fondu en vitesse et le plancher, mais **avant la butée**.
+
+**Pourquoi celui-là.** Sur 7972 images et 27 traces (cercles, virage 40, virage 80, créneau, slalom), c'est
+lui qui laisse le moins de dépendance résiduelle à la vitesse, et c'est le seul des bons candidats qui ne
+dépende pas de l'angle de roue — la dérive du pneu **avant** se calcule à partir de lui, donc la prendre
+comme prédicteur serait circulaire, ce qui explique aussi qu'elle paraisse bonne.
+
+| Prédicteur | Dispersion résiduelle entre vitesses |
+|---|---|
+| **vitesse latérale arrière** | **0,069** |
+| dérive du pneu arrière (angle) | 0,087 |
+| dérive du pneu avant | 0,349 (circulaire) |
+| accélération latérale | 0,381 |
+| dérive de caisse | 0,382 |
+| vitesse latérale de la caisse | 0,467 |
+| vitesse de lacet | 0,540 |
+
+Écart quadratique moyen **0,066** sur un rapport qui descend jusqu'à 0,30 ; résidu par essai : virage 40
+−0,002, cercles +0,007, virage 80 +0,027, créneau −0,064 (ce dernier est le résidu de la loi de base à
+60 km/h, pas de la réduction).
+
+**Et ce n'est pas une loi de dérive de caisse** : à 15 km/h le rapport reste à 1,0 jusqu'à 14 ° de dérive de
+caisse, alors qu'à 70 km/h il tombe à 0,72 dès 7,4 °. La vitesse latérale arrière explique les deux — en
+cercle serré à 15 km/h, le terme géométrique `b·lacet` annule presque `vLat`, donc l'arrière ne glisse pas.
+
+### Vérification du moteur sur les images mesurées
+
+Le moteur tourne sur **1200 images mesurées** (commande stable, 4 roues au sol, 27 traces) et on compare son
+angle de roue à celui de GTA. Cela vérifie l'**implémentation** — signes, distance à l'essieu arrière, ordre
+vis-à-vis de la butée — et non l'ajustement.
+
+| Essai | Images | Sans la réduction | Avec | Biais avec |
+|---|---|---|---|---|
+| **Global** | 1200 | 4,040 ° | **1,290 °** | — |
+| Virage 80 | 67 | 11,144 ° (biais +9,74) | **2,295 °** | −0,93 ° |
+| Cercles | 960 | 3,420 ° | **1,297 °** | −0,35 ° |
+| Virage 40 | 81 | 0,363 ° | **0,363 °** | −0,02 ° |
+| Créneau | 92 | 0,451 ° | **0,451 °** | +0,28 ° |
+
+**Le virage 40 et le créneau sont inchangés au millième** : la réduction n'agit que là où l'arrière glisse.
+`PeakFactor` 0,55 et `RollCentreScale` 0,25, calés sur ces deux essais, ne sont donc pas remis en cause. Le
+banc longitudinal reste à 5,3 %.
+
+Mesures complètes : [`skidpad-analyse.json`](skidpad-analyse.json), six traces brutes dans
+[`fivem/`](fivem/).
+
+### Ce qui reste ouvert
+
+- La **dynamique** de l'étage 2 (90 % en 0,2 s, dépassement de 4 à 13 %) n'est pas modélisée.
+- Les trois cercles qui partent en toupie (18 à 21 km/h, dérive 10 à 19 °) gardent un écart de 7 ° : la
+  réduction y sature à son plancher de 0,30 alors que GTA braque encore. Régime non calé, et sans intérêt
+  pour le calage.
+- Le résidu de −0,064 au créneau est celui de la loi de base à 60 km/h, pas de la réduction.
 
 ## Limites de cette campagne
 
