@@ -12,7 +12,8 @@
 	roll, pitch (°), pz (m), wheelsOnGround.
 
 	Fenêtres d'analyse. Les essais FiveM du créneau, du slalom et du virage 80 ont été faits sur le tablier
-	de l'aéroport, qui porte une marche de ~0,35 m à ~11 m au nord de la ligne de départ : le véhicule la
+	de l'aéroport, dont la bande plate ne fait que ≈ 12 m de large au nord de l'axe de départ : au-delà, à
+	y ≈ −3031, le bord du tablier forme une arête longitudinale de ≈ +0,35 m. Le véhicule la
 	franchit en biais pendant la manœuvre (créneau ~2,0 s, slalom 8,4 s, virage 80 1,3 s). Tout ce qui suit
 	ce franchissement n'est pas de la dynamique de manœuvre. On coupe donc chaque trace (GTA comme Roblox)
 	à la même fenêtre `clean` ; côté GTA, on coupe aussi au premier écart d'altitude de caisse > 8 mm.

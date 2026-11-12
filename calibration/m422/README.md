@@ -114,12 +114,25 @@ cadence d'images donnée.
 | Côte 16,5 % : plein gaz 4 s | **45,1 km/h** (σ 0,6), 32,5 m, 2ᵉ | 43 km/h | proche | `DriveForce` |
 | Côte 16,5 % : coût de la pente | −22,2 km/h et −11,7 m face aux **67,3 km/h / 44,1 m** du plat | non mesuré | — | |
 
-> ⚠ **Valeurs faussées par le terrain, relevé du 2026-11-12.** À ≈ 11 m au nord de la ligne de départ, le
-> tablier porte une marche d'environ 0,35 m. Le créneau la franchit en biais ≈ 1,93 s après le braquage, le
-> slalom à 8,4 s, le virage 80 à 1,28 s : les roulis de 3,36 ° et 3,48 ° sont ceux du franchissement, pas de
-> la manœuvre (avant la marche : 0,86 ° et 0,68 °), et tout le virage 80 au-delà de 1,28 s (dérive 53,9 °,
-> sortie 14,3 km/h, roulis 2,52 °) suit ce choc. Les valeurs propres, calculées par le même code que le côté
-> Roblox, sont dans « Vérification en 3D » plus bas et dans [`fivem-analyse.json`](fivem-analyse.json).
+> ⚠ **Valeurs faussées par le terrain, relevé du 2026-11-12.** Le créneau franchit en biais une arête du
+> tablier ≈ 1,93 s après le braquage, le slalom à 8,4 s, le virage 80 à 1,28 s (durées **depuis le début de
+> la manœuvre**) : les roulis de 3,36 ° et 3,48 ° sont ceux du franchissement, pas de la manœuvre (avant
+> l'arête : 0,86 ° et 0,68 °), et tout le virage 80 au-delà de 1,28 s (dérive 53,9 °, sortie 14,3 km/h,
+> roulis 2,52 °) suit ce choc. Les valeurs propres, calculées par le même code que le côté Roblox, sont dans
+> « Vérification en 3D » plus bas et dans [`fivem-analyse.json`](fivem-analyse.json).
+>
+> **Où est cette arête, exactement** (localisée dans les traces le 2026-11-12, après coup). Ce n'est pas une
+> marche en travers près du départ : c'est **le bord nord du tablier**, une arête **longitudinale** de
+> ≈ +0,35 m à **y ≈ −3031**, soit **12,4 à 13,1 m au nord de l'axe de départ**. La bande plate fait donc
+> ≈ 12 m de large au nord de l'axe. Conséquences :
+>
+> - **Tous les essais en ligne droite sont intacts** — accel, frein, roue libre, frein à main, marche
+>   arrière, bordure, côte ne s'écartent jamais de l'axe. Le virage 40 non plus (écart de hauteur maximal
+>   1,9 cm sur toute la trace) : son roulis de 1,89 ° est propre.
+> - Les essais qui dérivent latéralement la franchissent chacun à leur distance : créneau à 80,3 m
+>   d'avance (t = 6,50 s absolu), virage 80 à 94,5 m (6,70 s), slalom à 178,5 m (12,23 s).
+> - Le virage 80 à pleine butée quitte la bande **1,4 s après le braquage** : c'est tout ce que ce tablier
+>   permet d'en mesurer. Pour aller plus loin il faudrait une surface plate de plus de 12 m de large.
 
 ## Ce qu'on apprend du moteur GTA
 
@@ -161,7 +174,11 @@ GTA roule d'environ **1,0 °/g** et Roblox d'environ **0,26 °/g** : la caisse R
 | 1,5 g | 1,72 ° |
 | 2,0 g | 1,76 ° |
 
-La courbe sature au-delà de 1 g — comportement de barre anti-roulis, pas de ressort pur.
+J'en avais conclu une **saturation** au-delà de 1 g, comportement de barre anti-roulis. À revoir : ce
+relevé mélange des points transitoires d'un seul essai. Les points en régime établi, eux, sont
+**linéaires** — créneau 0,86 ° pour 0,83 g (1,03 °/g), virage 40 1,71 ° pour 1,69 g (1,01 °/g) — et c'est
+aussi ce que trouve la vérification en Studio. Retenir **≈ 1,0 °/g linéaire** ; la saturation n'est pas
+établie.
 
 **La perte d'adhérence.** À 80 km/h plein braquage, GTA atteint **53,9 ° de dérive** et sort
 du virage à **14,3 km/h** : le véhicule part en glisse et la glisse le freine. Roblox reste
@@ -369,6 +386,40 @@ résumé FiveM est la valeur brute, 3,45 ° la relative).
 
 Le banc longitudinal, relancé après ces changements, reste à **5,3 %** : `PeakFactor`, `BumpK` et
 `DampVMax` ne le touchent pas.
+
+### `PeakFactor` : la dérive du pneu, calculée dans les traces
+
+La correction de 0,25 à 0,5 est juste : mes 4,4 ° étaient la dérive de la **caisse**. Mais les « ≈ 9 ° »
+retenus comme dérive du pneu sont en fait l'angle de la **vitesse à l'essieu avant**. La dérive d'un pneu
+est l'écart entre le plan de la roue et sa vitesse, donc il faut encore retirer le braquage :
+
+```
+alpha_pneu = braquage_roue − atan( (vLat + a · lacet) / vFwd )
+```
+
+Virage 40 en régime établi, `a` = distance du centre de gravité à l'essieu avant :
+
+| Grandeur | Valeur mesurée |
+|---|---|
+| Braquage de roue (moyenne des deux avant ; Ackermann : −22,9 ° et −30,5 °) | 24,9 à 26,2 ° |
+| Lacet | 93,7 à 94,7 °/s |
+| Dérive de la **caisse** | 3,8 à 4,6 ° |
+| Angle de la vitesse **à l'essieu avant** | 7,7 à 11,1 ° |
+| **Dérive du pneu avant** | **13,7 à 17,2 °** (`a` de 1,7 à 1,3 m) |
+
+Les signes ont été vérifiés sur les valeurs brutes : en virage à droite (`str` > 0, braquage < 0, lacet < 0,
+`vLat` > 0), seule la combinaison `vLat + a · lacet` donne une dérive de pneu du même signe que le braquage
+et plus petite en module — l'autre donnerait 40 °, incompatible avec un rayon de 6,2 m.
+
+À cette dérive de ≈ 15 ° le véhicule ne tient que 1,69 g alors que `fTractionCurveMax` vaut 1,90 : le pneu
+n'est donc **pas encore à son pic**, ce qui place le pic de GTA au-delà de 15 ° et pointe vers
+`PeakFactor` ≈ **0,8 à 1,0** (19 ° × 0,8 = 15,2 °).
+
+**Pourquoi ne pas le changer tout de suite.** Le balayage en Studio trouve 0,5 meilleur de bout en bout, et
+au-delà de 0,55 l'adhérence bascule. C'est cohérent avec un moteur dont **la direction braque deux fois
+trop** (ci-dessous) : il lui faut moins d'adhérence par degré de dérive pour retomber sur la dérive de
+caisse observée. Autrement dit, 0,5 compense aujourd'hui un autre défaut. Garder 0,5 comme valeur de
+travail et **reprendre `PeakFactor` après la direction**, pas avant.
 
 ### Le roulis : la raideur ne vient pas des ressorts, mais du point d'application des forces latérales
 
