@@ -430,11 +430,16 @@ et plus petite en module — l'autre donnerait 40 °, incompatible avec un rayon
 n'est donc **pas encore à son pic**, ce qui place le pic de GTA au-delà de 15 ° et pointe vers
 `PeakFactor` ≈ **0,8 à 1,0** (19 ° × 0,8 = 15,2 °).
 
-**Pourquoi ne pas le changer tout de suite.** Le balayage en Studio trouve 0,5 meilleur de bout en bout, et
-au-delà de 0,55 l'adhérence bascule. C'est cohérent avec un moteur dont **la direction braque deux fois
-trop** (ci-dessous) : il lui faut moins d'adhérence par degré de dérive pour retomber sur la dérive de
-caisse observée. Autrement dit, 0,5 compense aujourd'hui un autre défaut. Garder 0,5 comme valeur de
-travail et **reprendre `PeakFactor` après la direction**, pas avant.
+**Pourquoi 0,5 tenait, et pourquoi il faut y revenir.** Le balayage en Studio trouvait 0,5 meilleur de bout
+en bout, et au-delà de 0,55 l'adhérence basculait. C'était cohérent avec un moteur dont **la direction
+braquait deux fois trop** : il lui fallait moins d'adhérence par degré de dérive pour retomber sur la
+dérive de caisse observée, et « au-delà de 0,55 ça bascule » était un symptôme de ce défaut, pas une
+limite physique.
+
+**Cette raison a disparu** : la direction est mesurée et corrigée (« La direction, à consigne constante »
+plus bas). `PeakFactor` est donc à **rebalayer en 3D**, en partant de 0,8 et non de 0,5 — et **avant**
+`RollCentreScale`, qui dépend de l'adhérence établie. 0,5 reste la valeur en place en attendant : la
+changer sans vérification en 3D ne ferait que remplacer une erreur par une autre.
 
 ### Le roulis : la raideur ne vient pas des ressorts, mais du point d'application des forces latérales
 

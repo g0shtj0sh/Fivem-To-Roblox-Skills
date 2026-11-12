@@ -28,6 +28,15 @@ Dyn.Tuning = {
 	-- CAISSE (4,4 °) pour celle des pneus : sur un rayon de 6,3 m la géométrie seule en donne déjà ≈ 12,8 °.
 	-- Banc 3D, virage 40 : 0,25 → dérive 7,7 °, rayon 6,85 m ; 0,5 → 5,4 °, 6,12 m (GTA 4,4 °, 6,29 m) ;
 	-- au-delà de 0,5 l'adhérence bascule (0,55 → sortie à 30 km/h au lieu de 38).
+	-- À REPRENDRE EN 3D, la raison de garder 0,5 ayant disparu. Ce balayage a été fait quand la direction
+	-- braquait 2,4 fois trop (voir SteerFade, corrigé depuis) : il lui fallait donc moins d'adhérence par
+	-- degré de dérive pour retomber sur la dérive de caisse observée, et « au-delà de 0,5 ça bascule » était
+	-- un symptôme de ce défaut. Le calcul direct dans les traces donne 13,7 à 17,2 ° de dérive de PNEU avant
+	-- au virage 40 établi (braquage de roue 24,9–26,2 ° moins l'angle de la vitesse à l'essieu avant), pour
+	-- 1,69 g seulement alors que fTractionCurveMax vaut 1,90 : le pneu n'est pas encore à son pic, donc le
+	-- pic de GTA est AU-DELÀ de 15 ° et PeakFactor vaut plutôt 0,8 à 1,0. Les « ≈ 9 ° » ci-dessus sont
+	-- l'angle de la vitesse à l'essieu avant, pas la dérive du pneu. À rebalayer maintenant que le braquage
+	-- est juste — et avant RollCentreScale, qui dépend de l'adhérence établie.
 	KappaPeak = 0.12, -- glissement longitudinal du pic (champ absent de GTA V)
 	Falloff = 1.5, -- largeur (en multiples du pic) de la descente de Max vers Min
 	FalloffKappa = 0.1, -- poids du glissement LONGITUDINAL dans cette descente. MESURÉ : au freinage les roues
