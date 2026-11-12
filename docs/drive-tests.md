@@ -9,11 +9,18 @@ Véhicule : mod FiveM `m422` converti par le skill (2 200 kg, 6 rapports, 4 roue
 débattement 0,28 m). Runtime `4e9b56ddd88a` puis banc corrigé (voir « Erreurs du banc »).
 Rien n'a été enregistré dans la place : piste et copies créées en Play seulement.
 
+> **Mise à jour du 2026-11-12** : le protocole a été relancé après le calage sur les mesures FiveM, avec une
+> piste alignée sur la campagne GTA (marche de 0,149 m × 12,2 m au lieu d'une barre de 0,56 m, côte à 16,5 %),
+> le créneau et le slalom, et un analyseur commun aux deux colonnes. Résultats, verdicts et limites :
+> [`calibration/m422/README.md`, « Vérification en 3D »](../calibration/m422/README.md#vérification-en-3d-studio-2026-11-12).
+> Les chiffres ci-dessous sont ceux du 2026-11-11, avant calage, sur l'ancienne piste.
+
 ## Protocole
 
 1. Piste : `roblox/TestTrack.lua` (serveur, en Play) construit une plaque de 2048 × 6144 studs
    (≈ 573 × 1 720 m) **au-delà de tout ce que contient Workspace** (origine automatique, côté +X),
-   avec 400 studs derrière le départ, une bordure de 0,15 m et une côte à 15 %. Le véhicule est posé par
+   avec 400 studs derrière le départ, une bordure de 0,15 m et une côte à 15 % (depuis le 2026-11-12 : marche
+   de 0,149 m sur 12,2 m à 74 m du départ, côte à 16,5 %). Le véhicule est posé par
    `Track.place(car, lane, player)` (→ `VehicleAccess.PlaceOnGround` → `VehicleAccess.Teleport`).
 2. Joueur au volant : `VehicleAccess.Enter(player, car, "DriverSeat")` côté serveur.
 3. Mesures : `roblox/DriveBench.lua` côté client du conducteur (`VehicleDrive.SetOverride`), lancées
@@ -121,3 +128,20 @@ Par priorité :
 - Manette et tactile non vérifiés en automatique.
 - Les essais sont reproductibles avec `TestTrack.lua` et `DriveBench.lua` (scripts disponibles) ; chaque
   chiffre ci-dessus vient d'une seule passe (pas de répétition statistique).
+
+## Conduite des essais en Studio (2026-11-12)
+
+- Déposer `DriveBench.lua`, `TestTrack.lua` **et** `tools/drive-compare/analyze.luau` (sous le nom
+  `DriveAnalyze.lua`) dans le dossier de transfert **avant** le Play.
+- Joueur au volant : téléporter d'abord le personnage à côté de la portière (`Access.Enter` refuse
+  au-delà de sa portée, `too_far`), puis `Access.Enter(player, car, "DriverSeat")`.
+- Côté client, une file d'essais (`task.spawn`) qui garde seulement les grandeurs de l'analyseur ;
+  relever toutes les ~13 s. Les traces brutes (15 à 40 Ko par essai) restent dans le client.
+- Réglages en direct pour un balayage : `sim.T[k]` est relu à chaque pas ; `PeakFactor` demande de
+  recalculer `sim.P.alphaPeak`, et la hauteur de centre de roulis se change dans `sim.P.wheels[i].rc`.
+- Entre deux passages de marche, le serveur replace le véhicule au départ de la voie dès qu'il est
+  arrêté au-delà de 110 m (le client ne peut pas le demander par un attribut : il ne se réplique pas
+  vers le serveur).
+- Le frein à main se mesure depuis un départ propre sur la ligne : enchaîné après le slalom, il est
+  entré en correction de cap et a donné 36,5 °/s de lacet au lieu de 1,4.
+

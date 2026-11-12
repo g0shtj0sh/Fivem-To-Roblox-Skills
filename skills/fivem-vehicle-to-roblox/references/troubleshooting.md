@@ -62,6 +62,8 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 | Véhicule qui repart seul après une remise | roues encore lancées dans la simulation | `VehicleDynamics.reset` dès que `VehicleRoot` est ancré (corrigé) |
 | Véhicule disparu après une sortie de carte | pièces détruites sous `FallenPartsDestroyHeight` | remise automatique (`VoidMargin`, `VoidRecoveries`) ; Verify `void_play` |
 | Bordure : l'avant décolle à basse vitesse | amortisseur sans plafond (5 m/s en une image) | `DampVMax` (1 m/s par défaut) |
+| Marche de trottoir : caisse renvoyée, roues en l'air à 60 km/h, cabrage qui monte avec la vitesse | la roue monte la marche en une image et dépasse la course restante : la butée `BumpK` frappe | `BumpK` 0 (défaut depuis le 2026-11-12) ; banc : `TestTrack` voie `curb` |
+| Roulis presque nul en virage (0,2 °/g) | forces latérales appliquées à la hauteur du centre de roulis, bras de levier de 0,05–0,15 m | `RollCentreScale` (0 → ≈ 1 °/g, voir `calibration/m422/README.md` avant de l'adopter) |
 | Accélération molle (0,26 g), patinage bloqué loin du pic | inertie de roue trop forte (`IwRel` 1,5) | `IwRel` 0,25 et 8 sous-pas |
 | Boîte qui pompe 1 ↔ 2 | après la montée, le régime tombe sous le seuil de descente | hystérésis : descente seulement si le rapport inférieur resterait sous 0,85 × seuil de montée |
 | Ligne droite volant lâché : virage de très grand rayon (~3,7 km) | légère dissymétrie (conducteur assis d'un côté) | normal ; le banc tient sa ligne (`Bench.setLine`) |

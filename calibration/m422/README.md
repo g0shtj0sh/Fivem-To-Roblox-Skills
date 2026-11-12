@@ -89,15 +89,15 @@ cadence d'images donnée.
 | Virage 40 km/h : rayon | **6,54 m** (σ 0,07) | non mesuré | — | `SteeringLock` |
 | Virage 40 km/h : vitesse en sortie | 38,3 km/h | 39,9 km/h | ok | |
 | Virage 80 km/h : accélération latérale | **2,24 g** (σ 0,001) | 2,04 g | proche | `KMu`, `Falloff` |
-| Virage 80 km/h : **roulis** | **2,52 °** (σ 0,08) | 0,29 ° | Roblox **−88 %** | `KArb` |
-| Virage 80 km/h : **dérive** | **53,9 °** (σ 2,7) | 9,5 ° | GTA **glisse** | `Falloff` |
-| Virage 80 km/h : vitesse en sortie | **14,3 km/h** | 71 km/h | GTA perd tout | |
+| Virage 80 km/h : **roulis** | **2,52 °** (σ 0,08) ⚠ | 0,29 ° | Roblox **−88 %** | `KArb` |
+| Virage 80 km/h : **dérive** | **53,9 °** (σ 2,7) ⚠ | 9,5 ° | GTA **glisse** | `Falloff` |
+| Virage 80 km/h : vitesse en sortie | **14,3 km/h** ⚠ | 71 km/h | GTA perd tout | |
 | Virage 80 km/h : rayon | 18,3 m | non mesuré | — | |
 | Marche arrière, 4 s | **−48,8 km/h**, 41,4 m | −58,4 km/h, 34 m | Roblox **+20 %** | `ReverseHold` |
 | Roue libre 110 → 30 km/h | **115,2 m** (σ 0,39) → ≈ **0,38 g** de décélération | non mesuré | — | `EngineBrakeG`, traînée |
 | Créneau 60 km/h : lacet max | **31,2 °/s** (σ 0,33) | non mesuré | — | `SteerFade`, `SteerMinPct` |
-| Créneau 60 km/h : roulis | **3,36 °** (σ 0,07) | non mesuré | — | `KArb` |
-| Slalom 60 km/h : roulis | **3,48 °** (σ 0,33) | non mesuré | — | `KArb`, `KSpring` |
+| Créneau 60 km/h : roulis | **3,36 °** (σ 0,07) ⚠ — en manœuvre seule **0,86 °** | non mesuré | — | `KArb` |
+| Slalom 60 km/h : roulis | **3,48 °** (σ 0,33) ⚠ — en manœuvre seule **0,68 °** | non mesuré | — | `KArb`, `KSpring` |
 | Slalom 60 km/h : lacet max | 26,5 °/s | non mesuré | — | |
 | Slalom 60 km/h : dérive | 1,22 ° | non mesuré | — | |
 | Bordure 0,15 m à 20 km/h : **cabrage** | **3,29 °** (σ 0,02) | 7,6 ° | Roblox **×2,3** | `BumpK`, `DampVMax` |
@@ -113,6 +113,13 @@ cadence d'images donnée.
 | Côte 16,5 % : tout relâché 2 s | **0,0 cm** — recul **strictement nul** | 6,7 cm | Roblox **recule** | maintien à l'arrêt |
 | Côte 16,5 % : plein gaz 4 s | **45,1 km/h** (σ 0,6), 32,5 m, 2ᵉ | 43 km/h | proche | `DriveForce` |
 | Côte 16,5 % : coût de la pente | −22,2 km/h et −11,7 m face aux **67,3 km/h / 44,1 m** du plat | non mesuré | — | |
+
+> ⚠ **Valeurs faussées par le terrain, relevé du 2026-11-12.** À ≈ 11 m au nord de la ligne de départ, le
+> tablier porte une marche d'environ 0,35 m. Le créneau la franchit en biais ≈ 1,93 s après le braquage, le
+> slalom à 8,4 s, le virage 80 à 1,28 s : les roulis de 3,36 ° et 3,48 ° sont ceux du franchissement, pas de
+> la manœuvre (avant la marche : 0,86 ° et 0,68 °), et tout le virage 80 au-delà de 1,28 s (dérive 53,9 °,
+> sortie 14,3 km/h, roulis 2,52 °) suit ce choc. Les valeurs propres, calculées par le même code que le côté
+> Roblox, sont dans « Vérification en 3D » plus bas et dans [`fivem-analyse.json`](fivem-analyse.json).
 
 ## Ce qu'on apprend du moteur GTA
 
@@ -223,7 +230,7 @@ chaque valeur porte en commentaire la mesure dont elle sort.
 | Réglage | Avant | Après | D'où vient la valeur |
 |---|---|---|---|
 | `KMu` | 0,6 | **1,0** | 100-0 roues bloquées : 1,88 g de moyenne, 2,09–2,14 g de pic, pour `fTractionCurveMax` = 1,90. Le champ du jeu **est** une accélération en g. |
-| `PeakFactor` | 0,5 | **0,25** | virage 40 km/h tenu à la limite : la dérive se stabilise à 4,6 ° pour 1,69 g (`fTractionCurveLateral` = 19 °) ; en virage 80 km/h l'adhérence latérale quasi établie décroît déjà entre 3 ° et 10 °. |
+| `PeakFactor` | 0,5 | ~~0,25~~ → **0,5** (Studio) | virage 40 km/h tenu à la limite : la dérive se stabilise à 4,6 ° pour 1,69 g (`fTractionCurveLateral` = 19 °) ; en virage 80 km/h l'adhérence latérale quasi établie décroît déjà entre 3 ° et 10 °. |
 | `FalloffKappa` | *(n'existait pas)* | **0,1** | au freinage les roues se bloquent complètement (glissement −1,0) et l'adhérence reste à son pic : dans GTA la chute d'adhérence est pilotée par la **dérive**, pas par le blocage. |
 | `KDrag` | *(facteur 1e-4 figé)* | **2,1** | plateau de vitesse : 118,9 km/h en 4ᵉ à régime 0,806 pour `fInitialDragCoeff` = 8,0. Le 1e-4 de la conversion de chargement n'était qu'une hypothèse. |
 | `FirstGearForce` | *(n'existait pas)* | **1,5** | poussée mesurée en 1ʳᵉ : 10,5 à 12,4 m/s², là où `DriveForce × rapport × g` donne 6,53. Les 2ᵉ et 3ᵉ, elles, suivent la loi à 2 et 5 % près. Appliqué aussi à la marche arrière, qui emploie le même rapport. |
@@ -232,8 +239,9 @@ chaque valeur porte en commentaire la mesure dont elle sort.
 | `UpshiftRpmFirst` | *(n'existait pas)* | **0,82** | passage 1→2 à 0,821–0,827, soit 40,0 km/h : la 1ʳᵉ passe nettement plus tôt. |
 | `EngineBrakeG` | 0,08 | **0,9** | roue libre 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à 3,0 m/s² (≈ 0,29 g) sur toute la plage. |
 | `HandbrakeGripRear` | 0,75 | **1,0** | frein à main à 60 km/h volant droit : 0,1–0,2 °/s de lacet, 0,07 ° de dérive, alors que les roues arrière glissent (5,3 contre 9,2 m/s). |
-| `DampVMax` | 1,0 | **0,5** | marche de 0,149 m : 3,29 ° de cabrage à 20 km/h, 2,18 ° à 60, quatre roues au sol, 0,06 km/h perdus. |
+| `DampVMax` | 1,0 | ~~0,5~~ → **1,0** (Studio) | marche de 0,149 m : 3,29 ° de cabrage à 20 km/h, 2,18 ° à 60, quatre roues au sol, 0,06 km/h perdus. |
 | rupteur en marche arrière | absent | **appliqué** | la marche arrière plafonne à −48,8 km/h, soit exactement `DriveMaxFlatVel / 3,333` = 48,6 km/h. |
+| `BumpK` | 400 | **0** (Studio) | ajouté le 2026-11-12 après vérification en 3D : c'est la butée de fin de course, pas l'amortisseur, qui faisait cabrer et décoller sur la marche. Voir « Vérification en 3D ». |
 
 ### Vérification
 
@@ -271,7 +279,7 @@ pour juger le calage.
 
 ### Ce que ce calage ne couvre pas
 
-- **Le latéral, le roulis et la bordure ne sont pas vérifiés.** Un banc longitudinal ne peut
+- *(Vérifiés depuis en Studio, voir « Vérification en 3D » ci-dessous.)* **Le latéral, le roulis et la bordure ne sont pas vérifiés.** Un banc longitudinal ne peut
   pas les simuler : ils dépendent du solveur 3D de Roblox. `KMu`, `PeakFactor`, `FalloffKappa`,
   `HandbrakeGripRear` et `DampVMax` sont posés **d'après la mesure**, mais il faut relancer
   `roblox/DriveBench.lua` en Studio pour les confirmer.
@@ -287,6 +295,138 @@ pour juger le calage.
   rapport bloqué.
 - **Un seul véhicule.** Tout vient du `m422`. `KMu = 1,0` et `KDrag = 2,1` deviennent les
   défauts de **tous** les véhicules convertis : à recouper sur un deuxième mod.
+
+## Vérification en 3D (Studio, 2026-11-12)
+
+Le latéral, le roulis, la marche et la côte demandent le solveur 3D de Roblox : ils ont été mesurés en
+Studio, avec le protocole de [`docs/drive-tests.md`](../../docs/drive-tests.md) (`TestTrack.lua` serveur,
+`DriveBench.lua` client du conducteur, même `m422` converti, un joueur, PC Studio, Play piloté par le MCP
+Roblox Studio). Les deux colonnes sont calculées par **le même code**,
+[`tools/drive-compare/analyze.luau`](../../tools/drive-compare/) : sous lune sur les traces FiveM, dans
+Studio sur les traces Roblox (mêmes colonnes, mêmes fenêtres).
+
+**Ce qui a changé dans le banc avant de mesurer.**
+
+- La « bordure » de `TestTrack.lua` était une barre de 2 studs (0,56 m) : une bosse que les deux essieux
+  franchissent, pas la **marche** de GTA. Elle est maintenant la marche des conteneurs : +0,149 m, dessus
+  plat sur 12,2 m, à 74 m du départ. La côte passe de 15 % à **16,5 %** (pente au point d'arrêt mesurée :
+  16,2 %), au même point de pente que GTA.
+- `DriveBench` enregistre une ligne par image avec les colonnes de la télémétrie FiveM, et gagne le
+  créneau (`stepsteer`) et le slalom (`slalom`) avec les lois de `tools/fivem-telemetry`.
+- Les cibles GTA du créneau, du slalom et du virage 80 sont **corrigées** : voir l'encadré ⚠ sous
+  « Résultats ». Le comparateur coupe les traces avant la marche du tablier.
+
+**Répétabilité.** Le moteur Roblox est déterministe sur ce banc : deux passes identiques donnent les mêmes
+chiffres au centième (virage 40 : 1,76 g / 7,74 ° / 6,85 m deux fois ; marche à 20 km/h : 4,91 ° puis
+4,98 °). Chaque chiffre Roblox ci-dessous vient d'une passe, sauf mention.
+
+**Versions.** « Calage de la nuit » = runtime `d6df6a87f51c` (commit `d887f58`) ; « Après » = runtime
+`ef7a5b4c4da2` (ce commit), valeurs **par défaut** du module, aucun réglage en direct.
+
+| Essai | Mesure | GTA (3 passes) | Calage de la nuit | Après |
+|---|---|---|---|---|
+| Virage 40 km/h | pic latéral | 1,83 g | 1,77 g | 1,75 g |
+| | latéral établi (2–4 s) | 1,69 g | 1,76 g | 1,72 g |
+| | dérive de caisse établie | 4,4 ° | 7,7 ° | **5,4 °** |
+| | rayon | 6,29 m | 6,85 m | **6,12 m** |
+| | lacet max | 97,3 °/s | 91,7 °/s | 95,5 °/s |
+| | roulis établi | 1,71 ° (1,01 °/g) | 0,39 ° (0,22 °/g) | 0,39 ° (0,22 °/g) |
+| | sortie | 38,2 km/h | 39,2 km/h | 36,6 km/h |
+| Virage 80 km/h (0–1,27 s) | pic latéral | 2,24 g | 1,88 g | 2,68 g |
+| | dérive max dans la fenêtre | 8,2 ° (et croissante) | 1,2 ° | **7,0 °** |
+| | lacet max | 60,7 °/s | 48,3 °/s | 69,8 °/s |
+| | roulis max | 1,89 ° | 0,36 ° | 0,38 ° |
+| Créneau 60 km/h, 0,5 (0–1,9 s) | lacet max | 29,3 °/s | — | 69,1 °/s |
+| | latéral établi | 0,83 g | — | 1,88 g |
+| | roulis établi | 0,86 ° (1,03 °/g) | — | 0,42 ° (0,22 °/g) |
+| Slalom 60 km/h (0–8,3 s) | lacet max | 25,2 °/s | — | 66,0 °/s |
+| | roulis max | 0,68 ° | — | 0,38 ° |
+| Frein à main 60-0 | lacet max | 0,13 °/s | 0,8–1,0 °/s | **1,4 / 2,0 °/s** (2 passes) |
+| | distance | 20,0 m (0,71 g) | 15,7 m (0,83 g) | 15,7 / 15,6 m (0,82 g) |
+| 100-0 au frein | distance | 20,6 m (1,81 g) | 19,6 m (1,87 g) | 19,4 m (1,87 g) |
+| Marche 0,149 m à 20 km/h | cabrage / plongée | +3,45 / −4,25 ° | **+9,6** / −3,9 ° | **+4,9 / −3,0 °** (2 passes) |
+| | roues au sol min, images en l'air | 4, 0 | 2, 0 | **4, 0** |
+| | vitesse perdue | 0,06 km/h | 3,0 km/h | 1,9–2,0 km/h |
+| | montée de caisse | 0,145 m | 0,15 m | 0,15 m |
+| Marche 0,149 m à 60 km/h | cabrage / plongée | +2,22 / −2,60 ° | +8,4 / **−17,7 °** | **+3,5 / −2,5 °** |
+| | roues au sol min, images en l'air | 4, 0 | **0, 3** | **4, 0** |
+| | vitesse perdue | 0,03 km/h | 8,7 km/h | 0,55 km/h |
+| Côte 16,5 % | frein à main 1,5 s | 5,9 cm | 6,0 cm | 5,95 cm |
+| | tout relâché 2 s | **0,0 cm** | 6,3 cm | **5,7 cm** |
+| | plein gaz 4 s | 45,1 km/h, 32,5 m, 2ᵉ | 36,4 km/h, 32,7 m, 2ᵉ | 36,7 km/h, 32,8 m, 2ᵉ |
+
+Cabrage et plongée sont relatifs à l'assiette de croisière (GTA roule à −0,16 ° à 20 km/h : le 3,29 ° du
+résumé FiveM est la valeur brute, 3,45 ° la relative).
+
+### Les quatre réglages posés d'après la mesure
+
+| Réglage | Nuit | Verdict en 3D | Pourquoi |
+|---|---|---|---|
+| `PeakFactor` | 0,25 | **corrigé → 0,5** | La « dérive » de 4,4 ° du virage 40 est l'angle de la **caisse**. Sur un rayon de 6,3 m, la géométrie seule en donne ≈ 12,8 ° au centre de gravité ; les pneus arrière sont donc à ≈ 8 ° de dérive. Les traces donnent l'angle des roues avant (`w0str`, `w1str`) : au virage 40 établi, dérive du pneu avant ≈ 9 ° ; en entrée du virage 80, ≈ 10 °. C'est 19 ° × 0,5. En 3D : 0,25 → dérive 7,7 °, rayon 6,85 m, et le virage 80 ne décroche pas (1,2 °) ; 0,5 → 5,4 °, 6,12 m, 7,0 ° en 1,27 s (GTA 8,2 °). Balayage 0,25 / 0,4 / 0,45 / 0,5 / 0,55 / 0,6 / 0,75 : 0,5 est le meilleur au virage 40 ; au-delà, l'adhérence bascule (0,55 → sortie à 30 km/h). |
+| `FalloffKappa` | 0,1 | **confirmé** | 100-0 en 19,4–19,6 m à 1,87 g (GTA 20,6 m, 1,81 g). À 1 : 20,6 m en 3D mais 22,9 m (+11 %) sur le banc longitudinal, qui freine moins fort que le 3D (pas de report de charge en tangage). Garder 0,1 tient le banc à 5,3 %. |
+| `HandbrakeGripRear` | 1,0 | **confirmé, sans être la cause** | Départ propre sur la ligne : lacet 1,4 et 2,0 °/s, le véhicule reste droit (avant le calage : 69 °/s). Mais à 0,75 il reste droit aussi (1,35 °/s, `PeakFactor` 0,5) : sur le plat, ce n'est pas ce réglage qui faisait pivoter ; le tête-à-queue d'avant venait d'une autre cause, non isolée. Entré **pendant une correction de cap** (juste après le slalom), le frein à main part à 36,5 °/s : il amplifie un lacet présent. GTA n'a pas été mesuré dans ce cas. |
+| `DampVMax` | 0,5 | **corrigé → 1,0, avec `BumpK` 400 → 0** | La cause du cabrage et du décollage n'était pas l'amortisseur mais la **butée de fin de course** : à 60 km/h la roue monte les 0,149 m en une image et dépasse les 0,10 m de course restante au repos ; `BumpK` 400 renvoyait la caisse (+8,4 / −17,7 °, 3 images en l'air). Grille à 60 km/h : `BumpK` 400 → +8,4 / −17,7 ° ; 100 → +5,1 / −7,3 ° ; 50 → +4,8 / −5,7 ° ; **0 → +3,8 / −3,3 °, 4 roues** (avec `DampVMax` 0,5). Puis `DampVMax` à `BumpK` 0 : 0,5 → +4,5 ° à 20 km/h et +3,8 ° à 60 ; **1,0 → +4,7 ° et +3,0 °** ; 0,25 → 24 images en l'air à 60. Seul 1,0 garde nettement la signature GTA (le cabrage **baisse** avec la vitesse). GTA comprime lui-même au-delà de sa course nominale (0,326 à 60 km/h). |
+
+Le banc longitudinal, relancé après ces changements, reste à **5,3 %** : `PeakFactor`, `BumpK` et
+`DampVMax` ne le touchent pas.
+
+### Le roulis : la raideur ne vient pas des ressorts, mais du point d'application des forces latérales
+
+Il n'y a pas de contrainte de suspension dans le châssis Roblox : les roues de collision ne sont pas
+solides pendant la conduite, et `VehicleDrive` applique des forces calculées. La raideur de roulis
+effective vient de **la hauteur à laquelle `VehicleDrive` applique les forces latérales des pneus** :
+`lateralPoint` = contact + `RollCentreHeightFront/Rear` (0,3 / 0,4 m sur le m422). Le centre de gravité est
+mesuré en Studio à 0,45 m au-dessus du contact : le bras de levier du roulis n'est donc que de **0,15 m à
+l'avant et 0,05 m à l'arrière**.
+
+- Calcul : raideur de roulis (ressorts + barres, `KSpring` = `KArb` = 1) = 263 m²/s² par radian. Avec le
+  bras de 0,45 m → 0,96 °/g (c'est le ≈ 0,93 °/g de la formule). Avec les bras réels (moyenne pondérée
+  0,10 m) → **0,22 °/g**.
+- Mesuré en Studio : **0,22 °/g** (virage 40, créneau, virage 80). Avec `RollCentreScale` = 0 (forces au
+  contact) : **0,94 °/g**, GTA ≈ 1,0 °/g. Cause démontrée par le calcul et la mesure.
+- **Non adopté** : à 0, le virage 40 ne tient plus que 1,40 g établi (GTA 1,69 g, rayon 5,05 m, sortie
+  30 km/h) et le créneau à 60 km/h part à **28 ° de roulis** sur 2 roues. Le seuil de levée de roue tombe à
+  ≈ 1,7 g (voie 1,54 m / (2 × 0,45 m)) ; la trace GTA du virage 40 compte d'ailleurs par moments 2 à 3 roues au sol, sans
+  perdre son adhérence. Le réglage `RollCentreScale` (défaut 1, comportement inchangé) est ajouté à
+  `Dyn.Tuning` pour poursuivre.
+- Prochaine étape suggérée : corriger d'abord la direction (ci-dessous), puis reprendre `RollCentreScale`
+  entre 0 et 1, en surveillant l'adhérence établie du virage 40 et le roulis du créneau.
+
+### Ce que la 3D révèle en plus (hors des quatre réglages)
+
+1. **La direction braque deux fois trop à vitesse.** Au créneau (0,5 de braquage à 60 km/h), Roblox tient
+   1,88 g et 69 °/s, GTA 0,83 g et 29 °/s ; au slalom 66 °/s contre 25. Angle de roue moyen relevé dans les
+   traces GTA (`w0str`, `w1str`) : ≈ 24–28 ° à 10,5 m/s plein braquage, **5,0 ° pour un demi-braquage à
+   16,4 m/s**, 12 ° en entrée du virage 80 (21 m/s). Roblox (`SteerFade` 28, `SteerMinPct` 0,3,
+   `SteerPeakGain` 1,6) braque à 23 ° plein braquage à 16,4 m/s, soit 11,5 ° à 0,5. La direction GTA a en plus
+   un retard (l'angle suit la consigne sinus avec du retard) et **réduit l'angle quand l'arrière glisse**
+   (virage 80 : 12 ° → 7,5 ° quand la dérive passe de 0 à −8,6 °). Ces données ne suffisent pas à caler la
+   loi proprement : il faut des essais FiveM à consigne **constante** (0,25 / 0,5 / 1) à 30, 60 et 90 km/h.
+   `PeakFactor` 0,5 relève aussi la cible haute vitesse (`SteerPeakGain` × pic = 15,2 ° au lieu de 10,5 °).
+2. **La côte recule encore** : 5,7 cm en 2 s relâché (GTA 0,0). Cause probable : le pneu ne produit une
+   force que s'il glisse (glissement rapporté à `VMin` = 1 m/s), il n'a pas de frottement statique ; le
+   maintien à l'arrêt (`hold` à 0,5 de frein) bloque les roues, mais la caisse glisse lentement sur ses
+   pneus. Non corrigé.
+3. **Le démarrage en côte est trop lent** : 36,7 km/h en 4 s contre 45,1 (même distance, 32,8 m contre
+   32,5) ; Roblox accélère plus tôt et plafonne ensuite en 2ᵉ. Non expliqué.
+4. **Le frein à main s'arrête trop court** : 15,6–15,7 m à 0,82 g (GTA 20,0 m, 0,71 g). Dans GTA les roues
+   arrière glissent sans se bloquer (5,3 contre 9,2 m/s). Réglage probable : `HandBrakeForce` ou
+   l'adhérence d'une roue bloquée. Non corrigé.
+5. **Vitesse perdue sur la marche à 20 km/h** : 1,9–2,0 km/h (GTA 0,06). Une part vient sans doute du
+   régulateur de vitesse du banc (entrée à 21 km/h pour 20 demandés) : à confirmer avec une chute
+   image par image (Roblox 0,7 km/h par image, GTA 0,13).
+
+### Limites de cette vérification
+
+- PC Studio, un joueur, une session ; aucun téléphone. Un seul véhicule (4 roues motrices).
+- Une passe par réglage, sauf mention : le moteur est déterministe sur ce banc, mais une passe ne
+  couvre pas un départ différent (le frein à main le montre : 1,4 °/s sur la ligne, 36,5 °/s en
+  correction de cap).
+- La marche Roblox fait 11,2 m de large contre 7,9 m pour les conteneurs ; arête franche des deux côtés.
+- Après 1,27 s, le virage 80 GTA n'est pas comparable (marche du tablier) : la glisse à 53,9 ° n'est
+  ni confirmée ni infirmée.
+- Reproduction : scripts disponibles (`TestTrack.lua`, `DriveBench.lua`, `tools/drive-compare/`) ;
+  la séquence complète prend ≈ 6 min de Play.
 
 ## Limites de cette campagne
 

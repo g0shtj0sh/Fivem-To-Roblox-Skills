@@ -174,11 +174,12 @@ celles marquées **mesuré** ci-dessous en viennent. Pour un véhicule : table `
 | Réglage | Défaut | Rôle |
 |---|---|---|
 | `KMu` | **1,0** | échelle de `TractionCurveMax/Min` en g — **mesuré** : le champ du jeu *est* l'accélération en g |
-| `PeakFactor` | **0,25** | pic latéral = `TractionCurveLateral × PeakFactor` — **mesuré** : pic vers 4,6 ° de dérive |
+| `PeakFactor` | **0,5** | pic latéral = `TractionCurveLateral × PeakFactor` — **vérifié en Studio** : les pneus avant de GTA travaillent à ≈ 9–10 ° de dérive à la limite (19 ° × 0,5) ; 0,25 confondait la dérive de la caisse (4,4 °) avec celle des pneus. Au-delà de 0,5 l'adhérence bascule |
 | `KappaPeak` | 0,12 | glissement longitudinal du pic |
 | `Falloff` | 1,5 | largeur de la descente Max → Min |
 | `FalloffKappa` | **0,1** | poids du glissement **longitudinal** dans cette descente — **mesuré** : une roue bloquée garde son pic ; dans GTA la chute est pilotée par la dérive. 1 = ancien comportement |
-| `KSpring`, `KArb` | 1 | raideurs de suspension et d'anti-roulis (lois inconnues ; le roulis mesuré est 4 × celui de Roblox, mais sa raideur se joue dans le châssis, pas ici) |
+| `KSpring`, `KArb` | 1 | raideurs de suspension et d'anti-roulis (lois inconnues) |
+| `RollCentreScale` | 1 | × hauteur des centres de roulis, là où `VehicleDrive` applique les forces latérales : c'est **elle** qui règle le roulis (bras de levier = centre de gravité − centre de roulis). Mesuré en Studio : 0,22 °/g à 1, 0,94 °/g à 0 (GTA ≈ 1,0) ; 0 non adopté, il fait perdre de l'adhérence et lever des roues tant que la direction braque trop à vitesse |
 | `IwRel` | **0,03** | inertie de roue + transmission (`Iw = IwRel × r² / 4`) — **calé** : 0,25 interdisait de tenir à la fois le 0-100 et la vitesse de pointe |
 | `KDrag` | **2,1** | multiplie le coefficient de traînée issu du chargement (`DragCoeff × 1e-4`), dont le facteur n'était qu'une hypothèse — **mesuré** sur le plateau de vitesse |
 | `FirstGearForce` | **1,5** | gain de poussée de la 1ʳᵉ **et de la marche arrière** (même rapport) — **mesuré** : 10,5 à 12,4 m/s² là où la loi donne 6,53 |
@@ -188,11 +189,12 @@ celles marquées **mesuré** ci-dessous en viennent. Pour un véhicule : table `
 | `SteerFade`, `SteerMinPct`, `SteerPeakGain` | 28 m/s / 0,3 / 1,6 | braquage réduit avec la vitesse |
 | `CounterSteer` | 0 | aide au contre-braquage |
 | `AbsSlip`, `AbsRelease` | 0,18 / 0,35 | ABS |
-| `HandbrakeGripRear` | **1,0** | adhérence latérale arrière au frein à main — **mesuré** : GTA bloque l'arrière sans lui faire perdre son adhérence latérale (0,1 °/s de lacet volant droit) |
+| `HandbrakeGripRear` | **1,0** | adhérence latérale arrière au frein à main — **mesuré** : GTA bloque l'arrière sans lui faire perdre son adhérence latérale (0,1 °/s de lacet volant droit). Studio : reste droit (1,4–2 °/s) depuis un départ propre, mais 0,75 aussi ; entré en correction de cap, 36,5 °/s |
 | `AirPitch`, `AirRoll`, `AirDamp` | 4 / 3 / 1,5 | contrôle en l'air |
 | `RightingK`, `RightingSpeed` | 6 / 3 m/s | redressement doux |
 | `SubSteps` | 8 | sous-pas internes |
-| `DampVMax` | **0,5 m/s** | vitesse d'amortisseur plafonnée (clapets, souplesse du pneu) : sans elle une bordure de 15 cm à 20 km/h fait décoller l'avant. **Mesuré** : 3,29 ° de cabrage à 20 km/h et 2,18 ° à 60 — le cabrage *baisse* avec la vitesse. À revérifier en Studio |
+| `DampVMax` | **1,0 m/s** | vitesse d'amortisseur plafonnée (clapets, souplesse du pneu) : sans elle une bordure de 15 cm à 20 km/h fait décoller l'avant. **Vérifié en Studio** avec `BumpK` 0 sur une marche de 0,149 m : +4,9 ° de cabrage à 20 km/h, +3,5 ° à 60 (GTA +3,45 / +2,2) — le cabrage *baisse* avec la vitesse ; 0,5 le fait moins bien |
+| `BumpK` | **0** | butée au-delà de la course : à 400, une marche de 15 cm à 60 km/h renvoyait la caisse (−17,7 °, 3 images en l'air) ; GTA comprime au-delà de sa course nominale |
 | `CurbBoost` | 0 | effet « curb boost » (désactivé) |
 
 Dans le Setup : `COM_ABOVE_AXLE` (0,1 m, hauteur du centre de gravité au-dessus des moyeux), `MASS_SCALE` (0,1).

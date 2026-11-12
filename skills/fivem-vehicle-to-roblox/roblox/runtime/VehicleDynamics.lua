@@ -22,22 +22,41 @@ Dyn.Tuning = {
 	-- calibration/m422/README.md et les traces de calibration/m422/fivem/.
 	KMu = 1.0, -- échelle de TractionCurveMax/Min en « g ». MESURÉ : 100-0 km/h roues bloquées donne 1,88 g de
 	-- moyenne et 2,09–2,14 g de pic pour fTractionCurveMax = 1,90 → le champ EST une accélération en g.
-	PeakFactor = 0.25, -- pic latéral = TractionCurveLateral × PeakFactor. MESURÉ : en virage 40 km/h tenu à la
-	-- limite la dérive se stabilise à 4,6 ° pour 1,69 g (fTractionCurveLateral = 19 °), et en virage 80 km/h
-	-- l'adhérence latérale quasi établie décroît déjà entre 3 ° et 10 ° : le pic est bien avant 9,5 °.
+	PeakFactor = 0.5, -- pic latéral = TractionCurveLateral × PeakFactor. VÉRIFIÉ EN STUDIO (2026-11-12, banc 3D,
+	-- calibration/m422/README.md « Vérification en 3D ») : au virage 40 km/h établi GTA tient ses pneus AVANT à
+	-- ≈ 9 ° de dérive et à 80 km/h à ≈ 10 °, soit 19 ° × 0,5. Le 0,25 du 2026-11-12 (nuit) prenait la dérive de
+	-- CAISSE (4,4 °) pour celle des pneus : sur un rayon de 6,3 m la géométrie seule en donne déjà ≈ 12,8 °.
+	-- Banc 3D, virage 40 : 0,25 → dérive 7,7 °, rayon 6,85 m ; 0,5 → 5,4 °, 6,12 m (GTA 4,4 °, 6,29 m) ;
+	-- au-delà de 0,5 l'adhérence bascule (0,55 → sortie à 30 km/h au lieu de 38).
 	KappaPeak = 0.12, -- glissement longitudinal du pic (champ absent de GTA V)
 	Falloff = 1.5, -- largeur (en multiples du pic) de la descente de Max vers Min
 	FalloffKappa = 0.1, -- poids du glissement LONGITUDINAL dans cette descente. MESURÉ : au freinage les roues
 	-- se bloquent complètement (glissement −1,0) et l'adhérence reste à son pic (1,88 g pour 1,90) : dans GTA
 	-- la chute d'adhérence est pilotée par la dérive, pas par le blocage. 1 = ancien comportement.
+	-- CONSERVÉ après vérification en Studio (2026-11-12) : 100-0 en 19,6 m à 1,87 g (GTA 20,6 m, 1,81 g). À 1,
+	-- le 3D donne 20,6 m mais le banc longitudinal 22,9 m (+11 %) : le banc freine moins fort que le 3D (pas de
+	-- report de charge en tangage). Le frein à main 60-0 reste trop court à toutes les valeurs (15,7 m à 0,1 ;
+	-- 17,6 m à 1 ; GTA 20,0 m) : ce n'est pas ce réglage qui le règle.
 	VMin = 1.0, -- m/s : plancher de vitesse pour les glissements (anti-tremblement)
 	KSpring = 1.0, -- k = SuspensionForce × biais × g / course × KSpring (hypothèse)
-	BumpK = 400, -- m/s² par m au-delà de la butée de compression
-	DampVMax = 0.5, -- m/s : vitesse d'amortisseur plafonnée (clapets haute vitesse, souplesse du pneu).
+	BumpK = 0, -- m/s² par m au-delà de la butée de compression. VÉRIFIÉ EN STUDIO (2026-11-12) : la marche de
+	-- 0,149 m prise à 60 km/h monte la roue en une image et dépasse les 0,10 m de course restante au repos ;
+	-- à 400 la butée renvoyait la caisse : +8,4 / −17,7 ° de tangage, 3 images en l'air, 8,7 km/h perdus. À 0 :
+	-- +3,0 / −2,4 °, 4 roues au sol, 0,45 km/h perdus (GTA +2,2 / −2,6 °, 4 roues, 0,03 km/h). 50 abîme déjà
+	-- (+4,8 / −5,7 °, 2 roues). GTA lui-même comprime au-delà de sa course nominale (0,326 à 60 km/h).
+	DampVMax = 1.0, -- m/s : vitesse d'amortisseur plafonnée (clapets haute vitesse, souplesse du pneu).
 	--                 Sans plafond, une bordure de 15 cm à 20 km/h (5,4 m/s en une image) fait décoller l'avant.
-	-- MESURÉ sur une marche de 0,149 m : 3,29 ° de cabrage à 20 km/h et 2,18 ° à 60 — le cabrage BAISSE avec la
-	-- vitesse — quatre roues au sol en permanence, 0,06 km/h perdus. Le banc Roblox donnait 7,6 ° puis 17,6 °
-	-- avec 0,15 s en l'air. À REVÉRIFIER en Studio : la bordure ne se simule pas hors solveur 3D.
+	-- VÉRIFIÉ EN STUDIO (2026-11-12), marche de 0,149 m × 12,2 m, BumpK 0 : 1,0 → cabrage +4,7 ° à 20 km/h et
+	-- +3,0 ° à 60 ; 0,5 → +4,5 ° et +3,8 ° (GTA +3,45 ° et +2,2 °). Seul 1,0 garde la signature GTA (le cabrage
+	-- BAISSE nettement avec la vitesse). 0,25 : 24 images en l'air à 60 km/h. Le 0,5 posé d'après la mesure
+	-- (2026-11-12, nuit) n'était pas la cause : c'était la butée (BumpK).
+	RollCentreScale = 1.0, -- hauteur des centres de roulis (RollCentreHeightFront/Rear) × ce facteur : c'est là que
+	-- VehicleDrive applique les forces LATÉRALES des pneus. C'est elle qui règle le roulis, pas KSpring / KArb :
+	-- sur le m422 (centre de gravité 0,45 m au-dessus du sol, centres de roulis 0,3 / 0,4 m), le bras de levier
+	-- n'est que de 0,15 m à l'avant et 0,05 m à l'arrière → 0,22 °/g calculé, 0,22 °/g mesuré en Studio. À 0, le
+	-- bras redevient la hauteur du centre de gravité : 0,94 °/g mesuré (GTA ≈ 1,0 °/g). NON ADOPTÉ : à 0 le virage
+	-- 40 km/h ne tient plus que 1,40 g (GTA 1,69) et le créneau à 60 km/h part à 28 ° de roulis tant que la
+	-- direction braque deux fois trop à vitesse (voir SteerFade). Prochain chantier.
 	KArb = 1.0, -- anti-roulis : kA = AntiRollBarForce × biais × g / course × KArb (loi inconnue)
 	IwRel = 0.03, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
 	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g).
@@ -68,6 +87,9 @@ Dyn.Tuning = {
 	HandbrakeGripRear = 1.0, -- adhérence latérale arrière frein à main serré. MESURÉ : à 60 km/h volant droit
 	-- les roues arrière glissent (5,3 m/s contre 9,2 m/s) mais le lacet reste à 0,1–0,2 °/s et la dérive à
 	-- 0,07 ° : le frein à main de GTA bloque l'arrière SANS lui faire perdre son adhérence latérale.
+	-- VÉRIFIÉ EN STUDIO (2026-11-12) : 60-0 au frein à main volant droit, lacet max 0,8–1,0 °/s (GTA 0,13 ; 69 °/s
+	-- avant le calage). Mais à 0,75 il reste droit aussi (1,35 °/s) : sur le plat, ce n'était pas ce réglage qui
+	-- faisait pivoter. Il reste la valeur mesurée ; le tête-à-queue d'avant venait d'ailleurs (non isolé).
 	AirPitch = 4, -- contrôle en l'air (rad/s² par unité d'entrée), tangage
 	AirRoll = 3, -- contrôle en l'air, roulis
 	AirDamp = 1.5, -- amortissement angulaire en l'air
@@ -232,7 +254,7 @@ function Dyn.new(cfg, comLocal, overrides)
 		w.driveShare = (w.front and P.driveShareF / math.max(nF, 1)) or (P.driveShareR / math.max(nR, 1))
 		w.brakeBias = w.front and P.brakeF or P.brakeR
 		w.trac = w.front and P.tracF or P.tracR
-		w.rc = w.front and P.rcF or P.rcR
+		w.rc = (w.front and P.rcF or P.rcR) * (T.RollCentreScale or 1)
 		w.Iw = T.IwRel * w.radius * w.radius / 4
 		w.x0 = -P.lower -- compression au repos (depuis la détente maximale)
 	end
