@@ -1,0 +1,779 @@
+{
+ "quoi": "Campagne des essais ajoutes le 2026-11-12 : burnout, frein a main en virage, puissance en glisse, reduction d'adherence, retournement, vol. Vehicule m422, 3 passes par essai sauf la reduction d'adherence et le retournement (1 par cas).",
+ "quand": "2026-11-12",
+ "resultats": {
+  "burnout_1": {
+   "launchWheelieMax": 0,
+   "steer": 0.5,
+   "launchDistance": 46.217,
+   "burnoutYawMax": 6.95,
+   "launch": 4.0,
+   "launchSpeed": 68.63,
+   "burnoutSpeed": 0.31,
+   "launchMaxSlip": 0.0867,
+   "hold": 3.0,
+   "burnoutWheelieMax": 0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "burnoutDrift": 0.172
+  },
+  "burnout_2": {
+   "launchWheelieMax": 0,
+   "steer": 0.5,
+   "launchDistance": 44.892,
+   "burnoutYawMax": 7.09,
+   "launch": 4.0,
+   "launchSpeed": 67.39,
+   "burnoutSpeed": 0.26,
+   "launchMaxSlip": 0.069,
+   "hold": 3.0,
+   "burnoutWheelieMax": 0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "burnoutDrift": 0.169
+  },
+  "burnout_3": {
+   "launchWheelieMax": 0,
+   "steer": 0.5,
+   "launchDistance": 45.137,
+   "burnoutYawMax": 6.94,
+   "launch": 4.0,
+   "launchSpeed": 67.73,
+   "burnoutSpeed": 0.23,
+   "launchMaxSlip": 0.0822,
+   "hold": 3.0,
+   "burnoutWheelieMax": 0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "burnoutDrift": 0.14
+  },
+  "hbcorner_40_1": {
+   "kmh": 40,
+   "pendant": {
+    "wheelDeg": 4.534,
+    "yawMax": 38.1,
+    "yawRate": 32.59,
+    "beta": 4.914,
+    "n": 50,
+    "hbOn": 1,
+    "kmh": 14.23,
+    "kappaRear": -0.6942
+   },
+   "entrySpeed": 39.38,
+   "steer": 0.5,
+   "avant": {
+    "wheelDeg": 7.521,
+    "yawMax": 31.61,
+    "yawRate": 24.99,
+    "beta": 1.366,
+    "n": 51,
+    "hbOn": 0,
+    "kmh": 39.36,
+    "kappaRear": 0.0008
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "apres": {
+    "wheelDeg": 11.258,
+    "yawMax": 33.91,
+    "yawRate": 29.67,
+    "beta": 3.1,
+    "n": 73,
+    "hbOn": 0,
+    "kmh": 35.93,
+    "kappaRear": 0.0076
+   }
+  },
+  "hbcorner_40_2": {
+   "kmh": 40,
+   "pendant": {
+    "wheelDeg": 4.692,
+    "yawMax": 38.09,
+    "yawRate": 32.35,
+    "beta": 4.812,
+    "n": 51,
+    "hbOn": 1,
+    "kmh": 13.86,
+    "kappaRear": -0.6892
+   },
+   "entrySpeed": 39.37,
+   "steer": 0.5,
+   "avant": {
+    "wheelDeg": 7.518,
+    "yawMax": 31.6,
+    "yawRate": 24.98,
+    "beta": 1.366,
+    "n": 51,
+    "hbOn": 0,
+    "kmh": 39.36,
+    "kappaRear": 0.0009
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "apres": {
+    "wheelDeg": 11.451,
+    "yawMax": 33.91,
+    "yawRate": 29.56,
+    "beta": 3.271,
+    "n": 73,
+    "hbOn": 0,
+    "kmh": 34.76,
+    "kappaRear": 0.0019
+   }
+  },
+  "hbcorner_40_3": {
+   "kmh": 40,
+   "pendant": {
+    "wheelDeg": 4.686,
+    "yawMax": 38.11,
+    "yawRate": 32.38,
+    "beta": 4.793,
+    "n": 51,
+    "hbOn": 1,
+    "kmh": 13.95,
+    "kappaRear": -0.6817
+   },
+   "entrySpeed": 39.5,
+   "steer": 0.5,
+   "avant": {
+    "wheelDeg": 7.514,
+    "yawMax": 31.61,
+    "yawRate": 25.0,
+    "beta": 1.363,
+    "n": 51,
+    "hbOn": 0,
+    "kmh": 39.36,
+    "kappaRear": 0.0008
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "apres": {
+    "wheelDeg": 11.389,
+    "yawMax": 33.91,
+    "yawRate": 29.73,
+    "beta": 3.212,
+    "n": 73,
+    "hbOn": 0,
+    "kmh": 36.0,
+    "kappaRear": 0.0082
+   }
+  },
+  "hbcorner_70_1": {
+   "kmh": 70,
+   "pendant": {
+    "wheelDeg": 3.933,
+    "yawMax": 47.43,
+    "yawRate": 38.82,
+    "beta": 9.921,
+    "n": 49,
+    "hbOn": 1,
+    "kmh": 42.9,
+    "kappaRear": -0.6324
+   },
+   "entrySpeed": 68.07,
+   "steer": 0.5,
+   "avant": {
+    "wheelDeg": 3.981,
+    "yawMax": 27.79,
+    "yawRate": 21.97,
+    "beta": 0.654,
+    "n": 50,
+    "hbOn": 0,
+    "kmh": 68.29,
+    "kappaRear": 0.0015
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "apres": {
+    "wheelDeg": 5.662,
+    "yawMax": 46.6,
+    "yawRate": 28.09,
+    "beta": 3.734,
+    "n": 74,
+    "hbOn": 0,
+    "kmh": 56.64,
+    "kappaRear": 0.006
+   }
+  },
+  "hbcorner_70_2": {
+   "kmh": 70,
+   "pendant": {
+    "wheelDeg": 3.99,
+    "yawMax": 49.95,
+    "yawRate": 39.38,
+    "beta": 10.116,
+    "n": 50,
+    "hbOn": 1,
+    "kmh": 42.87,
+    "kappaRear": -0.639
+   },
+   "entrySpeed": 68.14,
+   "steer": 0.5,
+   "avant": {
+    "wheelDeg": 3.977,
+    "yawMax": 27.29,
+    "yawRate": 21.74,
+    "beta": 0.63,
+    "n": 50,
+    "hbOn": 0,
+    "kmh": 68.7,
+    "kappaRear": 0.0022
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "apres": {
+    "wheelDeg": 5.575,
+    "yawMax": 49.25,
+    "yawRate": 29.08,
+    "beta": 4.367,
+    "n": 74,
+    "hbOn": 0,
+    "kmh": 59.76,
+    "kappaRear": 0.0077
+   }
+  },
+  "hbcorner_70_3": {
+   "kmh": 70,
+   "pendant": {
+    "wheelDeg": 3.988,
+    "yawMax": 47.88,
+    "yawRate": 38.94,
+    "beta": 10.043,
+    "n": 50,
+    "hbOn": 1,
+    "kmh": 42.44,
+    "kappaRear": -0.629
+   },
+   "entrySpeed": 68.1,
+   "steer": 0.5,
+   "avant": {
+    "wheelDeg": 3.969,
+    "yawMax": 27.59,
+    "yawRate": 21.87,
+    "beta": 0.651,
+    "n": 50,
+    "hbOn": 0,
+    "kmh": 68.32,
+    "kappaRear": 0.0017
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "apres": {
+    "wheelDeg": 5.653,
+    "yawMax": 47.05,
+    "yawRate": 28.46,
+    "beta": 3.755,
+    "n": 74,
+    "hbOn": 0,
+    "kmh": 56.85,
+    "kappaRear": 0.0063
+   }
+  },
+  "slidepower_1": {
+   "kmh": 60,
+   "droite": {
+    "kmh": 71.43,
+    "gear": 2,
+    "beta": 0.006,
+    "n": 102,
+    "rpm": 0.8613,
+    "power": 0.3346
+   },
+   "steer": 0.8,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "glisse": {
+    "kmh": 33.7,
+    "gear": 2,
+    "beta": 28.969,
+    "n": 141,
+    "rpm": 0.4828,
+    "power": 0.527
+   }
+  },
+  "slidepower_2": {
+   "kmh": 60,
+   "droite": {
+    "kmh": 71.56,
+    "gear": 3,
+    "beta": 0.005,
+    "n": 102,
+    "rpm": 0.8589,
+    "power": 0.3156
+   },
+   "steer": 0.8,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "glisse": {
+    "kmh": 34.01,
+    "gear": 2,
+    "beta": 27.422,
+    "n": 141,
+    "rpm": 0.4778,
+    "power": 0.5187
+   }
+  },
+  "slidepower_3": {
+   "kmh": 60,
+   "droite": {
+    "kmh": 71.62,
+    "gear": 3,
+    "beta": 0.005,
+    "n": 102,
+    "rpm": 0.8614,
+    "power": 0.3203
+   },
+   "steer": 0.8,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "glisse": {
+    "kmh": 32.12,
+    "gear": 2,
+    "beta": 29.035,
+    "n": 141,
+    "rpm": 0.4621,
+    "power": 0.5277
+   }
+  },
+  "grip_ref": {
+   "kmh": 50,
+   "hasReduce": true,
+   "hasLevel": true,
+   "entrySpeed": 49.6,
+   "steer": 0.7,
+   "plateau": {
+    "latG": 1.339,
+    "beta": 21.076,
+    "n": 67,
+    "yawRate": 79.38,
+    "radius": 8.599,
+    "kmh": 42.89
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "reduce": false
+  },
+  "grip_on": {
+   "kmh": 50,
+   "hasReduce": true,
+   "hasLevel": true,
+   "entrySpeed": 50.22,
+   "steer": 0.7,
+   "plateau": {
+    "latG": 0.1408,
+    "beta": 41.215,
+    "n": 66,
+    "yawRate": 46.55,
+    "radius": 13.83,
+    "kmh": 40.45
+   },
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "reduce": true
+  },
+  "grip_lvl0": {
+   "level": 0,
+   "steer": 0.7,
+   "plateau": {
+    "latG": 0.1498,
+    "beta": 39.504,
+    "n": 66,
+    "yawRate": 47.04,
+    "radius": 13.45,
+    "kmh": 39.75
+   },
+   "entrySpeed": 49.65,
+   "kmh": 50,
+   "hasReduce": true,
+   "hasLevel": true,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "reduce": true
+  },
+  "grip_lvl1": {
+   "level": 1,
+   "steer": 0.7,
+   "plateau": {
+    "latG": 0.4685,
+    "beta": 40.667,
+    "n": 69,
+    "yawRate": 47.09,
+    "radius": 10.792,
+    "kmh": 31.93
+   },
+   "entrySpeed": 50.01,
+   "kmh": 50,
+   "hasReduce": true,
+   "hasLevel": true,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "reduce": true
+  },
+  "grip_lvl2": {
+   "level": 2,
+   "steer": 0.7,
+   "plateau": {
+    "latG": 0.5671,
+    "beta": 17.24,
+    "n": 69,
+    "yawRate": 41.92,
+    "radius": 18.341,
+    "kmh": 48.3
+   },
+   "entrySpeed": 49.74,
+   "kmh": 50,
+   "hasReduce": true,
+   "hasLevel": true,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "reduce": true
+  },
+  "grip_lvl3": {
+   "level": 3,
+   "steer": 0.7,
+   "plateau": {
+    "latG": 0.9808,
+    "beta": 27.405,
+    "n": 68,
+    "yawRate": 62.29,
+    "radius": 11.387,
+    "kmh": 44.57
+   },
+   "entrySpeed": 49.79,
+   "kmh": 50,
+   "hasReduce": true,
+   "hasLevel": true,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "reduce": true
+  },
+  "flip_toit_rien": {
+   "endWheels": 4,
+   "startWheels": 0,
+   "rightedAt": 2.25,
+   "amp": 0.0,
+   "startRoll": 142.26,
+   "maxRollRateDeg": 64.29,
+   "roll": 180.0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "endRoll": 1.12
+  },
+  "flip_toit_droite": {
+   "endWheels": 4,
+   "startWheels": 0,
+   "rightedAt": 4.263,
+   "amp": 1.0,
+   "startRoll": 142.29,
+   "maxRollRateDeg": 77.5,
+   "roll": 180.0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "endRoll": 0.95
+  },
+  "flip_toit_gauche": {
+   "endWheels": 4,
+   "startWheels": 0,
+   "rightedAt": 1.949,
+   "amp": -1.0,
+   "startRoll": 143.5,
+   "maxRollRateDeg": 91.98,
+   "roll": 180.0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "endRoll": -0.43
+  },
+  "flip_cote_rien": {
+   "endWheels": 4,
+   "startWheels": 2,
+   "rightedAt": 0.405,
+   "amp": 0.0,
+   "startRoll": 52.78,
+   "maxRollRateDeg": 168.45,
+   "roll": 90.0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "endRoll": -7.42
+  },
+  "flip_cote_droite": {
+   "endWheels": 4,
+   "startWheels": 2,
+   "rightedAt": 0.407,
+   "amp": 1.0,
+   "startRoll": 51.63,
+   "maxRollRateDeg": 168.59,
+   "roll": 90.0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "endRoll": -9.47
+  },
+  "flip_cote_gauche": {
+   "endWheels": 4,
+   "startWheels": 2,
+   "rightedAt": 0.409,
+   "amp": -1.0,
+   "startRoll": 52.06,
+   "maxRollRateDeg": 168.52,
+   "roll": 90.0,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "endRoll": -9.29
+  },
+  "air_rien": {
+   "axis": "rien",
+   "runUp": 14.0,
+   "maxOmegaDeg": [
+    21.7,
+    13.18,
+    5.76
+   ],
+   "takeoffRot": [
+    9.91,
+    -11.85,
+    32.15
+   ],
+   "airFrames": 16,
+   "tookOff": true,
+   "engineHealthAfter": 1000.0,
+   "amp": 0.0,
+   "landRot": [
+    1.18,
+    -6.59,
+    31.23
+   ],
+   "takeoffSpeed": 77.43,
+   "airSeconds": 0.4,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "landSpeed": 75.59
+  },
+  "air_tp": {
+   "axis": "tangage",
+   "runUp": 14.0,
+   "maxOmegaDeg": [
+    35.0,
+    22.46,
+    9.03
+   ],
+   "takeoffRot": [
+    9.92,
+    -8.78,
+    31.35
+   ],
+   "airFrames": 13,
+   "tookOff": true,
+   "engineHealthAfter": 1000.0,
+   "amp": 1.0,
+   "landRot": [
+    9.23,
+    1.28,
+    31.0
+   ],
+   "takeoffSpeed": 78.67,
+   "airSeconds": 0.33,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "landSpeed": 77.06
+  },
+  "air_tm": {
+   "axis": "tangage",
+   "runUp": 14.0,
+   "maxOmegaDeg": [
+    39.28,
+    25.46,
+    5.28
+   ],
+   "takeoffRot": [
+    9.95,
+    -8.82,
+    30.68
+   ],
+   "airFrames": 10,
+   "tookOff": true,
+   "engineHealthAfter": 1000.0,
+   "amp": -1.0,
+   "landRot": [
+    1.56,
+    -3.18,
+    29.85
+   ],
+   "takeoffSpeed": 70.11,
+   "airSeconds": 0.259,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "landSpeed": 68.91
+  },
+  "air_rp": {
+   "axis": "roulis",
+   "runUp": 14.0,
+   "maxOmegaDeg": [
+    55.02,
+    6.92,
+    10.09
+   ],
+   "takeoffRot": [
+    9.38,
+    -6.41,
+    31.84
+   ],
+   "airFrames": 8,
+   "tookOff": true,
+   "engineHealthAfter": 1000.0,
+   "amp": 1.0,
+   "landRot": [
+    5.45,
+    2.96,
+    31.51
+   ],
+   "takeoffSpeed": 73.13,
+   "airSeconds": 0.21,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "landSpeed": 72.21
+  },
+  "air_rm": {
+   "axis": "roulis",
+   "runUp": 14.0,
+   "maxOmegaDeg": [
+    40.35,
+    14.11,
+    3.69
+   ],
+   "takeoffRot": [
+    9.15,
+    -6.1,
+    32.25
+   ],
+   "airFrames": 10,
+   "tookOff": true,
+   "engineHealthAfter": 1000.0,
+   "amp": -1.0,
+   "landRot": [
+    4.08,
+    -0.69,
+    32.06
+   ],
+   "takeoffSpeed": 72.66,
+   "airSeconds": 0.257,
+   "instrument": {
+    "engineHealth": 1000.0,
+    "topSpeedModifier": -1.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "landSpeed": 71.63
+  }
+ }
+}
