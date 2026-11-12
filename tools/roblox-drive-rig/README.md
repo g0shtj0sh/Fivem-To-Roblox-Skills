@@ -25,6 +25,11 @@ lune run tools/roblox-drive-rig/rig.luau report 2.1 0.9 1.5 0.03
 lune run tools/roblox-drive-rig/rig.luau scan
 ```
 
+- `cote [pente %] [pente du lancement %]` rejoue l'essai de **côte** : recul tout relâché pendant
+  2 s, puis lancement plein gaz pendant 4 s. Sans second argument, le lancement suit le **profil de
+  pente mesuré** dans GTA (17,1 % → 37 %, pas de 0,1 s) ; `trace` en troisième argument affiche le
+  détail image par image. La côte ne demande donc plus Studio : une pente en ligne droite ne demande
+  que la gravité le long de la pente et les charges corrigées.
 - `report` affiche chaque essai et son écart avec la mesure GTA. Sans argument il utilise les
   réglages par défaut du module ; avec quatre arguments il surcharge `KDrag`, `EngineBrakeG`,
   `FirstGearForce` et `IwRel`.
@@ -41,9 +46,10 @@ n'en fournit pas.
 | 0-60, 0-100, plein gaz 4 s | tenue latérale, dérive |
 | passages de rapports (vitesse et régime) | roulis |
 | vitesse de pointe | bordure |
-| freinage 100-0 (distance, temps, décélération) | côte, démarrage en pente |
+| freinage 100-0 (distance, temps, décélération) | tangage, bosses |
 | roue libre | frein à main (le lacet) |
 | marche arrière | tout ce qui dépend du contact réel |
+| **côte** : recul à l'arrêt, démarrage en pente | |
 
 Ce qui n'est pas couvert demande le solveur 3D de Roblox : `roblox/DriveBench.lua` en Studio.
 

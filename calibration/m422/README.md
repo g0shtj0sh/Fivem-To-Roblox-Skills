@@ -1117,6 +1117,78 @@ moteur produit vraiment. Prédiction à vérifier : avec le plafond actif, `Peak
   dur, un raccord progressif ferait sans doute mieux.
 - Mesures complètes : [`tyre-analyse.json`](tyre-analyse.json).
 
+## La côte : le frottement statique, et une anomalie de poussée (2026-11-12)
+
+### Un banc de côte, sans Studio
+
+La côte demandait Studio. Or une pente en ligne droite ne demande au banc que deux choses : la composante
+de gravité le long de la pente, et les charges corrigées (`cos` de la pente, plus le report longitudinal
+`sin × h/L`). Le solveur 3D n'est pas nécessaire. `lune run tools/roblox-drive-rig/rig.luau cote` rejoue donc
+l'essai `hill` en quelques secondes, avec le **profil de pente mesuré** : elle n'est pas constante, elle passe
+de **17,1 % à 37 %** pendant les 4 s du lancement, et prendre sa moyenne (25 %) pénalise à tort le début.
+
+Le profil est vérifié de deux façons indépendantes : l'assiette de caisse (colonne `pitch`) et la pente de la
+**trajectoire** (`dz` / distance horizontale, qui ne dépend pas de l'assiette). Elles concordent — 25,0 et
+25,2 % de moyenne, 39,8 et 40,3 % en fin de lancement — donc le cabrage sous la poussée ne fausse pas la
+lecture.
+
+### Le frottement statique : GTA tient, le moteur descendait
+
+**MESURÉ** sur l'essai `hill`, 3 passes : tout relâché pendant 2,0 s sur une pente de 17,1 %, déplacement
+**0,000 m**, vitesse 0,00 km/h, boîte **au point mort** et pression de frein **nulle**. Ce n'est donc ni un
+frein automatique ni le frein à main : c'est le pneu qui tient.
+
+Le moteur ne pouvait pas : son plancher `VMin` divise le glissement par 1 m/s, donc à l'arrêt le glissement
+est nul et la force avec. Le véhicule descendait la pente sur ses pneus (2,9 cm en 2 s au banc).
+
+Deux essais avant d'y arriver, et le premier est instructif :
+
+| | Recul en 2 s | Vitesse de fluage |
+|---|---|---|
+| sans rien | 2,9 cm | −0,36 km/h |
+| **amortisseur** (force ∝ vitesse de glissement) | **5,5 cm** | −0,10 km/h |
+| **ressort** (force ∝ glissement accumulé) | **0,1 cm** | −0,13 km/h |
+
+L'amortisseur fait **pire** : une force proportionnelle à la vitesse s'annule avec elle, donc il subsiste une
+vitesse de fluage d'équilibre (ici 0,10 km/h, soit 5,5 cm en 2 s — le véhicule flue moins vite, mais plus
+longtemps). Le ressort, lui, garde sa force à vitesse nulle. `KStick` = 200 par mètre : la tenue demande
+0,8 mm de déformation à 17 % de pente, et le décrochage vient à 9,5 mm, ce qui est l'ordre de grandeur d'un
+flanc de pneu. `CStick` = 28 l'amortit.
+
+### Ce qui reste : GTA pousse plus fort en côte que sur le plat
+
+Le lancement reste à **−10,7 %** en vitesse finale (40,3 contre 45,1 km/h) pour **+6,4 %** en distance
+(34,6 contre 32,5 m) : le moteur accélère plus fort au début et moins à la fin. En cherchant pourquoi, une
+mesure inattendue, prise sur les deux moteurs en **2ᵉ, à vitesse et régime égaux** :
+
+| | Sur le plat | En pente (25 à 37 %) |
+|---|---|---|
+| **GTA** | 0,36 à 0,38 g | **0,47 g** |
+| moteur Roblox | 0,357 g | 0,38 g |
+
+Les deux concordent sur le plat. **GTA produit donc ≈ 27 % de poussée en plus dans la pente**, à vitesse,
+rapport et régime identiques. Le moteur, lui, en produit autant dans les deux cas — ce qui est le
+comportement attendu d'un `fDriveForce` appliqué comme une accélération. Ce n'est donc pas un manque de
+poussée du moteur mais un apport de GTA, qui n'est pas dans le modèle.
+
+Deux pistes, non tranchées : une aide en côte (beaucoup de jeux en ont une), ou un effet du report de charge
+sur un essieu moteur limité par l'adhérence — mais à 0,37 g pour `fTractionCurveMax` = 1,90, la limite
+d'adhérence est loin.
+
+**L'essai qui trancherait** : tenir 40 km/h en 2ᵉ sur des pentes de 0, 10, 20 et 30 % et relever la poussée
+à chacune. C'est une variante de `hill` à écrire, et elle demande FiveM.
+
+### Et une différence d'embrayage, mesurée mais non corrigée
+
+À l'arrêt, GTA part embrayage à **0,100** et met **1,14 s** à l'engager ; le moteur est à **1,000** dès la
+première image. Et GTA transmet du couple pendant ce patinage — il passe de 0 à 24 km/h avec l'embrayage
+entre 0,1 et 1,0 — alors que le moteur annule les gaz tant que l'embrayage patine
+(`thr = (S.clutch < 1) and 0 or driveIn`). C'est ce qui donne au moteur un départ plus vif puis un retard.
+
+Non corrigé : la transmission du couple à embrayage patinant est aussi ce qui règle le **passage de rapport**,
+où le moteur concorde avec GTA (creux de 1,8 par seconde des deux côtés, mesuré). La changer demanderait de
+revérifier tout le banc longitudinal, et c'est un travail à part.
+
 ## Limites de cette campagne
 
 - **Longueur de piste : 671 m.** Suffisant pour tout ce qui précède — la vitesse de pointe

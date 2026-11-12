@@ -60,6 +60,22 @@ Dyn.Tuning = {
 	-- report de charge en tangage). Le frein à main 60-0 reste trop court à toutes les valeurs (15,7 m à 0,1 ;
 	-- 17,6 m à 1 ; GTA 20,0 m) : ce n'est pas ce réglage qui le règle.
 	VMin = 1.0, -- m/s : plancher de vitesse pour les glissements (anti-tremblement)
+	-- Frottement STATIQUE. Le plancher `VMin` divise le glissement par 1 m/s à l'arrêt : le glissement
+	-- devient donc nul, et la force avec. Le véhicule descend alors la pente sur ses pneus. GTA, lui,
+	-- TIENT : MESURÉ sur l'essai `hill`, 3 passes — tout relâché pendant 2,0 s sur une pente de 17,1 %,
+	-- déplacement **0,000 m**, vitesse 0,00 km/h, boîte au point mort et pression de frein **nulle**. Ce
+	-- n'est donc ni un frein automatique ni le frein à main : c'est le pneu qui tient.
+	-- On abaisse donc le plancher quand la roue ET le sol sont quasi immobiles, ce qui fait du pneu un
+	-- ressort raide à l'arrêt, et on borne la force longitudinale à ce qui annule le glissement en un pas
+	-- (comme le fait déjà le latéral), sans quoi la raideur ferait osciller.
+	-- Il faut un RESSORT sur le glissement accumulé, et non un amortisseur : une force proportionnelle à
+	-- la vitesse de glissement s'annule avec elle, donc il subsiste une vitesse de fluage d'équilibre
+	-- (mesurée au banc : 0,10 km/h, soit 5,5 cm en 2 s — pire que sans rien). Le ressort, lui, garde sa
+	-- force à vitesse nulle. Il décroche à l'adhérence, ce qui redonne le frottement cinétique.
+	VStick = 0.30, -- m/s : en dessous, la roue et le sol sont considérés immobiles
+	KStick = 200, -- par mètre de glissement accumulé : à 17 % de pente la tenue demande 0,8 mm, et le
+	-- décrochage vient à 9,5 mm (μ = 1,9). Un flanc de pneu se déforme bien de cet ordre.
+	CStick = 28, -- amortissement du ressort (≈ 2√K) : sans lui le ressort oscillerait
 	KSpring = 1.0, -- k = SuspensionForce × biais × g / course × KSpring (hypothèse)
 	BumpK = 0, -- m/s² par m au-delà de la butée de compression. VÉRIFIÉ EN STUDIO (2026-11-12) : la marche de
 	-- 0,149 m prise à 60 km/h monte la roue en une image et dépasse les 0,10 m de course restante au repos ;
@@ -369,12 +385,13 @@ function Dyn.new(cfg, comLocal, overrides)
 	local S = {
 		rpm = 0.2, gear = 1, clutch = 1, shiftDir = 0, lastShift = -1, time = 0,
 		reverseTimer = 0, steerAngle = 0, lock = P.steerLock,
-		omega = {}, x = {}, slip = {},
+		omega = {}, x = {}, slip = {}, stick = {},
 	}
 	for i, w in ipairs(wheels) do
 		S.omega[i] = 0
 		S.x[i] = w.x0
 		S.slip[i] = 0
+		S.stick[i] = 0
 	end
 	return { P = P, S = S, T = T }
 end
@@ -388,6 +405,7 @@ function Dyn.reset(sim)
 		S.omega[i] = 0
 		S.x[i] = w.x0
 		S.slip[i] = 0
+		S.stick[i] = 0
 	end
 end
 
@@ -645,6 +663,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			local omega = S.omega[i]
 			local Fx, Fy = 0, 0
 			if c.grounded and N[i] > 0 then
+				-- à l'arrêt, le plancher VMin annule le glissement donc la force : GTA tient (voir Dyn.Tuning)
+				local still = math.abs(vLong) < T.VStick and math.abs(omega * w.radius) < T.VStick
 				local vRef = math.max(math.abs(vLong), T.VMin)
 				local kappa = (omega * w.radius - vLong) / vRef
 				local alpha = math.atan2(vLat, vRef)
@@ -677,6 +697,21 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				local kill = math.abs(vLat) * w.massFrac / dt
 				if math.abs(Fy) > kill then
 					Fy = sign(Fy) * kill
+				end
+				-- frottement STATIQUE : ressort sur le glissement accumulé, qui ne s'annule pas à vitesse
+				-- nulle (voir Dyn.Tuning). Il décroche à l'adhérence et rend alors la main au glissement.
+				if still then
+					local vSlip = vLong - omega * w.radius
+					S.stick[i] += vSlip * dt
+					local Fs = -(T.KStick * S.stick[i] + T.CStick * vSlip) * N[i] / P.g
+					if math.abs(Fs) > fmax then
+						Fs = sign(Fs) * fmax
+						S.stick[i] = -sign(vSlip) * fmax * P.g / math.max(T.KStick * N[i], 1e-6)
+					else
+						Fx = Fs
+					end
+				else
+					S.stick[i] = 0
 				end
 				-- ABS
 				if P.abs and brakeIn > 0 and not hand and kappa < -T.AbsSlip then

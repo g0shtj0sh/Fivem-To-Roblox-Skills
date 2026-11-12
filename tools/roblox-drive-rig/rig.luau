@@ -9,7 +9,9 @@
 	freinage, roue libre, marche arriere — sans ouvrir Roblox Studio.
 
 	Ce qu'il ne couvre PAS : tout ce qui demande le solveur 3D de Roblox, donc
-	le lateral, le roulis, la bordure et la cote. Pour ceux-la, roblox/DriveBench.lua.
+	le lateral, le roulis et la bordure. Pour ceux-la, roblox/DriveBench.lua.
+	La COTE, en revanche, est couverte depuis le 2026-11-12 : une pente en ligne
+	droite ne demande que la gravite le long de la pente et les charges corrigees.
 
 	Usage :
 	    lune run tools/roblox-drive-rig/rig.luau report
@@ -64,18 +66,112 @@ local cfg = {
 local DT = 1 / 60
 local function newSim(ov) return Dyn.new(cfg, Vector3.new(0, 0, 0), ov) end
 
-local function step(sim, v, inp)
+-- `pente` est en pourcentage (montee positive). Une pente en ligne droite ne demande que deux
+-- choses : la composante de gravite le long de la pente, et les charges corrigees. On impose les
+-- charges par la compression des contacts, de sorte que la suspension du moteur rende exactement
+--     Nav = m.g (cos.b/L - sin.h/L)   et   Nar = m.g (cos.a/L + sin.h/L)
+-- h etant la hauteur du centre de gravite au-dessus du contact (mesuree a 0,45 m en Studio).
+local COM_H = 0.45
+local TRACE = false
+local function step(sim, v, inp, pente)
+	pente = pente or 0
+	local th = math.atan(pente / 100)
+	local cosT, sinT = math.cos(th), math.sin(th)
+	local P = sim.P
+	-- empattement et repartition, depuis les positions de roue du module
+	local zF, zR, nF, nR = 0, 0, 0, 0
+	for _, w in ipairs(P.wheels) do
+		if w.front then zF += w.rest.Z; nF += 1 else zR += w.rest.Z; nR += 1 end
+	end
+	zF, zR = zF / math.max(nF, 1), zR / math.max(nR, 1)
+	local base = math.max(zR - zF, 0.5)
 	local contacts = {}
-	for i, w in ipairs(sim.P.wheels) do
-		contacts[i] = { grounded = true, x = w.x0, xdot = 0, vLong = v, vLat = 0, grip = 1 }
+	for i, w in ipairs(P.wheels) do
+		local n = w.front and (nF or 2) or (nR or 2)
+		-- charge visee pour cette roue (en unites du moteur : une acceleration specifique)
+		local partF = (zR - 0) / base -- centre de gravite a l'origine du repere des roues
+		local statique = w.front and (partF / nF) or ((1 - partF) / nR)
+		local transfert = sinT * COM_H / base / n * (w.front and -1 or 1)
+		local cible = P.g * (statique * cosT + transfert)
+		local x = w.x0 + (cible - w.load) / math.max(w.k, 1e-6)
+		contacts[i] = { grounded = true, x = x, xdot = 0, vLong = v, vLat = 0, grip = 1 }
 	end
 	local out = Dyn.step(sim, inp, contacts, DT, {
 		vBody = Vector3.new(0, 0, -v), wBody = Vector3.new(0, 0, 0), up = Vector3.new(0, 1, 0),
 	})
 	local ax = 0
-	for i in ipairs(sim.P.wheels) do ax += out.wheels[i].Fx end
+	for i in ipairs(P.wheels) do ax += out.wheels[i].Fx end
 	ax -= out.body.Z
+	ax -= P.g * sinT -- gravite le long de la pente
 	return ax, out
+end
+
+-- Profil de pente MESURE pendant le lancement en cote (moyenne des 3 passes FiveM, pas de 0,1 s,
+-- en pourcentage). La pente n'est pas constante : elle passe de 17,1 % a 38,2 % en 4 s, et une
+-- pente constante egale a la moyenne (25 %) penalise a tort le debut, ou l'acceleration compte.
+local PENTE_LANCEMENT = {
+	{ 0.00, 17.13 }, { 0.10, 17.13 }, { 0.20, 17.38 }, { 0.30, 17.82 }, { 0.40, 18.18 },
+	{ 0.50, 18.22 }, { 0.60, 17.81 }, { 0.70, 17.47 }, { 0.80, 16.86 }, { 0.90, 15.29 },
+	{ 1.00, 14.80 }, { 1.10, 16.96 }, { 1.20, 21.54 }, { 1.30, 25.20 }, { 1.40, 26.54 },
+	{ 1.50, 25.58 }, { 1.60, 21.50 }, { 1.70, 19.40 }, { 1.80, 20.04 }, { 1.90, 21.43 },
+	{ 2.00, 22.36 }, { 2.10, 23.14 }, { 2.20, 24.11 }, { 2.30, 25.13 }, { 2.40, 26.02 },
+	{ 2.50, 26.58 }, { 2.60, 27.12 }, { 2.70, 27.59 }, { 2.80, 27.59 }, { 2.90, 27.64 },
+	{ 3.00, 28.81 }, { 3.10, 31.40 }, { 3.20, 33.42 }, { 3.30, 32.99 }, { 3.40, 31.30 },
+	{ 3.50, 31.58 }, { 3.60, 34.16 }, { 3.70, 36.48 }, { 3.80, 36.98 }, { 3.90, 36.23 },
+	{ 4.00, 38.23 },
+}
+
+local function penteA(t)
+	local p = PENTE_LANCEMENT
+	if t <= p[1][1] then return p[1][2] end
+	for i = 2, #p do
+		if t <= p[i][1] then
+			local a, b = p[i - 1], p[i]
+			local f = (t - a[1]) / math.max(b[1] - a[1], 1e-9)
+			return a[2] + f * (b[2] - a[2])
+		end
+	end
+	return p[#p][2]
+end
+
+--- Essai de cote, calque sur `hill` de tools/fivem-telemetry : le vehicule est a l'arret sur la
+--- pente, on relache tout pendant 2 s (recul), puis plein gaz pendant 4 s (vitesse et distance).
+--- GTA, lui, ne bouge PAS d'un millimetre pendant les 2 s relachees, au point mort et sans
+--- pression de frein : c'est du frottement statique.
+local function hill(ov, pente, penteLancement)
+	local sim = newSim(ov)
+	local v, dist, reculMin = 0, 0, 0
+	-- 2 s tout relache
+	for _ = 1, math.floor(2.0 / DT) do
+		local a = step(sim, v, { Throttle = 0, Brake = 0, Steer = 0, Engine = true }, pente)
+		v += a * DT
+		dist += v * DT
+		reculMin = math.min(reculMin, v * 3.6)
+	end
+	local recul = math.abs(dist)
+	-- 4 s plein gaz, sur la pente du lancement (plus raide : le vehicule monte)
+	local sim2 = newSim(ov)
+	local v2, d2, vmin, t2 = 0, 0, 0, 0
+	local gears = {}
+	for _ = 1, math.floor(4.0 / DT) do
+		-- la pente du lancement suit le profil MESURE, sauf si on en impose une
+		local pl = penteLancement or penteA(t2)
+		local a, out = step(sim2, v2, { Throttle = 1, Brake = 0, Steer = 0, Engine = true }, pl)
+		if TRACE and math.abs(t2 % 0.15) < DT then
+			print(("       %5.2f %7.2f %8.3f %7.3f %4d %8.3f   pente %5.1f %%  a %+6.2f")
+				:format(t2, v2 * 3.6, d2, out.rpm, out.gear, out.clutch, pl, a))
+		end
+		t2 += DT
+		v2 += a * DT
+		d2 += v2 * DT
+		vmin = math.min(vmin, v2 * 3.6)
+		gears[out.gear] = true
+	end
+	local g = {}
+	for k in pairs(gears) do table.insert(g, k) end
+	table.sort(g)
+	return { recul = recul, reculVmin = reculMin, lancementKmh = v2 * 3.6, lancementDist = d2,
+		lancementVmin = vmin, rapports = g }
 end
 
 local FULL = { Throttle = 1, Brake = 0, Steer = 0, Engine = true }
@@ -162,6 +258,33 @@ local function score(res)
 end
 
 local mode = (process.args[1] or "report")
+
+-- `lune run rig.luau cote [pente %] [pente du lancement %]`
+-- Cibles GTA (3 passes, essai `hill` de tools/fivem-telemetry) : pente 17,1 % a l'arret et
+-- 25,0 % en moyenne pendant le lancement ; recul tout relache 0,000 m ; lancement 45,1 km/h
+-- sur 32,5 m en 4 s, rapports 1 puis 2.
+if mode == "cote" then
+	local pente = tonumber(process.args[2] or "") or 17.1
+	local penteL = tonumber(process.args[3] or "") -- nil = profil mesure
+	TRACE = (process.args[4] == "trace")
+	if TRACE then
+		print("       t, km/h, distance, regime, rapport, embrayage, pente, acceleration")
+	end
+	local r = hill(nil, pente, penteL)
+	print(("=== COTE   pente %.1f %% a l'arret, %s au lancement")
+		:format(pente, penteL and ("%.1f %%"):format(penteL) or "profil mesure 17->38 %"))
+	print(("   recul tout relache        %8.4f m      GTA   0.0000   (vitesse min %+.2f km/h)")
+		:format(r.recul, r.reculVmin))
+	print(("   lancement 4 s             %8.2f km/h   GTA    45.10   ecart %+6.1f %%")
+		:format(r.lancementKmh, 100 * (r.lancementKmh - 45.10) / 45.10))
+	print(("   lancement 4 s             %8.2f m      GTA    32.50   ecart %+6.1f %%")
+		:format(r.lancementDist, 100 * (r.lancementDist - 32.50) / 32.50))
+	print(("   recul au lancement        %8.2f km/h   GTA    -0.36"):format(r.lancementVmin))
+	local g = {}
+	for _, k in ipairs(r.rapports) do table.insert(g, tostring(k)) end
+	print(("   rapports traverses        %8s        GTA    1, 2"):format(table.concat(g, ", ")))
+	return
+end
 
 if mode == "scan" then
 	local best, bestOv = 1e9, nil
