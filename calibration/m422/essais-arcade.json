@@ -775,5 +775,1370 @@
    },
    "landSpeed": 71.63
   }
+ },
+ "volSurTremplin": {
+  "airr_rien_p_1": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 65.37,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -20.59,
+    -0.71,
+    90.58
+   ],
+   "tookOff": true,
+   "airSeconds": 0.964,
+   "runUp": 18.0,
+   "amp": 0.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.02,
+     5.86,
+     1.53
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    31.99,
+    2.7,
+    11.09
+   ],
+   "airFrames": 49,
+   "axis": "rien",
+   "landSpeed": 66.1,
+   "takeoffRot": [
+    9.86,
+    -0.21,
+    90.62
+   ]
+  },
+  "airr_rien_p_2": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.28,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -16.76,
+    12.3,
+    94.19
+   ],
+   "tookOff": true,
+   "airSeconds": 0.965,
+   "runUp": 18.0,
+   "amp": 0.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    30.12,
+    11.29,
+    12.15
+   ],
+   "airFrames": 49,
+   "axis": "rien",
+   "landSpeed": 66.89,
+   "takeoffRot": [
+    11.0,
+    0.73,
+    90.42
+   ]
+  },
+  "airr_rien_p_3": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 67.06,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -15.75,
+    15.35,
+    95.36
+   ],
+   "tookOff": true,
+   "airSeconds": 0.986,
+   "runUp": 18.0,
+   "amp": 0.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    29.51,
+    13.58,
+    12.92
+   ],
+   "airFrames": 50,
+   "axis": "rien",
+   "landSpeed": 67.56,
+   "takeoffRot": [
+    11.5,
+    0.69,
+    90.95
+   ]
+  },
+  "airr_tangage_p_1": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.19,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    25.16,
+    -0.22,
+    89.13
+   ],
+   "tookOff": true,
+   "airSeconds": 0.935,
+   "runUp": 18.0,
+   "amp": 1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    51.53,
+    2.14,
+    24.09
+   ],
+   "airFrames": 48,
+   "axis": "tangage",
+   "landSpeed": 66.69,
+   "takeoffRot": [
+    9.8,
+    0.16,
+    89.41
+   ]
+  },
+  "airr_tangage_p_2": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 65.4,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    24.25,
+    0.14,
+    88.9
+   ],
+   "tookOff": true,
+   "airSeconds": 0.943,
+   "runUp": 18.0,
+   "amp": 1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    51.65,
+    2.21,
+    23.21
+   ],
+   "airFrames": 48,
+   "axis": "tangage",
+   "landSpeed": 65.92,
+   "takeoffRot": [
+    9.99,
+    0.23,
+    89.24
+   ]
+  },
+  "airr_tangage_p_3": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.4,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    27.86,
+    8.93,
+    89.26
+   ],
+   "tookOff": true,
+   "airSeconds": 0.918,
+   "runUp": 18.0,
+   "amp": 1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    51.32,
+    10.37,
+    26.77
+   ],
+   "airFrames": 71,
+   "axis": "tangage",
+   "landSpeed": 66.45,
+   "takeoffRot": [
+    10.79,
+    0.54,
+    90.48
+   ]
+  },
+  "airr_tangage_m_1": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.51,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -35.5,
+    -0.52,
+    90.21
+   ],
+   "tookOff": true,
+   "airSeconds": 1.042,
+   "runUp": 18.0,
+   "amp": -1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    57.7,
+    1.01,
+    35.61
+   ],
+   "airFrames": 76,
+   "axis": "tangage",
+   "landSpeed": 50.11,
+   "takeoffRot": [
+    9.96,
+    -0.2,
+    90.44
+   ]
+  },
+  "airr_tangage_m_2": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 65.61,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -33.15,
+    -1.92,
+    86.64
+   ],
+   "tookOff": true,
+   "airSeconds": 1.157,
+   "runUp": 18.0,
+   "amp": -1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    57.92,
+    9.93,
+    34.91
+   ],
+   "airFrames": 98,
+   "axis": "tangage",
+   "landSpeed": 42.73,
+   "takeoffRot": [
+    10.0,
+    0.15,
+    89.39
+   ]
+  },
+  "airr_tangage_m_3": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.32,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -32.51,
+    -2.81,
+    85.78
+   ],
+   "tookOff": true,
+   "airSeconds": 1.31,
+   "runUp": 18.0,
+   "amp": -1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    58.24,
+    8.91,
+    35.86
+   ],
+   "airFrames": 88,
+   "axis": "tangage",
+   "landSpeed": 41.01,
+   "takeoffRot": [
+    9.87,
+    0.15,
+    89.43
+   ]
+  },
+  "airr_roulis_p_1": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 65.7,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -17.68,
+    35.68,
+    93.28
+   ],
+   "tookOff": true,
+   "airSeconds": 0.919,
+   "runUp": 18.0,
+   "amp": 1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    31.36,
+    55.62,
+    35.02
+   ],
+   "airFrames": 68,
+   "axis": "roulis",
+   "landSpeed": 65.8,
+   "takeoffRot": [
+    9.95,
+    0.1,
+    89.61
+   ]
+  },
+  "airr_roulis_p_2": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.54,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -17.56,
+    35.43,
+    96.21
+   ],
+   "tookOff": true,
+   "airSeconds": 0.94,
+   "runUp": 18.0,
+   "amp": 1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    32.94,
+    52.65,
+    36.18
+   ],
+   "airFrames": 70,
+   "axis": "roulis",
+   "landSpeed": 66.63,
+   "takeoffRot": [
+    10.46,
+    -1.04,
+    91.19
+   ]
+  },
+  "airr_roulis_p_3": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 66.39,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -16.99,
+    32.66,
+    94.23
+   ],
+   "tookOff": true,
+   "airSeconds": 0.922,
+   "runUp": 18.0,
+   "amp": 1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    30.53,
+    53.7,
+    32.87
+   ],
+   "airFrames": 50,
+   "axis": "roulis",
+   "landSpeed": 66.55,
+   "takeoffRot": [
+    10.05,
+    -0.31,
+    89.91
+   ]
+  },
+  "airr_roulis_m_1": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 65.56,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -15.47,
+    -35.97,
+    85.52
+   ],
+   "tookOff": true,
+   "airSeconds": 0.919,
+   "runUp": 18.0,
+   "amp": -1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    29.85,
+    52.56,
+    44.7
+   ],
+   "airFrames": 69,
+   "axis": "roulis",
+   "landSpeed": 65.69,
+   "takeoffRot": [
+    10.22,
+    0.08,
+    89.52
+   ]
+  },
+  "airr_roulis_m_2": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 67.49,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -18.35,
+    -32.38,
+    92.85
+   ],
+   "tookOff": true,
+   "airSeconds": 0.967,
+   "runUp": 18.0,
+   "amp": -1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    32.45,
+    53.43,
+    48.02
+   ],
+   "airFrames": 73,
+   "axis": "roulis",
+   "landSpeed": 67.76,
+   "takeoffRot": [
+    10.36,
+    -0.85,
+    92.24
+   ]
+  },
+  "airr_roulis_m_3": {
+   "kmhTarget": 70,
+   "takeoffSpeed": 67.98,
+   "engineHealthAfter": 1000.0,
+   "landRot": [
+    -17.83,
+    -32.4,
+    90.26
+   ],
+   "tookOff": true,
+   "airSeconds": 0.972,
+   "runUp": 18.0,
+   "amp": -1.0,
+   "ramp": {
+    "heading": 90.0,
+    "groundZ": 12.945,
+    "dim": [
+     4.03,
+     5.87,
+     1.54
+    ],
+    "model": "prop_mp_ramp_02",
+    "pos": [
+     -1205.0,
+     -3056.0,
+     13.728
+    ]
+   },
+   "instrument": {
+    "topSpeedModifier": -1.0,
+    "engineHealth": 1000.0,
+    "neutre": true,
+    "powerIncrease": 1.0
+   },
+   "maxOmegaDeg": [
+    31.02,
+    53.56,
+    47.63
+   ],
+   "airFrames": 66,
+   "axis": "roulis",
+   "landSpeed": 68.09,
+   "takeoffRot": [
+    10.39,
+    0.44,
+    90.63
+   ]
+  }
+ },
+ "vehiculeDeComparaison": {
+  "modele": "banshee (propulsion du jeu de base)",
+  "resultats": {
+   "v_burnout_1": {
+    "launchWheelieMax": 0,
+    "burnoutSpeed": 0.37,
+    "burnoutWheelieMax": 0,
+    "burnoutDrift": 0.043,
+    "launchDistance": 57.074,
+    "burnoutYawMax": 5.35,
+    "launch": 4.0,
+    "hold": 3.0,
+    "launchMaxSlip": 1.8237,
+    "steer": 0.5,
+    "launchSpeed": 88.62,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    }
+   },
+   "v_burnout_2": {
+    "launchWheelieMax": 0,
+    "burnoutSpeed": 0.34,
+    "burnoutWheelieMax": 0,
+    "burnoutDrift": 0.04,
+    "launchDistance": 57.09,
+    "burnoutYawMax": 5.33,
+    "launch": 4.0,
+    "hold": 3.0,
+    "launchMaxSlip": 1.1941,
+    "steer": 0.5,
+    "launchSpeed": 88.65,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    }
+   },
+   "v_burnout_3": {
+    "launchWheelieMax": 0,
+    "burnoutSpeed": 0.35,
+    "burnoutWheelieMax": 0,
+    "burnoutDrift": 0.044,
+    "launchDistance": 57.534,
+    "burnoutYawMax": 5.42,
+    "launch": 4.0,
+    "hold": 3.0,
+    "launchMaxSlip": 1.2253,
+    "steer": 0.5,
+    "launchSpeed": 87.86,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    }
+   },
+   "v_air_rien_1": {
+    "kmhTarget": 70,
+    "takeoffSpeed": 63.66,
+    "engineHealthAfter": 1000.0,
+    "landRot": [
+     -6.74,
+     -57.83,
+     99.74
+    ],
+    "tookOff": true,
+    "airSeconds": 0.852,
+    "runUp": 18.0,
+    "amp": 0.0,
+    "ramp": {
+     "heading": 90.0,
+     "groundZ": 12.945,
+     "dim": [
+      4.03,
+      5.87,
+      1.54
+     ],
+     "model": "prop_mp_ramp_02",
+     "pos": [
+      -1205.0,
+      -3056.0,
+      13.728
+     ]
+    },
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "maxOmegaDeg": [
+     20.73,
+     29.47,
+     35.96
+    ],
+    "airFrames": 38,
+    "axis": "rien",
+    "landSpeed": 63.59,
+    "takeoffRot": [
+     11.29,
+     -30.32,
+     94.48
+    ]
+   },
+   "v_air_rien_2": {
+    "kmhTarget": 70,
+    "takeoffSpeed": 64.53,
+    "engineHealthAfter": 1000.0,
+    "landRot": [
+     -1.65,
+     -49.18,
+     107.77
+    ],
+    "tookOff": true,
+    "airSeconds": 0.91,
+    "runUp": 18.0,
+    "amp": 0.0,
+    "ramp": {
+     "heading": 90.0,
+     "groundZ": 12.945,
+     "dim": [
+      4.03,
+      5.87,
+      1.54
+     ],
+     "model": "prop_mp_ramp_02",
+     "pos": [
+      -1205.0,
+      -3056.0,
+      13.728
+     ]
+    },
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "maxOmegaDeg": [
+     15.18,
+     20.63,
+     29.09
+    ],
+    "airFrames": 35,
+    "axis": "rien",
+    "landSpeed": 64.31,
+    "takeoffRot": [
+     12.01,
+     -27.0,
+     94.99
+    ]
+   },
+   "v_air_roulis_1": {
+    "kmhTarget": 70,
+    "takeoffSpeed": 64.46,
+    "engineHealthAfter": 1000.0,
+    "landRot": [
+     5.51,
+     -35.48,
+     94.58
+    ],
+    "tookOff": true,
+    "airSeconds": 0.909,
+    "runUp": 18.0,
+    "amp": 1.0,
+    "ramp": {
+     "heading": 90.0,
+     "groundZ": 12.945,
+     "dim": [
+      4.03,
+      5.87,
+      1.54
+     ],
+     "model": "prop_mp_ramp_02",
+     "pos": [
+      -1205.0,
+      -3056.0,
+      13.728
+     ]
+    },
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "maxOmegaDeg": [
+     15.81,
+     57.38,
+     23.45
+    ],
+    "airFrames": 37,
+    "axis": "roulis",
+    "landSpeed": 62.84,
+    "takeoffRot": [
+     13.51,
+     -30.8,
+     92.87
+    ]
+   },
+   "v_air_roulis_2": {
+    "kmhTarget": 70,
+    "takeoffSpeed": 63.44,
+    "engineHealthAfter": 1000.0,
+    "landRot": [
+     -6.27,
+     -17.43,
+     97.49
+    ],
+    "tookOff": true,
+    "airSeconds": 0.92,
+    "runUp": 18.0,
+    "amp": 1.0,
+    "ramp": {
+     "heading": 90.0,
+     "groundZ": 12.945,
+     "dim": [
+      4.03,
+      5.87,
+      1.54
+     ],
+     "model": "prop_mp_ramp_02",
+     "pos": [
+      -1205.0,
+      -3056.0,
+      13.728
+     ]
+    },
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "maxOmegaDeg": [
+     33.47,
+     44.99,
+     13.98
+    ],
+    "airFrames": 37,
+    "axis": "roulis",
+    "landSpeed": 63.65,
+    "takeoffRot": [
+     11.91,
+     -30.14,
+     93.83
+    ]
+   },
+   "v_off_bitume_1": {
+    "full": 18.0,
+    "distance": 541.81,
+    "materials": {
+     "38": 0.05,
+     "48": 0.1193,
+     "21": 0.0887,
+     "19": 0.0985,
+     "1": 0.5675,
+     "0": 0.0029,
+     "4": 0.0573,
+     "43": 0.0157
+    },
+    "coastDecelG": 0.2368,
+    "coastFrom": 66.89,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 2.808,
+     "50": 1.899,
+     "30": 0.992,
+     "110": 6.339,
+     "90": 4.434
+    },
+    "vmax": 148.2,
+    "coastDistance": 39.36,
+    "coastTo": 0.0
+   },
+   "v_off_bitume_2": {
+    "full": 18.0,
+    "distance": 544.38,
+    "materials": {
+     "43": 0.0229,
+     "86": 0.0004,
+     "1": 0.5406,
+     "0": 0.0037,
+     "173": 0.0015,
+     "38": 0.0539,
+     "48": 0.1237,
+     "19": 0.1049,
+     "4": 0.0539,
+     "35": 0.0055,
+     "21": 0.089
+    },
+    "coastDecelG": 0.2183,
+    "coastFrom": 61.67,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 2.842,
+     "50": 1.918,
+     "30": 1.014,
+     "110": 6.232,
+     "90": 4.511
+    },
+    "vmax": 147.62,
+    "coastDistance": 36.24,
+    "coastTo": 0.0
+   },
+   "v_off_sable_1": {
+    "full": 18.0,
+    "distance": 484.41,
+    "materials": {
+     "48": 0.0888,
+     "19": 0.1465,
+     "44": 0.0016,
+     "11": 0.0744,
+     "21": 0.676,
+     "9": 0.0128
+    },
+    "coastDecelG": 0.449,
+    "coastFrom": 126.85,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 3.344,
+     "50": 2.189,
+     "30": 1.137,
+     "110": 8.7,
+     "90": 4.69
+    },
+    "vmax": 132.36,
+    "coastDistance": 91.1,
+    "coastTo": 0.0
+   },
+   "v_off_sable_2": {
+    "full": 18.0,
+    "distance": 284.71,
+    "materials": {
+     "19": 0.0354,
+     "44": 0.0069,
+     "54": 0.0846,
+     "23": 0.0225,
+     "21": 0.8506
+    },
+    "coastDecelG": 0.1286,
+    "coastFrom": 36.34,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "30": 1.154,
+     "70": 3.393,
+     "50": 2.187,
+     "90": 4.682
+    },
+    "vmax": 104.91,
+    "coastDistance": 10.2,
+    "coastTo": 0.0
+   },
+   "v_off_sable_3": {
+    "full": 25.0,
+    "distance": 547.93,
+    "materials": {
+     "48": 0.1918,
+     "21": 0.4743,
+     "19": 0.1167,
+     "44": 0.0013,
+     "11": 0.063,
+     "23": 0.1444,
+     "9": 0.0085
+    },
+    "coastDecelG": 0.1865,
+    "coastFrom": 52.69,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 3.346,
+     "50": 2.159,
+     "30": 1.151,
+     "110": 9.245,
+     "90": 5.935
+    },
+    "vmax": 132.41,
+    "coastDistance": 12.44,
+    "coastTo": 0.0
+   },
+   "v_off_bitume_3": {
+    "full": 25.0,
+    "distance": 622.15,
+    "materials": {
+     "43": 0.0104,
+     "86": 0.0001,
+     "1": 0.4783,
+     "0": 0.0023,
+     "173": 0.0005,
+     "38": 0.0375,
+     "48": 0.3032,
+     "19": 0.0792,
+     "4": 0.041,
+     "21": 0.0475
+    },
+    "coastDecelG": 0.3061,
+    "coastFrom": 86.49,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 2.837,
+     "50": 1.917,
+     "30": 0.985,
+     "110": 6.321,
+     "90": 4.421
+    },
+    "vmax": 146.9,
+    "coastDistance": 57.81,
+    "coastTo": 0.0
+   },
+   "v_off_sable_4": {
+    "full": 25.0,
+    "distance": 661.83,
+    "materials": {
+     "48": 0.1355,
+     "21": 0.4869,
+     "19": 0.1295,
+     "44": 0.0002,
+     "11": 0.0663,
+     "23": 0.1721,
+     "9": 0.0095
+    },
+    "coastDecelG": 0.4289,
+    "coastFrom": 121.19,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 3.432,
+     "50": 2.159,
+     "30": 1.143,
+     "110": 13.63,
+     "90": 4.83
+    },
+    "vmax": 126.45,
+    "coastDistance": 91.7,
+    "coastTo": 0.0
+   },
+   "v_off_bitume_4": {
+    "full": 25.0,
+    "distance": 719.39,
+    "materials": {
+     "43": 0.0097,
+     "86": 0.0003,
+     "1": 0.3795,
+     "0": 0.0022,
+     "173": 0.001,
+     "38": 0.0337,
+     "48": 0.2574,
+     "19": 0.2022,
+     "4": 0.0435,
+     "21": 0.0706
+    },
+    "coastDecelG": 0.0001,
+    "coastFrom": 0.03,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 2.815,
+     "50": 1.904,
+     "30": 0.983,
+     "110": 6.343,
+     "90": 4.456
+    },
+    "vmax": 146.85,
+    "coastDistance": 0.02,
+    "coastTo": 0.0
+   },
+   "v_off_sable_5": {
+    "full": 25.0,
+    "distance": 345.48,
+    "materials": {
+     "48": 0.0023,
+     "19": 0.4297,
+     "44": 0.003,
+     "11": 0.0518,
+     "21": 0.5132
+    },
+    "coastDecelG": -0.3105,
+    "coastFrom": 0.03,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 3.402,
+     "50": 2.178,
+     "30": 1.152,
+     "110": 11.611,
+     "90": 4.294
+    },
+    "vmax": 126.09,
+    "coastDistance": 59.13,
+    "coastTo": 87.74
+   },
+   "v_off_bitume_5": {
+    "full": 25.0,
+    "distance": 729.37,
+    "materials": {
+     "38": 0.0356,
+     "48": 0.2443,
+     "21": 0.0686,
+     "19": 0.1941,
+     "1": 0.401,
+     "0": 0.0024,
+     "4": 0.0427,
+     "43": 0.0112
+    },
+    "coastDecelG": 0.0468,
+    "coastFrom": 13.23,
+    "coast": 8.0,
+    "instrument": {
+     "topSpeedModifier": -1.0,
+     "engineHealth": 1000.0,
+     "neutre": true,
+     "powerIncrease": 1.0
+    },
+    "marks": {
+     "70": 2.802,
+     "50": 1.893,
+     "30": 0.99,
+     "110": 6.276,
+     "90": 4.444
+    },
+    "vmax": 147.33,
+    "coastDistance": 1.34,
+    "coastTo": 0.0
+   }
+  }
+ },
+ "constantes": {
+  "etagement": [
+   -3.33333,
+   3.33333,
+   1.94877,
+   1.39249,
+   1.0945,
+   0.94631,
+   0.9
+  ],
+  "essieuxMoteurs": "les deux",
+  "graviteParVehicule": 9.8,
+  "coupleDeRoulisEnVol": {
+   "degParSeconde2ParUnite": 78.4,
+   "radParSeconde2": 1.368,
+   "plus1": 77.1,
+   "moins1": -79.6,
+   "sansEntree": 0.4,
+   "fiabilite": "sure, 3 passes, ecart-type 2 a 4"
+  },
+  "coupleDeTangageEnVol": {
+   "fiabilite": "non obtenue : le tremplin imprime sa propre rotation"
+  },
+  "autoRedressementEnVol": {
+   "valeur": 0.0,
+   "mesure": "+1,8 et +0,4 deg/s2 sans entree",
+   "fiabilite": "sure, deux essais independants"
+  },
+  "redressementDepuisLeToit": {
+   "sansEntree_s": 2.25,
+   "gauche_s": 1.949,
+   "droite_s": 4.263,
+   "surLeCote_s": 0.41
+  },
+  "reductionAdherence": {
+   "reference_g": 1.339,
+   "binaire": 0.141,
+   "palier0": 0.15,
+   "palier1": 0.469,
+   "palier2": 0.567,
+   "palier3": 0.981,
+   "fiabilite": "ordre sur, valeurs a +-10 %"
+  },
+  "glissementAuDemarrage": {
+   "m422_4x4": 0.079,
+   "banshee_propulsion": "1,19 a 1,82"
+  },
+  "vitessePointeSurfaces": {
+   "bitume_kmh": 147.4,
+   "sable_kmh": "126 a 132",
+   "ecart": "-14 %",
+   "ecretageA130": false
+  },
+  "embrayageMinimum": {
+   "valeur": 0.1,
+   "traces": 283,
+   "images": 5033,
+   "note": "resout l ecart annonce a 0,29, qui venait d un echantillon etroit"
+  },
+  "coupureDePuissanceEnGlisse": {
+   "fiabilite": "non tranchee : regime et rapport non controles"
+  }
  }
 }

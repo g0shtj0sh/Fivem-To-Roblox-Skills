@@ -1045,6 +1045,11 @@ function Tests.skidpad(v, p)
     return res
 end
 
+-- Declares ici, definis plus bas (ils ont besoin de groundZ) : sans cette declaration
+-- anticipee, les essais places AVANT eux dans le fichier ne les voient pas.
+local stepObjects = {}
+local clearStepObjects, placeRamp
+
 --- Controle en l'air et auto-redressement.
 ---
 --- Le vehicule saute NATURELLEMENT : on monte la cote a plein gaz et on passe la crete. Aucune
@@ -1064,17 +1069,34 @@ function Tests.airtime(v, p)
     local amp = p.amp or 1.0
     local runUp = p.runUp or 12.0      -- duree de l'elan, plein gaz
     local airMax = p.airMax or 3.0     -- duree maximale enregistree en l'air
+    local kmh = p.kmh                  -- si donne, on lance a cette vitesse au lieu de plein gaz
+
+    -- tremplin optionnel : la crete de la cote ne donnait que 0,2 a 0,4 s d'air, trop peu et
+    -- contamine par l'atterrissage. Une rampe posee a `ramp` donne un vol franc.
+    local rampInfo = nil
+    if p.ramp then
+        clearStepObjects()
+        local info, err = placeRamp(v, p.ramp.x + 0.0, p.ramp.y + 0.0,
+                                    (p.ramp.z or 20.0) + 0.0, p.ramp.h or 0.0, p.ramp.model)
+        if not info then return { error = err } end
+        rampInfo = info
+    end
+
     if p.start then
         resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
     end
     settle(v)
     setLine(v)
 
-    local res = { axis = axis, amp = amp, runUp = runUp }
-    -- elan : plein gaz, tenue de ligne, jusqu'au decollage
+    local res = { axis = axis, amp = amp, runUp = runUp, ramp = rampInfo, kmhTarget = kmh }
+    -- elan : plein gaz (ou vitesse tenue si `kmh` est donne), tenue de ligne, jusqu'au decollage
     local nAirRun = 0
     local tOff = nil
-    hold(v, { throttle = 1.0 }, runUp, function(t)
+    hold(v, function()
+        if not kmh then return { throttle = 1.0 } end
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br }
+    end, runUp, function(t)
         if wheelsOnGround(v) == 0 then
             nAirRun = nAirRun + 1
             if nAirRun >= 2 and not tOff then
@@ -1130,6 +1152,9 @@ function Tests.airtime(v, p)
     res.engineHealthAfter = r(GetVehicleEngineHealth(v), 1)
     repairNow(v)
     settle(v)
+    if p.ramp and not p.keepRamp then
+        clearStepObjects()
+    end
     return res
 end
 
@@ -1756,7 +1781,6 @@ end
 --- d'une ligne droite validee. La marche obtenue est ensuite RELEVEE au rayon
 --- vertical, pour verifier sa hauteur reelle avant de mesurer quoi que ce soit.
 
-local stepObjects = {}
 
 --- Hauteur du sol sous (x, y). flags : 1 = terrain seul, 17 = terrain + objets.
 local function groundZ(v, x, y, zHint, flags)
@@ -1767,7 +1791,10 @@ local function groundZ(v, x, y, zHint, flags)
     return nil
 end
 
-local function clearStepObjects()
+-- Objets poses par les essais (marche, tremplin). Declares ICI, avant les essais, pour
+-- qu'ils soient visibles de tous : places plus bas, un essai anterieur dans le fichier ne
+-- les voyait pas et l'appel echouait a l'execution.
+function clearStepObjects()
     local n = 0
     for _, obj in ipairs(stepObjects) do
         if DoesEntityExist(obj) then
@@ -1779,6 +1806,73 @@ local function clearStepObjects()
     stepObjects = {}
     return n
 end
+
+--- Pose un tremplin et rend sa position. Meme methode que `buildstep` : on amene le vehicule
+--- sur zone pour que la collision du terrain soit la, on lit la hauteur du sol au rayon, puis on
+--- pose la rampe dessus. `prop_mp_ramp_01` fait 4,02 x 6,00 x 1,07 m ; `_02` monte a 1,53 m et
+--- `_03` a 2,42 m (mesures de `modelprobe`).
+function placeRamp(v, x, y, zHint, heading, model)
+    model = model or 'prop_mp_ramp_01'
+    local hash = GetHashKey(model)
+    if not IsModelInCdimage(hash) then return nil, 'modele absent : ' .. model end
+    RequestModel(hash)
+    local tw = GetGameTimer()
+    while not HasModelLoaded(hash) and GetGameTimer() - tw < 10000 do Wait(20) end
+    if not HasModelLoaded(hash) then return nil, 'modele non charge : ' .. model end
+
+    SetEntityCoordsNoOffset(v, x, y, zHint + 2.0, false, false, false)
+    SetEntityVelocity(v, 0.0, 0.0, 0.0)
+    local tw2 = GetGameTimer()
+    while GetGameTimer() - tw2 < 4000 do
+        RequestCollisionAtCoord(x, y, zHint)
+        Wait(50)
+        if HasCollisionLoadedAroundEntity(v) then break end
+    end
+    SetVehicleOnGroundProperly(v)
+    Wait(300)
+
+    local gz = groundZ(v, x, y, zHint, 1)
+    if not gz then
+        SetModelAsNoLongerNeeded(hash)
+        return nil, 'sol introuvable sous le tremplin'
+    end
+    local mn, mx = GetModelDimensions(hash)
+    -- l'origine du modele est au milieu : on le pose pour que son bas affleure le sol
+    local obj = CreateObject(hash, x, y, gz - mn.z, false, false, false)
+    SetEntityHeading(obj, heading + 0.0)
+    -- MESURE : CreateObject pose l'origine environ `dimZ` au-dessus du sol vise, pas `-mn.z`.
+    -- La rampe flottait donc de 54 cm et sa levre basse faisait un mur : le vehicule s'arretait
+    -- net devant, quelle que soit son orientation. PlaceObjectOnGroundProperly la rabat au sol.
+    if PlaceObjectOnGroundProperly then
+        PlaceObjectOnGroundProperly(obj)
+        Wait(100)
+    end
+    FreezeEntityPosition(obj, true)
+    SetEntityCollision(obj, true, true)
+    stepObjects[#stepObjects + 1] = obj
+    SetModelAsNoLongerNeeded(hash)
+    Wait(200)
+    local pos = GetEntityCoords(obj)
+    return { model = model, pos = { r(pos.x, 2), r(pos.y, 2), r(pos.z, 3) },
+             heading = r(heading, 2), dim = { r(mx.x - mn.x, 2), r(mx.y - mn.y, 2), r(mx.z - mn.z, 2) },
+             groundZ = r(gz, 3) }
+end
+
+--- Pose un tremplin seul (pour le reperer avant un essai de vol).
+function Tests.buildramp(v, p)
+    clearStepObjects()
+    local info, err = placeRamp(v, p.x + 0.0, p.y + 0.0, (p.z or 20.0) + 0.0,
+                                p.h or 0.0, p.model)
+    if not info then return { error = err } end
+    return { ramp = info }
+end
+
+--- Retire le tremplin.
+function Tests.clearramp(v, p)
+    return { deleted = clearStepObjects() }
+end
+
+
 
 --- Retire la marche construite.
 function Tests.clearstep(v, p)

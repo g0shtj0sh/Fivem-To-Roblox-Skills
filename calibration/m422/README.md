@@ -1266,6 +1266,165 @@ Non corrigé : la transmission du couple à embrayage patinant est aussi ce qui 
 où le moteur concorde avec GTA (creux de 1,8 par seconde des deux côtés, mesuré). La changer demanderait de
 revérifier tout le banc longitudinal, et c'est un travail à part.
 
+## Les aides arcade, mesurées (2026-11-12)
+
+Sept essais ajoutés à l'enregistreur pour les constantes que personne n'a publiées : contrôle en l'air,
+retournement, perte d'adhérence au démarrage, réduction d'adhérence du jeu, frein à main en virage,
+surfaces, et coupure de puissance en glisse. Véhicule `m422`, et une **propulsion puissante du jeu de
+base** (`banshee`) en comparaison, pour séparer ce qui tient au véhicule de ce qui tient au moteur du jeu.
+Mesures complètes : [`essais-arcade.json`](essais-arcade.json).
+
+### Ce que l'enregistreur sait lire en plus
+
+Dix canaux : étagement, frein à main vu par le jeu, échelle de braquage, turbo, gravité propre,
+multiplicateurs actifs, état de cabrage, température moteur, santé et caractère moteur de chaque roue,
+géométrie et flags de roue. Chaque essai rend aussi un **compte rendu d'instrument** : natives absentes du
+build, NaN rejetés par canal, et un drapeau `neutre` qui refuse l'essai si un modificateur est posé.
+
+Trois lectures tombent immédiatement :
+
+| Grandeur | Mesure |
+|---|---|
+| **Étagement réel** | marche arrière −3,333, puis **3,333 / 1,949 / 1,392 / 1,095 / 0,946 / 0,900** |
+| **Essieux moteurs** | les **deux** (`w0pwd` = `w2pwd` = 1), ce qui tranche l'ambiguïté de `fDriveBiasFront` |
+| **Gravité propre** | 9,8 — donc pas de multiplicateur tout-terrain sur ce véhicule |
+
+La 2ᵉ à 1,949 corrige l'inférence tirée de la poussée à plat (2,03, soit +4 %).
+
+**Aucune ressource du serveur ne modifie la physique** : pas un appel à `SetVehicleCheatPowerIncrease`,
+`SetVehicleReduceGrip`, `SetEntityMaxSpeed`, `ModifyVehicleTopSpeed` ni `SetVehicleHandling*` dans
+l'ensemble des ressources, et les canaux le confirment en jeu (`powInc` 1,0, `topMod` −1,0, santé moteur
+1000 à chaque essai). Le piège 5 du rapport ne s'applique donc pas ici.
+
+### Réduction d'adhérence : l'effet de chaque palier
+
+Un cercle à consigne et vitesse tenues, répété pour chaque réglage. C'est la constante la plus neuve.
+
+| Réglage | Latéral tenu | Part de la référence |
+|---|---|---|
+| référence | 1,339 g | 100 % |
+| `SetVehicleReduceGrip(true)` | 0,141 g | **11 %** |
+| palier 0 | 0,150 g | 11 % |
+| palier 1 | 0,469 g | 35 % |
+| palier 2 | 0,567 g | 42 % |
+| palier 3 | 0,981 g | **73 %** |
+
+Le mode binaire se comporte donc comme le **palier 0**, et les paliers vont du plus sévère (0) au plus
+doux (3). Réserve : une passe par cas, et le véhicule glisse beaucoup aux paliers bas (dérive de caisse de
+17 à 41 °), donc le plateau n'est pas un régime établi franc. L'ordre et les ordres de grandeur sont sûrs,
+les valeurs à ±10 %.
+
+### Contrôle en l'air et auto-redressement
+
+Le vol se fait sur un **tremplin posé** (`prop_mp_ramp_02`), approché à 70 km/h : environ une seconde de
+vol libre, mesurée sur les images où les quatre compressions de suspension sont nulles. L'entrée n'est
+appliquée que pendant ce vol. Trois passes par cas.
+
+| Axe | +1 | −1 | sans entrée | **Couple par unité de consigne** |
+|---|---|---|---|---|
+| **roulis** | +77,1 °/s² | −79,6 °/s² | +0,4 °/s² | **78,4 °/s², soit 1,37 rad/s²** |
+| tangage | +91,7 °/s² | +46,6 °/s² | +1,8 °/s² | non séparable |
+
+Le **roulis est net** : symétrique, biais nul, écart-type de 2 à 4 °/s² sur trois passes. Le **tangage ne
+l'est pas** : l'accélération sort positive dans les deux sens, parce que le tremplin imprime lui-même une
+rotation de tangage qui domine et diffère d'une passe à l'autre. L'entrée agit bien — l'assiette finale
+passe de +25,4 ° à −33,9 ° selon son signe — mais son gain n'est pas isolé par cet essai.
+
+**Il n'y a pas de couple d'auto-redressement en vol.** Sans entrée, les accélérations angulaires valent
++1,8 et +0,4 °/s² : le véhicule **conserve** sa rotation. Un essai antérieur, où il partait à plat et sans
+rotation, le confirme en négatif — sa vitesse angulaire est restée exactement nulle pendant toute la chute.
+Ce que les mods appellent « auto-correction en vol » n'est donc pas un couple de redressement continu.
+
+### Retournement
+
+Véhicule posé sur le toit ou sur le côté, puis gauche, droite, ou rien.
+
+| Cas | Se redresse en | Vitesse de roulis max |
+|---|---|---|
+| sur le toit, **sans entrée** | **2,25 s** | 64,3 °/s |
+| sur le toit, gauche | 1,95 s | 92,0 °/s |
+| sur le toit, droite | 4,26 s | 77,5 °/s |
+| sur le côté (les trois cas) | 0,41 s | 168,5 °/s |
+
+**GTA redresse le véhicule tout seul**, sans aucune entrée, en 2,25 s depuis le toit. L'entrée ne fait
+qu'accélérer ou ralentir le mouvement, et de façon **asymétrique** (1,95 s contre 4,26). Sur le côté, le
+véhicule retombe de lui-même en 0,41 s quelle que soit l'entrée : c'est de la gravité, pas une aide.
+
+### Perte d'adhérence au démarrage : c'est le véhicule, pas une aide
+
+Plein gaz et frein à l'arrêt avec braquage alterné, puis départ arrêté.
+
+| | Lacet gaz+frein | Départ 4 s | **Glissement de roue max** |
+|---|---|---|---|
+| `m422` (4 roues motrices) | 7,1 °/s | 67,9 km/h sur 45,4 m | **0,079** |
+| `banshee` (propulsion) | 5,3 °/s | 88,4 km/h sur 57,2 m | **1,19 à 1,82** |
+
+La propulsion patine de 119 à 182 %, le quatre roues motrices de 7,9 %. La perte d'adhérence au démarrage
+est donc **une propriété du véhicule**, pas une aide globale du jeu. Et le « magic movement » de burnout
+n'apparaît sur aucun des deux : gaz et frein ensemble ne donnent que 5 à 7 °/s de lacet et moins de 20 cm
+de déplacement. L'état de cabrage reste à **0** dans tous les cas, et non à 1 comme l'annonce le rapport
+pour « pas de cabrage ».
+
+### Frein à main en virage
+
+Braquage à 0,5 posé, puis frein à main une seconde.
+
+| Vitesse | Phase | Braquage | Lacet | Dérive | Glissement arrière |
+|---|---|---|---|---|---|
+| 40 km/h | avant | 7,52 ° | 25,0 °/s | 1,36 ° | +0,001 |
+| | **pendant** | **4,64 °** | 32,4 °/s | 4,84 ° | **−0,688** |
+| | après | 11,37 ° | 29,7 °/s | 3,19 ° | +0,006 |
+| 70 km/h | avant | 3,98 ° | 21,9 °/s | 0,65 ° | +0,002 |
+| | **pendant** | 3,97 ° | 39,1 °/s | 10,03 ° | **−0,633** |
+| | après | 5,63 ° | 28,5 °/s | 3,95 ° | +0,007 |
+
+Trois choses. Le **fondu de braquage n'est pas relâché** : à 40 km/h l'angle de roue *baisse* même
+(7,52 → 4,64 °), ce qui est la réduction en glisse déjà mesurée, puisque la dérive y monte à 4,84 ° ; à
+70 km/h il ne bouge pas. Les roues arrière **ne se bloquent pas complètement** (−0,69 et −0,63, pas −1,0).
+Et le canal `hbOn` passe bien à 1, ce qui prouve que la consigne injectée est prise par le jeu.
+
+### Surfaces : −14 % de vitesse de pointe, et pas d'écrêtage à 130
+
+Avec la `banshee`, cinq passes de chaque côté.
+
+| Surface | Vitesse de pointe |
+|---|---|
+| bitume (matériau 1) | 146,8 / 146,9 / 147,3 / 147,6 / 148,2 → **147,4 km/h** |
+| sable (matériau 21) | 126,1 / 126,5 / 132,4 / 132,4 → **126 à 132 km/h** |
+
+Le sable coûte donc **14 %** de vitesse de pointe. **Il n'y a pas d'écrêtage dur à 130 km/h** : deux passes
+le dépassent. La décélération en roue libre ne sépare pas proprement la traînée de surface d'un plafond,
+les deux sites n'étant pas assez homogènes sur la distance de roue libre (0,19 à 0,45 g sur sable, 0,22 à
+0,31 sur bitume).
+
+### Deux questions tranchées, une qui reste
+
+**L'écart d'embrayage est un artefact d'échantillon.** Le rapport notait 0,1 dans le code du jeu contre
+~0,29 dans la télémétrie. Sur **283 traces**, le minimum de `GetVehicleClutch` vaut exactement **0,1000**,
+observé sur 5033 images. La native descend donc bien à la valeur du code ; le 0,29 venait d'un essai où
+l'embrayage n'est jamais descendu plus bas.
+
+**La coupure de puissance en glisse n'est ni prouvée ni réfutée.** En ligne droite à plein gaz la puissance
+de roue vaut 0,32 à 0,34 pour un régime de 0,86 ; en glisse tenue (dérive 27 à 29 °) elle vaut 0,52 à 0,53
+pour un régime de 0,46 à 0,48. La puissance est donc **plus élevée** en glisse, ce qui contredit la coupure
+— mais le régime et le rapport diffèrent entre les deux phases, donc la comparaison n'est pas valide. Pour
+trancher il faudrait tenir le **même rapport et le même régime** des deux côtés, ce que cet essai ne force
+pas encore.
+
+### Fiabilité des constantes
+
+| Constante | Valeur | Fiabilité |
+|---|---|---|
+| Étagement | 3,333 / 1,949 / 1,392 / 1,095 / 0,946 / 0,900 | **sûre** — lue directement, une fois |
+| Couple de roulis en l'air | 1,37 rad/s² par unité de consigne | **sûre** — 3 passes, symétrique, σ 2 à 4 °/s² |
+| Auto-redressement en vol | nul | **sûre** — deux essais indépendants |
+| Redressement depuis le toit | 2,25 s sans entrée | **sûre** sur le principe, 1 passe par cas |
+| Paliers de réduction d'adhérence | 11 / 11 / 35 / 42 / 73 % | **ordre sûr, valeurs à ±10 %** — 1 passe, régime pas franc |
+| Glissement au démarrage | 0,08 (4×4) contre 1,2 à 1,8 (propulsion) | **sûre** — 3 passes chacun |
+| Vitesse de pointe sur sable | −14 % | **sûre** — 5 passes bitume, 4 sable |
+| Couple de tangage en l'air | — | **non obtenue** — le tremplin imprime sa propre rotation |
+| Coupure de puissance en glisse | — | **non tranchée** — régime et rapport non contrôlés |
+
 ## Limites de cette campagne
 
 - **Longueur de piste : 671 m.** Suffisant pour tout ce qui précède — la vitesse de pointe

@@ -65,6 +65,14 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 | `slalom` | braquage sinusoïdal | `maxRoll`, `maxYawRate`, `maxSlip` |
 | `skidpad` | **cercle à consigne constante, vitesse tenue** : sépare la dérive de la vitesse | `plateau` (`wheelDeg`, `beta`, `yawRate`, `latG`, `radius`, `tyreFront/Rear`), `buckets` (½ s) |
 | `thrust` | **poussée à pente et vitesse imposées** : monte à vitesse tenue jusqu'à un seuil de pente, puis plein gaz sur une fenêtre courte | `accel`, `slopePct` (pente de la **trajectoire**), `entrySpeed`, `exitSpeed`, `gear`, `rpm` |
+| `airtime` | **vol sur tremplin posé** : élan, décollage, entrée appliquée seulement pendant le vol libre | `tookOff`, `airSeconds`, `maxOmegaDeg`, `landRot`, `ramp` |
+| `flip` | véhicule sur le toit ou sur le côté, avec ou sans entrée | `rightedAt`, `maxRollRateDeg`, `endRoll`, `endWheels` |
+| `burnout` | gaz + frein à l'arrêt avec braquage alterné, puis départ arrêté | `burnoutYawMax`, `burnoutWheelieMax`, `launchSpeed`, `launchMaxSlip` |
+| `reducegrip` | cercle tenu, pour `SetVehicleReduceGrip` et chaque palier de `SetVehicleReduceGripLevel` | `plateau` (`latG`, `radius`, `yawRate`, `beta`), `hasReduce`, `hasLevel` |
+| `handbrake_corner` | frein à main une seconde en entrée de virage | `avant` / `pendant` / `apres` : `wheelDeg`, `yawRate`, `beta`, `kappaRear`, `hbOn` |
+| `offroad` | accélération puis roue libre sur une surface donnée | `vmax`, `marks`, `materials` (histogramme par roue), `coastDecelG` |
+| `slidepower` | plein gaz en ligne droite puis en glisse tenue | `droite` / `glisse` : `power`, `rpm`, `gear`, `beta` |
+| `buildramp`, `clearramp` | pose et retire un tremplin (`prop_mp_ramp_01/02/03`) | `ramp` (`pos`, `dim`, `groundZ`) |
 | `raw` | entrées constantes (diagnostic) | cap parcouru, angle de roue |
 | `surfscan` | relevé du sol le long d'une ligne | profil `d, z, matériau, pitch, roll` |
 | `roadscan` | relevé **en travers** d'une route (noeud routier le plus proche) | profil `offset, z, matériau` |
@@ -78,7 +86,24 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 Paramètres communs : `start` (`{x, y, z, h}` : le véhicule est réparé, remis à plat et
 arrêté là avant l'essai), `seconds`, `kmh`, `steer`.
 
-### Mesurer la direction en cercle
+### Trois pièges mesurés sur ce build
+
+- **La taille d'un envoi réseau, pas sa fréquence.** Un lot de 250 lignes de 79 colonnes pèse 130 Ko et fait
+  éjecter le client (« Malformed network event payload » à l'écran, « going over a rate limit » dans le
+  journal du serveur). Le lot se calcule donc à partir du nombre de colonnes pour viser 40 Ko : ajouter un
+  canal ne peut plus faire déborder l'événement.
+- **`rawget(_G, nom)` ne voit aucune native.** Dans FiveM elles sont exposées par métatable : le sondage
+  doit passer par `_G[nom]`, sans quoi toutes paraissent absentes du build.
+- **Le matériau de surface ne vaut pas 0 en l'air.** À 70 m du sol il rend encore 1 pour les quatre roues.
+  C'est la **compression de suspension** qui tombe exactement à 0 : c'est elle qui dit si une roue porte.
+
+## Ne jamais imposer la physique du véhicule
+
+Une première version de l'essai de vol posait le véhicule à 25 m avec une vitesse et une vitesse angulaire
+imposées. Elle a fait **crasher le jeu**, deux fois, et fait éjecter le client avant cela. L'essai saute
+maintenant sur un **tremplin posé** et ne force rien : il roule, il décolle, il enregistre.
+
+## Mesurer la direction en cercle
 
 Les essais en virage ne peuvent pas identifier une loi de direction : la vitesse tombe, la dérive monte et
 le temps avance **ensemble**, donc n'importe quelle fonction décroissante colle. `skidpad` tient une
