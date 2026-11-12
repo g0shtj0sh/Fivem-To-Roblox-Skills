@@ -404,6 +404,14 @@ Le banc longitudinal, relancé après ces changements, reste à **5,3 %** : `Pea
 
 ### `PeakFactor` : la dérive du pneu, calculée dans les traces
 
+> ⚠ **Corrigé le 2026-11-12 (après-midi)** — la formule ci-dessous prend le mauvais signe. Dans la
+> télémétrie FiveM, `vLat` est positif vers la **droite** (`GetEntitySpeedVector(veh, true).x`) et `wz`
+> vers le haut : la vitesse latérale à l'essieu avant vaut `vLat − a · wz` (ω × r), pas `vLat + a · wz`.
+> Avec le bon signe, GTA tient au virage 40 établi ses pneus avant à **9,35 °** et arrière à **8,34 °**
+> (3 passes, σ 0,05 °), et la géométrie se referme : β = atan(b/R) − α_arrière = 12,6 − 8,3 = 4,3 °, pour
+> 4,44 ° mesurés. Le texte d'origine est conservé ci-dessous ; la conclusion « pic au-delà de 15 °,
+> `PeakFactor` 0,8 à 1,0 » ne tient pas. Voir « `PeakFactor` rebalayé en 3D » plus bas.
+
 La correction de 0,25 à 0,5 est juste : mes 4,4 ° étaient la dérive de la **caisse**. Mais les « ≈ 9 ° »
 retenus comme dérive du pneu sont en fait l'angle de la **vitesse à l'essieu avant**. La dérive d'un pneu
 est l'écart entre le plan de la roue et sa vitesse, donc il faut encore retirer le braquage :
@@ -606,6 +614,174 @@ le véhicule glisse. Cette réduction-là reste à caler, et demanderait une pis
   ni confirmée ni infirmée.
 - Reproduction : scripts disponibles (`TestTrack.lua`, `DriveBench.lua`, `tools/drive-compare/`) ;
   la séquence complète prend ≈ 6 min de Play.
+
+## `PeakFactor` rebalayé en 3D (Studio, 2026-11-12, après-midi)
+
+Même protocole que « Vérification en 3D » (PC Studio, un joueur, `m422` converti, piste `TestTrack`,
+`DriveBench` côté client, analyseur commun). Runtime de départ `4ef18427ca1c` (direction mesurée,
+commit `85203d1`) ; runtime final `2b8eef57da8e` (ce commit). Moteur déterministe : une passe par point,
+le point PF 0,8 / virage 40 rejoué à l'identique.
+
+### Ce qui a changé dans le banc
+
+- **Zone morte de l'axe GTA** : `DriveBench` alimente le moteur avec la demande **effective**
+  `sign(c) × max(0, (|c| − 0,25) / 0,75)` (`Bench.gtaAxis`) : créneau 0,50 → 1/3, slalom 0,5 sin → sinus
+  écrêté (bande morte autour de chaque passage par zéro), virages 1,00 → 1,00. La colonne `str` garde la
+  consigne brute, comme les traces FiveM (l'analyseur y cale le début des fenêtres) ; `strEff` donne la
+  demande réelle et `steerDeg` le braquage de roue appliqué par `VehicleDynamics`.
+- **Dérive des pneus et braquage de roue** dans l'analyseur commun (`opts.axleFront/axleRear` ; m422 :
+  1,38 / 1,41 m) : `lune run tools/drive-compare/gta.luau calibration/m422/fivem 1.38 1.41`, sortie de
+  référence [`fivem-analyse-pneus.json`](fivem-analyse-pneus.json). Sans ces arguments, la sortie
+  [`fivem-analyse.json`](fivem-analyse.json) est inchangée (vérifié).
+
+### 1. Le créneau avant tout réglage
+
+`PeakFactor` 0,5, `RollCentreScale` 1, demande effective 1/3 : **29,7 °/s** de lacet (GTA 29,30),
+braquage de roue **5,01 °** à 59,9 km/h (GTA 5,00 ° à 58,1 km/h dans la fenêtre 1,0–1,8 s). La loi
+donne 5,02 ° à 59,9 km/h et 5,25 ° à 58,1 : l'écart au 5,25 ° prévu vient de la vitesse tenue par le banc,
+pas de la direction. Rien d'autre en cause : on a pu continuer.
+
+### 2. La dérive des pneus de GTA, avec le bon signe
+
+| Essai (fenêtre établie) | Braquage de roue | Pneu avant | Pneu arrière | Latéral |
+|---|---|---|---|---|
+| Créneau (1,0–1,8 s) | 5,00 ° | **3,17 °** | **3,05 °** | 0,832 g |
+| Virage 40 (2–4 s) | 25,90 ° | **9,35 °** | **8,34 °** | 1,694 g |
+| Virage 80 (1,0–1,27 s, transitoire) | **8,27 °** | 11,55 ° | 11,62 ° | 2,026 g |
+
+`a` = 1,38 m, `b` = 1,41 m (centre de gravité du m422 converti) ; 3 passes, σ ≤ 0,2 °. Deux lectures :
+le pneu de GTA est plus raide au début (0,27 g/° à 3 °) qu'à 9 ° (0,18 g/°) — une courbe qui s'infléchit
+tôt — et au virage 80 GTA **ne braque que 8,3 °** à 70 km/h, là où la loi à consigne constante donne
+11,6 ° : c'est la réduction du braquage en glisse (non modélisée, voir « Ce que la pleine butée ne permet
+pas de mesurer »). Le virage 80 ne peut donc pas servir à régler `PeakFactor` tant que ce comportement
+manque : Roblox y braque 10,6–11,8 ° et ses pneus avant passent le pic.
+
+### 3. Une cause parasite : la boîte rétrogradait en virage
+
+Au virage 40, `PeakFactor` 0,7 et 0,8 s'effondraient (32 km/h, 1,39–1,42 g). Trace image par image : la
+2ᵉ tient 36 km/h à 0,85 de gaz, puis la boîte rétrograde en 1ʳᵉ (`DownshiftRpm` 0,45, ≈ 34–36 km/h en 2ᵉ),
+les gaz passent à 1, la boîte pompe 1↔2 et la vitesse chute. GTA reste en 2ᵉ (36,5 km/h, 0,79 de gaz).
+Dans les traces GTA, 2→1 se fait **sous gaz à 0,348–0,353** (virage 80, 3 passes, 30,2–30,6 km/h) et **en
+roue libre à 0,404–0,410** (34 km/h). D'où `DownshiftRpmThrottle` = 0,35 (sous gaz) ; `DownshiftRpm` 0,45
+reste pour les gaz relâchés (à 0,35, la roue libre 110-30 du banc longitudinal passe de −1,7 % à +9,2 %).
+Banc longitudinal après : **5,3 %**, inchangé. C'est aussi, très probablement, la cause du « au-delà de
+0,55 l'adhérence bascule » du premier balayage (non rejoué avec l'ancienne direction).
+
+### 4. Balayage
+
+Virage 40 avec la boîte corrigée (`RollCentreScale` 1) :
+
+| `PeakFactor` | Latéral établi | Rayon | Dérive caisse | Pneus av. / arr. | Vitesse établie |
+|---|---|---|---|---|---|
+| **GTA** | **1,694 g** | **6,288 m** | **4,44 °** | **9,35 / 8,34 °** | **36,5 km/h** |
+| 0,5 (boîte 0,45) | 1,684 | 6,48 | 4,87 | 9,06 / 7,55 | 37,2 |
+| **0,55** | **1,675** | **6,37** | **4,35** | **9,54 / 8,26** | **36,8** |
+| 0,6 | 1,667 | 6,27 | 3,85 | 10,02 / 8,95 | 36,5 |
+| 0,7 | 1,644 | 6,12 | 2,79 | 11,06 / 10,29 | 35,8 |
+| 0,8 | 1,606 | 6,06 | 1,66 | 12,28 / 11,52 | 35,2 |
+
+Autres essais, boîte d'origine (`DownshiftRpm` 0,45), `RollCentreScale` 1 :
+
+| `PeakFactor` | Créneau : dérive caisse, pneus av./arr. | Virage 80 : latéral, rayon | Slalom : lacet max |
+|---|---|---|---|
+| **GTA** | **0,59 °, 3,17 / 3,05 °** | **2,026 g, 18,8 m** | **25,16 °/s** |
+| 0,4 | 0,73 °, 3,26 / 3,23 ° | 1,197 g, 34,0 m | 28,1 |
+| 0,45 | 1,13 °, 3,67 / 3,63 ° | 1,312 g, 30,1 m | 27,8 |
+| 0,5 | 1,53 °, 4,08 / 4,04 ° | 1,465 g, 26,4 m | 27,4 |
+| 0,6 | 2,32 °, 4,89 / 4,84 ° | 1,620 g, 22,9 m | 26,6 |
+| 0,8 | 3,88 ° | 1,804 g, 19,2 m | 24,9 |
+| 0,9 | 4,64 ° | 1,858 g, 18,1 m | 24,1 |
+| 1,0 | 5,37 ° | 1,913 g, 17,0 m | 23,4 |
+
+À 0,9 et 1,0, le virage 40 (boîte d'origine) donnait 1,91 g à 38 km/h, rayon 6,05 / 5,86 m :
+vraisemblablement tenu en 1ʳᵉ (non relevé), donc non comparable.
+
+**Retenu : `PeakFactor` 0,55.** C'est le seul point qui tient à la fois le rayon, la dérive de caisse,
+les deux dérives de pneus et la vitesse du virage 40, à 2 % près. Pas besoin d'aller au-delà de 1,0 :
+il fallait au contraire **rester sous 0,6**.
+
+**Ce qu'aucune valeur ne tient** : le créneau voudrait 0,4 (pneus à 3,2 ° pour 0,83 g), le virage 40
+0,55. Le pneu Roblox est linéaire jusqu'au pic puis décroît (`F = fmax × min(s, 1)`) ; celui de GTA
+s'infléchit tôt. Un seul `PeakFactor` ne peut pas reproduire les deux pentes : il faudrait une courbe de
+pneu à inflexion progressive. Le virage 80 voudrait 0,9, mais il est faussé par l'absence de réduction du
+braquage en glisse (§ 2).
+
+### 5. `RollCentreScale`
+
+`PeakFactor` 0,55, boîte corrigée :
+
+| `RollCentreScale` | Virage 40 : roulis, latéral, rayon, vitesse | Créneau : roulis, latéral | Virage 80 : roulis, latéral, rayon |
+|---|---|---|---|
+| **GTA** | **1,714 °, 1,694 g, 6,29 m, 36,5 km/h** | **0,859 °, 0,832 g** | **1,848 °, 2,026 g, 18,8 m** |
+| 1 | 0,38 °, 1,675 g, 6,37 m, 36,8 | 0,20 °, 0,878 g | 0,39 °, 1,536 g, 24,6 m |
+| 0,5 | 0,97 °, 1,659 g, 6,26 m, 36,3 | 0,52 °, 0,861 g | 1,00 °, 1,568 g, 26,6 m |
+| **0,25** | **1,26 °, 1,650 g, 6,14 m, 35,9** | **0,67 °, 0,853 g** | **1,25 °, 1,625 g, 26,1 m** |
+| 0,1 | 0,79 °, **0,889 g**, 5,01 m, **23,8** | 0,76 °, 0,848 g | 1,38 °, 0,627 g, 60,8 m |
+| 0 | 1,11 °, **1,156 g**, 4,97 m, **27,0** | 0,82 °, 0,845 g | 3,52 °, 1,493 g, 19,6 m |
+
+**Retenu : 0,25** (0,76 °/g ; GTA 1,01 °/g). C'est la valeur la plus basse qui tient. À 0,1 et 0, le virage 40
+s'effondre. **Cause démontrée** par une trace roue par roue (RCS 0) : la roue **arrière intérieure** se
+déleste et patine (vitesse de roue 77 puis 130 km/h pour 35 km/h de véhicule). Le régime, calculé sur la
+moyenne des roues motrices, s'emballe, la boîte monte en 3ᵉ et le véhicule perd sa motricité. GTA roule par
+moments sur 2 ou 3 roues au virage 40 sans rien perdre. Pour atteindre 1 °/g, il faut d'abord traiter ce
+patinage (répartition du couple vers les roues chargées, régime pris sur la vitesse du véhicule ou sur
+les roues au sol), puis redescendre ce réglage.
+
+### 6. Avant / après, valeurs par défaut du module
+
+« Avant » = runtime `4ef18427ca1c` (`PeakFactor` 0,5, `RollCentreScale` 1, rétrogradage à 0,45), banc avec
+zone morte. « Après » = runtime `2b8eef57da8e` (`PeakFactor` 0,55, `RollCentreScale` 0,25,
+`DownshiftRpmThrottle` 0,35), aucun réglage en direct (les chiffres retombent au centième sur ceux du
+balayage).
+
+| Essai | Mesure | GTA | Avant | Après |
+|---|---|---|---|---|
+| Virage 40 | latéral établi / pic | 1,694 / 1,829 g | 1,684 / 1,709 g | 1,650 / 1,711 g |
+| | rayon | 6,288 m | 6,48 m | 6,14 m |
+| | lacet max | 97,3 °/s | 91,5 °/s | 93,0 °/s |
+| | roulis établi / max | 1,714 / 1,891 ° | 0,38 / 0,38 ° | **1,26 / 1,28 °** |
+| | dérive de caisse établie | 4,44 ° | 4,87 ° | 4,02 ° |
+| | pneus av. / arr. | 9,35 / 8,34 ° | 9,06 / 7,55 ° | 9,89 / 9,05 ° |
+| | **braquage de roue appliqué** | 25,90 ° | 25,66 ° | **26,33 °** (35,9 km/h) |
+| | vitesse en fin | 38,23 km/h | 37,2 km/h | 35,9 km/h |
+| Virage 80 (0–1,27 s) | latéral établi / pic | 2,026 / 2,244 g | 1,465 / 2,58 g | 1,596 / 2,48 g |
+| | rayon | 18,82 m | 26,39 m | 26,59 m |
+| | lacet max | 60,7 °/s | 66,8 °/s | 64,4 °/s |
+| | roulis établi / max | 1,848 / 1,887 ° | 0,39 / 0,43 ° | **1,25 / 1,40 °** |
+| | **braquage de roue appliqué** | 8,27 ° | 11,53 ° (max 11,82) | **10,56 °** (max 10,68, 73,5 km/h) |
+| Créneau 60 (1/3) | latéral établi | 0,832 g | 0,879 g | 0,853 g |
+| | rayon | 32,76 m | 32,14 m | 33,04 m |
+| | lacet max | 29,30 °/s | 29,7 °/s | 28,9 °/s |
+| | roulis établi | 0,859 ° | 0,20 ° | **0,67 °** |
+| | dérive de caisse | 0,59 ° | 1,53 ° | 1,89 ° |
+| | **braquage de roue appliqué** | 5,00 ° | 5,01 ° | **5,02 °** (59,9 km/h) |
+| Slalom 60 (écrêté) | lacet max | 25,16 °/s | 27,4 °/s | 26,6 °/s |
+| | roulis max | 0,675 ° | 0,15 ° | 0,49 ° |
+| | pic latéral | 0,737 g | 0,818 g | 0,798 g |
+| | **braquage de roue max** | 4,95 ° | 4,94 ° | **4,93 °** |
+| Frein à main 60-0 | distance, décélération | 20,0 m, 0,71 g | 15,7 m (matin) | **17,96 m, 0,77 g** |
+| | lacet max | 0,13 °/s | 1,4–2,0 °/s (matin) | 1,03 °/s |
+| Côte 16,5 % | plein gaz 4 s | 45,1 km/h, 32,5 m | 36,7 km/h, 32,8 m (matin) | 40,9 km/h, **22,9 m** |
+| | tout relâché 2 s | 0,0 cm | 5,7 cm (matin) | 6,7 cm |
+
+Le braquage GTA de ce tableau est la moyenne des deux roues avant dans la **fenêtre établie** de
+l'analyseur (virage 40 : 2–4 s) ; le 26,17 ° cité ailleurs est pris sur une autre fenêtre.
+
+Frein à main et côte : une passe chacun, observés sans cause isolée (`PeakFactor`, `RollCentreScale` et
+le seuil de rétrogradage sous gaz ont changé ensemble). La côte arrive plus vite (40,9 km/h) mais sur
+22,9 m au lieu de 32,8 : démarrage plus lent puis reprise. Ni amélioré ni dégradé franchement. À rejouer
+séparément.
+
+### 7. Ce qui reste
+
+- **Forme du pneu** : un seul `PeakFactor` ne tient pas à la fois le créneau (0,4) et le virage 40 (0,55).
+- **Réduction du braquage en glisse** (GTA : 8,3 ° au virage 80 au lieu de 11,6 °) : tant qu'elle manque,
+  le virage 80 Roblox sous-vire (rayon 26,6 m contre 18,8) et ne peut pas servir au calage.
+- **Roulis à 0,76 °/g** au lieu de 1,0 : bloqué par le patinage de la roue intérieure délestée (§ 5).
+- **Limites** : PC Studio, un joueur, une passe par point (moteur déterministe), un seul véhicule.
+  Repro : scripts disponibles (`DriveBench.lua`, `TestTrack.lua`, `tools/drive-compare/`), ≈ 1 min de
+  Play par point de balayage. Reproduction vérifiée pour la passe finale (valeurs par défaut = valeurs du
+  balayage au centième).
 
 ## Limites de cette campagne
 

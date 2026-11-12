@@ -22,21 +22,16 @@ Dyn.Tuning = {
 	-- calibration/m422/README.md et les traces de calibration/m422/fivem/.
 	KMu = 1.0, -- échelle de TractionCurveMax/Min en « g ». MESURÉ : 100-0 km/h roues bloquées donne 1,88 g de
 	-- moyenne et 2,09–2,14 g de pic pour fTractionCurveMax = 1,90 → le champ EST une accélération en g.
-	PeakFactor = 0.5, -- pic latéral = TractionCurveLateral × PeakFactor. VÉRIFIÉ EN STUDIO (2026-11-12, banc 3D,
-	-- calibration/m422/README.md « Vérification en 3D ») : au virage 40 km/h établi GTA tient ses pneus AVANT à
-	-- ≈ 9 ° de dérive et à 80 km/h à ≈ 10 °, soit 19 ° × 0,5. Le 0,25 du 2026-11-12 (nuit) prenait la dérive de
-	-- CAISSE (4,4 °) pour celle des pneus : sur un rayon de 6,3 m la géométrie seule en donne déjà ≈ 12,8 °.
-	-- Banc 3D, virage 40 : 0,25 → dérive 7,7 °, rayon 6,85 m ; 0,5 → 5,4 °, 6,12 m (GTA 4,4 °, 6,29 m) ;
-	-- au-delà de 0,5 l'adhérence bascule (0,55 → sortie à 30 km/h au lieu de 38).
-	-- À REPRENDRE EN 3D, la raison de garder 0,5 ayant disparu. Ce balayage a été fait quand la direction
-	-- braquait 2,4 fois trop (voir SteerFade, corrigé depuis) : il lui fallait donc moins d'adhérence par
-	-- degré de dérive pour retomber sur la dérive de caisse observée, et « au-delà de 0,5 ça bascule » était
-	-- un symptôme de ce défaut. Le calcul direct dans les traces donne 13,7 à 17,2 ° de dérive de PNEU avant
-	-- au virage 40 établi (braquage de roue 24,9–26,2 ° moins l'angle de la vitesse à l'essieu avant), pour
-	-- 1,69 g seulement alors que fTractionCurveMax vaut 1,90 : le pneu n'est pas encore à son pic, donc le
-	-- pic de GTA est AU-DELÀ de 15 ° et PeakFactor vaut plutôt 0,8 à 1,0. Les « ≈ 9 ° » ci-dessus sont
-	-- l'angle de la vitesse à l'essieu avant, pas la dérive du pneu. À rebalayer maintenant que le braquage
-	-- est juste — et avant RollCentreScale, qui dépend de l'adhérence établie.
+	PeakFactor = 0.55, -- pic latéral = TractionCurveLateral × PeakFactor. REBALAYÉ EN 3D (2026-11-12, après la
+	-- direction mesurée, banc avec zone morte, DownshiftRpm 0,35) de 0,4 à 1,0 : 0,55 tient le virage 40 km/h
+	-- établi à 1,675 g / 6,37 m / dérive de caisse 4,35 ° (GTA 1,694 g / 6,29 m / 4,44 °) et ses pneus à
+	-- 9,5 ° avant / 8,3 ° arrière (GTA 9,35 / 8,35). Dérive des pneus = braquage − angle de la vitesse à
+	-- l'essieu, l'essieu avant allant à vLat − a·wz (x à DROITE dans la télémétrie FiveM) : le « vLat + a·wz »
+	-- qui donnait 13,7–17,2 ° et poussait vers 0,8–1,0 inversait ce signe (il donne 34 ° avec le braquage
+	-- signé). Au-delà, 0,6 → 6,27 m mais dérive 3,85 ° ; 0,8 → 6,06 m, 1,66 °, pneus 12,3 / 11,5 °. Limite :
+	-- au créneau (0,83 g) GTA est plus raide (pneus à 3,1 °, Roblox 4,5 ° à 0,55) — la forme du pneu
+	-- (linéaire jusqu'au pic) ne peut pas tenir les deux points. Le « bascule au-delà de 0,55 » des balayages
+	-- précédents était la boîte (DownshiftRpm 0,45 : rétrogradage 2→1 à 36 km/h en virage), pas le pneu.
 	KappaPeak = 0.12, -- glissement longitudinal du pic (champ absent de GTA V)
 	Falloff = 1.5, -- largeur (en multiples du pic) de la descente de Max vers Min
 	FalloffKappa = 0.1, -- poids du glissement LONGITUDINAL dans cette descente. MESURÉ : au freinage les roues
@@ -59,13 +54,18 @@ Dyn.Tuning = {
 	-- +3,0 ° à 60 ; 0,5 → +4,5 ° et +3,8 ° (GTA +3,45 ° et +2,2 °). Seul 1,0 garde la signature GTA (le cabrage
 	-- BAISSE nettement avec la vitesse). 0,25 : 24 images en l'air à 60 km/h. Le 0,5 posé d'après la mesure
 	-- (2026-11-12, nuit) n'était pas la cause : c'était la butée (BumpK).
-	RollCentreScale = 1.0, -- hauteur des centres de roulis (RollCentreHeightFront/Rear) × ce facteur : c'est là que
-	-- VehicleDrive applique les forces LATÉRALES des pneus. C'est elle qui règle le roulis, pas KSpring / KArb :
+	RollCentreScale = 0.25, -- hauteur des centres de roulis (RollCentreHeightFront/Rear) × ce facteur : c'est là
+	-- que VehicleDrive applique les forces LATÉRALES des pneus. C'est elle qui règle le roulis, pas KSpring / KArb :
 	-- sur le m422 (centre de gravité 0,45 m au-dessus du sol, centres de roulis 0,3 / 0,4 m), le bras de levier
 	-- n'est que de 0,15 m à l'avant et 0,05 m à l'arrière → 0,22 °/g calculé, 0,22 °/g mesuré en Studio. À 0, le
-	-- bras redevient la hauteur du centre de gravité : 0,94 °/g mesuré (GTA ≈ 1,0 °/g). NON ADOPTÉ : à 0 le virage
-	-- 40 km/h ne tient plus que 1,40 g (GTA 1,69) et le créneau à 60 km/h part à 28 ° de roulis tant que la
-	-- direction braque deux fois trop à vitesse (voir SteerFade). Prochain chantier.
+	-- bras redevient la hauteur du centre de gravité : 0,94 °/g mesuré (GTA ≈ 1,0 °/g).
+	-- BALAYÉ EN 3D (2026-11-12, PeakFactor 0,55) : 1 → roulis 0,38 ° au virage 40 ; 0,5 → 0,97 ° ; 0,25 → 1,26 °
+	-- (0,76 °/g ; GTA 1,71 °, 1,01 °/g) ; créneau 0,20 / 0,52 / 0,67 ° (GTA 0,86 °). 0,25 est la valeur la plus
+	-- basse qui tient : à 0,1 et à 0 le virage 40 s'effondre (0,89 et 1,16 g, 24 km/h). Cause démontrée : la roue
+	-- ARRIÈRE INTÉRIEURE se déleste et patine (130 km/h de vitesse de roue pour 35 km/h), le régime — moyenne
+	-- des roues motrices — s'emballe, la boîte monte en 3ᵉ et le véhicule perd sa motricité. GTA, lui, roule par
+	-- moments sur 2 ou 3 roues au virage 40 sans rien perdre. Pour aller vers 1 °/g : traiter d'abord ce
+	-- patinage (répartition du couple, régime pris sur la vitesse du véhicule), puis redescendre ce réglage.
 	KArb = 1.0, -- anti-roulis : kA = AntiRollBarForce × biais × g / course × KArb (loi inconnue)
 	IwRel = 0.03, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
 	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g).
@@ -78,7 +78,13 @@ Dyn.Tuning = {
 	-- VITESSE de la 1ʳᵉ reste 3,333 : le régime de passage mesuré (0,821) le confirme à 0,002 près.
 	UpshiftRpm = 0.95, -- montée de rapport (régime normalisé). MESURÉ : 2→3 à 0,974 et 3→4 à 0,954.
 	UpshiftRpmFirst = 0.82, -- la 1ʳᵉ passe PLUS TÔT. MESURÉ : 1→2 à 0,821–0,827, soit 40,0 km/h.
-	DownshiftRpm = 0.45, -- descente de rapport (régime sous lequel on rétrograde)
+	DownshiftRpm = 0.45, -- descente de rapport GAZ RELÂCHÉS (régime sous lequel on rétrograde). GTA : 2→1 en roue
+	-- libre à 0,404–0,410 (34 km/h, 3 passes) ; 0,45 garde la roue libre 110-30 du banc longitudinal à −1,7 %
+	-- (0,35 l'allonge à +9,2 %).
+	DownshiftRpmThrottle = 0.35, -- la même, SOUS GAZ (> 0,05). MESURÉ : 2→1 à 0,348–0,353 sous plein gaz (virage
+	-- 80, 3 passes, 30,2–30,6 km/h). Avant le 2026-11-12, un seul seuil à 0,45 : au virage 40 la 2ᵉ rétrogradait
+	-- à 34–36 km/h alors que GTA y reste (36,5 km/h, 0,79 de gaz) ; la 1ʳᵉ engagée faisait pomper la boîte et
+	-- tomber la vitesse à 27 km/h — c'est ce qui faisait « basculer » les balayages de PeakFactor au-delà de 0,55.
 	DownshiftMargin = 0.85, -- et seulement si le rapport inférieur resterait sous UpshiftRpm × marge (anti-pompage :
 	-- après une montée 1→2 le régime tombe à 0,93 × 1,949 / 3,333 ≈ 0,54, mesuré)
 	ReverseHold = 0.25, -- s à l'arrêt, frein maintenu, avant de passer la marche arrière
@@ -539,7 +545,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			local upRpm = (S.gear == 1) and (T.UpshiftRpmFirst or T.UpshiftRpm) or T.UpshiftRpm
 			if S.rpm > upRpm and S.gear < P.nGears and driveIn > 0.05 then
 				shift(S, S.gear + 1, 1)
-			elseif S.gear > 1 and S.rpm < T.DownshiftRpm
+			elseif S.gear > 1
+				and S.rpm < ((driveIn > 0.05) and (T.DownshiftRpmThrottle or T.DownshiftRpm) or T.DownshiftRpm)
 				and S.rpm * P.ratios[S.gear - 1] / ratio < upRpm * T.DownshiftMargin then
 				shift(S, S.gear - 1, -1)
 			end
