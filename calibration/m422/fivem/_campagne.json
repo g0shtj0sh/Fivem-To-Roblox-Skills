@@ -1,0 +1,872 @@
+{
+ "track": {
+  "x": -1201.0,
+  "y": -3044.0,
+  "z": 13.5,
+  "h": 90.0
+ },
+ "runs": 3,
+ "results": [
+  {
+   "label": "accel_1",
+   "test": "accel",
+   "params": {
+    "seconds": 20,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "vmax": 118.98,
+    "endGear": 4,
+    "t100": 8.733,
+    "t60": 3.43,
+    "plateauAt": 16.09,
+    "shifts": [
+     {
+      "from": 0,
+      "t": 0.018,
+      "to": 1,
+      "kmh": 0.1,
+      "rpm": 0.218
+     },
+     {
+      "from": 1,
+      "t": 1.328,
+      "to": 2,
+      "kmh": 39.8,
+      "rpm": 0.804
+     },
+     {
+      "from": 2,
+      "t": 5.467,
+      "to": 3,
+      "kmh": 80.5,
+      "rpm": 0.957
+     },
+     {
+      "from": 3,
+      "t": 11.225,
+      "to": 4,
+      "kmh": 110.3,
+      "rpm": 0.936
+     }
+    ],
+    "distance": 379.55
+   },
+   "error": null,
+   "samples": 906
+  },
+  {
+   "label": "accel_2",
+   "test": "accel",
+   "params": {
+    "seconds": 20,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "vmax": 119.31,
+    "endGear": 4,
+    "t100": 9.046,
+    "t60": 3.447,
+    "plateauAt": 16.08,
+    "shifts": [
+     {
+      "from": 0,
+      "t": 0.018,
+      "to": 1,
+      "kmh": 0.1,
+      "rpm": 0.218
+     },
+     {
+      "from": 1,
+      "t": 1.354,
+      "to": 2,
+      "kmh": 39.8,
+      "rpm": 0.803
+     },
+     {
+      "from": 2,
+      "t": 5.463,
+      "to": 3,
+      "kmh": 80.4,
+      "rpm": 0.956
+     },
+     {
+      "from": 3,
+      "t": 11.288,
+      "to": 4,
+      "kmh": 110.3,
+      "rpm": 0.937
+     }
+    ],
+    "distance": 378.07
+   },
+   "error": null,
+   "samples": 906
+  },
+  {
+   "label": "accel_3",
+   "test": "accel",
+   "params": {
+    "seconds": 20,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "vmax": 118.32,
+    "endGear": 4,
+    "t100": 8.911,
+    "t60": 3.447,
+    "plateauAt": 16.08,
+    "shifts": [
+     {
+      "from": 0,
+      "t": 0.017,
+      "to": 1,
+      "kmh": 0.1,
+      "rpm": 0.218
+     },
+     {
+      "from": 1,
+      "t": 1.373,
+      "to": 2,
+      "kmh": 40.0,
+      "rpm": 0.809
+     },
+     {
+      "from": 2,
+      "t": 5.446,
+      "to": 3,
+      "kmh": 80.4,
+      "rpm": 0.956
+     },
+     {
+      "from": 3,
+      "t": 11.458,
+      "to": 4,
+      "kmh": 110.3,
+      "rpm": 0.936
+     }
+    ],
+    "distance": 377.68
+   },
+   "error": null,
+   "samples": 906
+  },
+  {
+   "label": "brake_1",
+   "test": "brake",
+   "params": {
+    "fromKmh": 100,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 100.09,
+    "decelG": 1.779,
+    "maxRoll": 0.38,
+    "handbrake": false,
+    "time": 1.593,
+    "maxYaw": 0.36,
+    "distance": 20.61
+   },
+   "error": null,
+   "samples": 598
+  },
+  {
+   "label": "brake_2",
+   "test": "brake",
+   "params": {
+    "fromKmh": 100,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 100.05,
+    "decelG": 1.803,
+    "maxRoll": 0.02,
+    "handbrake": false,
+    "time": 1.571,
+    "maxYaw": 0.18,
+    "distance": 20.56
+   },
+   "error": null,
+   "samples": 588
+  },
+  {
+   "label": "brake_3",
+   "test": "brake",
+   "params": {
+    "fromKmh": 100,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 100.05,
+    "decelG": 1.835,
+    "maxRoll": 0.03,
+    "handbrake": false,
+    "time": 1.544,
+    "maxYaw": 0.15,
+    "distance": 20.54
+   },
+   "error": null,
+   "samples": 593
+  },
+  {
+   "label": "handbrake_1",
+   "test": "handbrake",
+   "params": {
+    "fromKmh": 60,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 60.18,
+    "decelG": 0.707,
+    "maxRoll": 0.03,
+    "handbrake": true,
+    "time": 2.411,
+    "maxYaw": 0.22,
+    "distance": 19.98
+   },
+   "error": null,
+   "samples": 320
+  },
+  {
+   "label": "handbrake_2",
+   "test": "handbrake",
+   "params": {
+    "fromKmh": 60,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 60.15,
+    "decelG": 0.704,
+    "maxRoll": 0.05,
+    "handbrake": true,
+    "time": 2.418,
+    "maxYaw": 0.11,
+    "distance": 19.99
+   },
+   "error": null,
+   "samples": 330
+  },
+  {
+   "label": "handbrake_3",
+   "test": "handbrake",
+   "params": {
+    "fromKmh": 60,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 60.07,
+    "decelG": 0.706,
+    "maxRoll": 0.04,
+    "handbrake": true,
+    "time": 2.408,
+    "maxYaw": 0.07,
+    "distance": 19.92
+   },
+   "error": null,
+   "samples": 332
+  },
+  {
+   "label": "corner40_1",
+   "test": "corner",
+   "params": {
+    "kmh": 40,
+    "steer": 1.0,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "maxSlip": 6.7,
+    "maxRoll": 1.905,
+    "kmh": 40,
+    "radiusAtMaxYaw": 6.62,
+    "steer": 1.0,
+    "endSpeed": 38.48,
+    "maxLatG": 1.797,
+    "minWheels": 3,
+    "maxYawRate": 96.13,
+    "displacement": 1.13
+   },
+   "error": null,
+   "samples": 298
+  },
+  {
+   "label": "corner40_2",
+   "test": "corner",
+   "params": {
+    "kmh": 40,
+    "steer": 1.0,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "maxSlip": 6.64,
+    "maxRoll": 1.878,
+    "kmh": 40,
+    "radiusAtMaxYaw": 6.56,
+    "steer": 1.0,
+    "endSpeed": 38.24,
+    "maxLatG": 1.831,
+    "minWheels": 3,
+    "maxYawRate": 97.1,
+    "displacement": 1.22
+   },
+   "error": null,
+   "samples": 301
+  },
+  {
+   "label": "corner40_3",
+   "test": "corner",
+   "params": {
+    "kmh": 40,
+    "steer": 1.0,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "maxSlip": 6.62,
+    "maxRoll": 1.889,
+    "kmh": 40,
+    "radiusAtMaxYaw": 6.45,
+    "steer": 1.0,
+    "endSpeed": 38.18,
+    "maxLatG": 1.86,
+    "minWheels": 2,
+    "maxYawRate": 98.77,
+    "displacement": 1.3
+   },
+   "error": null,
+   "samples": 301
+  },
+  {
+   "label": "corner80_1",
+   "test": "corner",
+   "params": {
+    "kmh": 80,
+    "steer": 1.0,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "maxSlip": 57.34,
+    "maxRoll": 2.618,
+    "kmh": 80,
+    "radiusAtMaxYaw": 18.07,
+    "steer": 1.0,
+    "endSpeed": 13.81,
+    "maxLatG": 2.245,
+    "minWheels": 4,
+    "maxYawRate": 70.46,
+    "displacement": 42.31
+   },
+   "error": null,
+   "samples": 517
+  },
+  {
+   "label": "corner80_2",
+   "test": "corner",
+   "params": {
+    "kmh": 80,
+    "steer": 1.0,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "maxSlip": 53.76,
+    "maxRoll": 2.425,
+    "kmh": 80,
+    "radiusAtMaxYaw": 18.29,
+    "steer": 1.0,
+    "endSpeed": 14.09,
+    "maxLatG": 2.242,
+    "minWheels": 4,
+    "maxYawRate": 69.61,
+    "displacement": 42.23
+   },
+   "error": null,
+   "samples": 521
+  },
+  {
+   "label": "corner80_3",
+   "test": "corner",
+   "params": {
+    "kmh": 80,
+    "steer": 1.0,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "maxSlip": 50.68,
+    "maxRoll": 2.527,
+    "kmh": 80,
+    "radiusAtMaxYaw": 18.65,
+    "steer": 1.0,
+    "endSpeed": 14.9,
+    "maxLatG": 2.245,
+    "minWheels": 4,
+    "maxYawRate": 68.26,
+    "displacement": 42.43
+   },
+   "error": null,
+   "samples": 518
+  },
+  {
+   "label": "reverse_1",
+   "test": "reverse",
+   "params": {
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "gear": 0,
+    "distance": 41.38,
+    "minSpeed": -48.83
+   },
+   "error": null,
+   "samples": 225
+  },
+  {
+   "label": "reverse_2",
+   "test": "reverse",
+   "params": {
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "gear": 0,
+    "distance": 41.49,
+    "minSpeed": -48.83
+   },
+   "error": null,
+   "samples": 226
+  },
+  {
+   "label": "reverse_3",
+   "test": "reverse",
+   "params": {
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "gear": 0,
+    "distance": 41.44,
+    "minSpeed": -48.83
+   },
+   "error": null,
+   "samples": 226
+  },
+  {
+   "label": "stepsteer_1",
+   "test": "stepsteer",
+   "params": {
+    "kmh": 60,
+    "steer": 0.5,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "steer": 0.5,
+    "endSpeed": 58.11,
+    "maxRoll": 3.377,
+    "maxYawRate": 30.83,
+    "kmh": 60,
+    "tTo90": 3.973,
+    "entrySpeed": 59.47
+   },
+   "error": null,
+   "samples": 472
+  },
+  {
+   "label": "stepsteer_2",
+   "test": "stepsteer",
+   "params": {
+    "kmh": 60,
+    "steer": 0.5,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "steer": 0.5,
+    "endSpeed": 58.1,
+    "maxRoll": 3.43,
+    "maxYawRate": 31.63,
+    "kmh": 60,
+    "tTo90": 3.946,
+    "entrySpeed": 59.48
+   },
+   "error": null,
+   "samples": 472
+  },
+  {
+   "label": "stepsteer_3",
+   "test": "stepsteer",
+   "params": {
+    "kmh": 60,
+    "steer": 0.5,
+    "seconds": 4,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "steer": 0.5,
+    "endSpeed": 58.06,
+    "maxRoll": 3.268,
+    "maxYawRate": 31.26,
+    "kmh": 60,
+    "tTo90": 4.005,
+    "entrySpeed": 59.48
+   },
+   "error": null,
+   "samples": 467
+  },
+  {
+   "label": "slalom_1",
+   "test": "slalom",
+   "params": {
+    "kmh": 60,
+    "amplitude": 0.5,
+    "period": 2.0,
+    "seconds": 12,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "minWheels": 4,
+    "maxSlip": 1.2,
+    "amplitude": 0.5,
+    "period": 2.0,
+    "endSpeed": 58.94,
+    "kmh": 60,
+    "maxYawRate": 26.63,
+    "maxRoll": 3.121
+   },
+   "error": null,
+   "samples": 875
+  },
+  {
+   "label": "slalom_2",
+   "test": "slalom",
+   "params": {
+    "kmh": 60,
+    "amplitude": 0.5,
+    "period": 2.0,
+    "seconds": 12,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "minWheels": 4,
+    "maxSlip": 1.26,
+    "amplitude": 0.5,
+    "period": 2.0,
+    "endSpeed": 58.93,
+    "kmh": 60,
+    "maxYawRate": 26.61,
+    "maxRoll": 3.39
+   },
+   "error": null,
+   "samples": 879
+  },
+  {
+   "label": "slalom_3",
+   "test": "slalom",
+   "params": {
+    "kmh": 60,
+    "amplitude": 0.5,
+    "period": 2.0,
+    "seconds": 12,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "minWheels": 4,
+    "maxSlip": 1.19,
+    "amplitude": 0.5,
+    "period": 2.0,
+    "endSpeed": 58.93,
+    "kmh": 60,
+    "maxYawRate": 26.33,
+    "maxRoll": 3.924
+   },
+   "error": null,
+   "samples": 878
+  },
+  {
+   "label": "coast_1",
+   "test": "coast",
+   "params": {
+    "fromKmh": 110,
+    "toKmh": 30,
+    "seconds": 60,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 110.01,
+    "endSpeed": 29.8,
+    "marks": [
+     {
+      "kmh": 140,
+      "t": 0.017,
+      "dist": 0.52
+     },
+     {
+      "kmh": 120,
+      "t": 0.017,
+      "dist": 0.52
+     },
+     {
+      "kmh": 100,
+      "t": 0.673,
+      "dist": 19.6
+     },
+     {
+      "kmh": 80,
+      "t": 2.099,
+      "dist": 55.18
+     },
+     {
+      "kmh": 60,
+      "t": 3.651,
+      "dist": 85.24
+     },
+     {
+      "kmh": 40,
+      "t": 5.278,
+      "dist": 107.74
+     }
+    ],
+    "distance": 115.08
+   },
+   "error": null,
+   "samples": 983
+  },
+  {
+   "label": "coast_2",
+   "test": "coast",
+   "params": {
+    "fromKmh": 110,
+    "toKmh": 30,
+    "seconds": 60,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 110.05,
+    "endSpeed": 29.87,
+    "marks": [
+     {
+      "kmh": 140,
+      "t": 0.018,
+      "dist": 0.53
+     },
+     {
+      "kmh": 120,
+      "t": 0.018,
+      "dist": 0.53
+     },
+     {
+      "kmh": 100,
+      "t": 0.687,
+      "dist": 20.0
+     },
+     {
+      "kmh": 80,
+      "t": 2.113,
+      "dist": 55.52
+     },
+     {
+      "kmh": 60,
+      "t": 3.643,
+      "dist": 85.16
+     },
+     {
+      "kmh": 40,
+      "t": 5.294,
+      "dist": 107.98
+     }
+    ],
+    "distance": 115.75
+   },
+   "error": null,
+   "samples": 983
+  },
+  {
+   "label": "coast_3",
+   "test": "coast",
+   "params": {
+    "fromKmh": 110,
+    "toKmh": 30,
+    "seconds": 60,
+    "start": {
+     "x": -1201.0,
+     "y": -3044.0,
+     "z": 13.5,
+     "h": 90.0
+    }
+   },
+   "summary": {
+    "from": 110.01,
+    "endSpeed": 29.85,
+    "marks": [
+     {
+      "kmh": 140,
+      "t": 0.017,
+      "dist": 0.53
+     },
+     {
+      "kmh": 120,
+      "t": 0.017,
+      "dist": 0.53
+     },
+     {
+      "kmh": 100,
+      "t": 0.677,
+      "dist": 19.73
+     },
+     {
+      "kmh": 80,
+      "t": 2.113,
+      "dist": 55.49
+     },
+     {
+      "kmh": 60,
+      "t": 3.641,
+      "dist": 85.09
+     },
+     {
+      "kmh": 40,
+      "t": 5.276,
+      "dist": 107.72
+     }
+    ],
+    "distance": 114.83
+   },
+   "error": null,
+   "samples": 985
+  }
+ ]
+}
