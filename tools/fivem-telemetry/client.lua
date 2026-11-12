@@ -725,6 +725,139 @@ function Tests.steerfade(v, p)
 end
 
 --- Slalom sinusoidal : braquage sinus d'amplitude et de periode donnees.
+--- Cercle a consigne CONSTANTE et vitesse tenue : separe la derive de la vitesse.
+---
+--- Le virage 80 ne pouvait pas identifier la reduction du braquage en glisse : la vitesse
+--- tombe, la derive monte et le temps avance ENSEMBLE, donc n'importe quelle fonction
+--- decroissante colle. Ici le regulateur tient la vitesse et la consigne est fixe : on
+--- balaye l'une a l'autre fixee, et la derive s'etablit a une valeur qui ne depend plus du
+--- temps. Il faut un carre plat (voir Tests.gridprobe), pas un couloir.
+---
+--- Rend le plateau lu en fin de cercle, et la suite des moyennes par demi-seconde pour
+--- verifier HORS JEU que le regime etait bien etabli, plutot que de le supposer.
+function Tests.skidpad(v, p)
+    local kmh = p.kmh or 60
+    local steer = p.steer or 1.0
+    local spin = p.spin or 8.0          -- duree du cercle
+    local tail = p.tail or 1.5          -- duree du plateau lu, en fin de cercle
+    local heading = p.h or 0.0
+    local cx, cy, cz = p.x + 0.0, p.y + 0.0, p.z + 0.0
+    local A, B = p.axleFront or 1.38, p.axleRear or 1.41
+
+    resetAt(v, cx, cy, cz, heading)
+    hold(v, { throttle = 1.0 }, 40, function() return speedKmh(v) >= kmh end, true)
+    -- tenue de ligne jusqu'au POINT de declenchement, s'il est donne : place sur le bord du
+    -- disque plat, un cercle de rayon R y est inscrit exactement quel que soit R (la distance
+    -- du centre du disque au centre du cercle vaut |R - Rdisque|, donc |R-Rd| + R = Rd).
+    -- Sans tx/ty, on tourne des que la vitesse est atteinte.
+    local tx, ty = p.tx, p.ty
+    local reached = (tx == nil or ty == nil)
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br }
+    end, p.approach or 12.0, function()
+        if reached then return true end
+        local pos = GetEntityCoords(v)
+        local hh = math.rad(GetEntityHeading(v))
+        local fx, fy = -math.sin(hh), math.cos(hh)
+        -- on a passe le point quand sa projection sur l'avant devient negative
+        if (tx - pos.x) * fx + (ty - pos.y) * fy <= 0.0 then
+            reached = true
+            return true
+        end
+        return false
+    end, true)
+
+    local turn0 = GetEntityCoords(v)
+    local res = {
+        kmh = kmh, steer = steer,
+        effective = r(math.max(0.0, (math.abs(steer) - 0.25) / 0.75), 4),
+        entrySpeed = r(speedKmh(v), 2),
+        turnStart = { r(turn0.x, 2), r(turn0.y, 2), r(turn0.z, 3) },
+        turnPointReached = reached,
+        buckets = {},
+        bucketColumns = { 't', 'wheelDeg', 'beta', 'yawRate', 'kmh', 'latG', 'distTurn' },
+    }
+    local n, sw, sbeta, syaw, skmh, slat, stf, stre, sroll = 0, 0, 0, 0, 0, 0, 0, 0, 0
+    local minWheels, maxDist, zMin, zMax = 4, 0.0, 1e9, -1e9
+    local bn, bw, bbeta, byaw, bkmh, blat, bdist, bIdx = 0, 0, 0, 0, 0, 0, 0, 0
+    local prevLat, prevT = nil, nil
+
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br, steer = steer }
+    end, spin, function(t)
+        local sv = GetEntitySpeedVector(v, true)
+        local wz = GetEntityRotationVelocity(v).z
+        local vf = sv.y
+        local now = GetGameTimer()
+        -- acceleration laterale : d(vLat)/dt - wz*vFwd ; le terme wz*vFwd seul ne vaut qu'etabli
+        local lat
+        if prevLat and prevT and now > prevT then
+            lat = math.abs((sv.x - prevLat) / ((now - prevT) / 1000.0) - wz * vf) / 9.81
+        else
+            lat = math.abs(wz * vf) / 9.81
+        end
+        prevLat, prevT = sv.x, now
+
+        local wheel = math.deg(0.5 * (GetVehicleWheelSteeringAngle(v, 0)
+                                    + GetVehicleWheelSteeringAngle(v, 1)))
+        local beta = (math.abs(vf) > 2.0) and math.deg(math.atan(sv.x, math.abs(vf))) or 0.0
+        local pos = GetEntityCoords(v)
+        local dist = #(pos - turn0)
+        maxDist = math.max(maxDist, dist)
+        zMin, zMax = math.min(zMin, pos.z), math.max(zMax, pos.z)
+        minWheels = math.min(minWheels, wheelsOnGround(v))
+
+        bn = bn + 1
+        bw, bbeta, byaw = bw + wheel, bbeta + beta, byaw + math.deg(wz)
+        bkmh, blat, bdist = bkmh + speedKmh(v), blat + lat, bdist + dist
+        if t >= (bIdx + 1) * 0.5 then
+            res.buckets[#res.buckets + 1] = {
+                r((bIdx + 1) * 0.5, 2), r(bw / bn, 3), r(bbeta / bn, 3), r(byaw / bn, 2),
+                r(bkmh / bn, 2), r(blat / bn, 3), r(bdist / bn, 2),
+            }
+            bIdx = bIdx + 1
+            bn, bw, bbeta, byaw, bkmh, blat, bdist = 0, 0, 0, 0, 0, 0, 0
+        end
+
+        if t >= spin - tail then
+            n = n + 1
+            sw = sw + wheel
+            sbeta = sbeta + beta
+            syaw = syaw + math.deg(wz)
+            skmh = skmh + speedKmh(v)
+            slat = slat + lat
+            sroll = sroll + math.abs(GetEntityRotation(v, 2).y)
+            if math.abs(vf) > 2.0 then
+                -- derives des pneus : vitesse laterale a l'essieu avant = vLat - a*wz
+                local thF = -math.deg(math.atan(sv.x - A * wz, math.abs(vf)))
+                local thR = -math.deg(math.atan(sv.x + B * wz, math.abs(vf)))
+                stf = stf + math.abs(wheel - thF)
+                stre = stre + math.abs(thR)
+            end
+        end
+        return false
+    end, false)
+
+    if n > 0 then
+        res.plateau = {
+            n = n,
+            wheelDeg = r(sw / n, 3), beta = r(sbeta / n, 3), yawRate = r(syaw / n, 2),
+            kmh = r(skmh / n, 2), latG = r(slat / n, 3), roll = r(sroll / n, 3),
+            tyreFront = r(stf / n, 3), tyreRear = r(stre / n, 3),
+        }
+        local yawRad = math.rad(math.abs(syaw / n))
+        if yawRad > 1e-4 then res.plateau.radius = r((skmh / n) / 3.6 / yawRad, 3) end
+    end
+    res.maxDistFromTurn = r(maxDist, 2)
+    res.zSpan = r(zMax - zMin, 3)
+    res.minWheels = minWheels
+    res.endSpeed = r(speedKmh(v), 2)
+    settle(v)
+    return res
+end
+
 function Tests.slalom(v, p)
     local kmh = p.kmh or 60
     local amp = p.amplitude or 0.5
@@ -857,6 +990,101 @@ end
 --- LE LONG de la route : la pente se lit directement sur le profil, sans avoir
 --- a y conduire. Reposer le vehicule ne marcherait pas, la collision n'etant
 --- chargee qu'autour de lui.
+--- Releve du sol sur une GRILLE carree, pour trouver une zone plate assez large.
+--- heightprobe ne donne qu'un profil en long : il avait laisse croire que le tablier etait
+--- plat alors que ses bords ne sont pas paralleles a l'axe. Ici on ajuste un PLAN
+--- z = a + b*dx + c*dy sur toute la grille et on rend le residu, qui est le vrai critere de
+--- platitude : une pente reguliere ne gene pas un cercle, une bosse si.
+function Tests.gridprobe(v, p)
+    local cx, cy, cz = p.x + 0.0, p.y + 0.0, (p.z or 20.0) + 0.0
+    SetEntityCoordsNoOffset(v, cx, cy, cz + 2.0, false, false, false)
+    SetEntityVelocity(v, 0.0, 0.0, 0.0)
+    local tw = GetGameTimer()
+    while GetGameTimer() - tw < (p.collisionMs or 4000) do
+        RequestCollisionAtCoord(cx, cy, cz)
+        Wait(50)
+        if HasCollisionLoadedAroundEntity(v) then break end
+    end
+    SetVehicleOnGroundProperly(v)
+    Wait(300)
+    local base = GetEntityCoords(v)
+
+    local half = p.half or 30.0
+    local step = p.step or 2.0
+    local pts, miss, k = {}, 0, 0
+    local dy = -half
+    while dy <= half + 1e-9 do
+        local dx = -half
+        while dx <= half + 1e-9 do
+            local x, y = cx + dx, cy + dy
+            local probe = StartExpensiveSynchronousShapeTestLosProbe(
+                x, y, base.z + 8.0, x, y, base.z - 8.0, 1, v, 7)
+            local _, hit, pos = GetShapeTestResult(probe)
+            if hit == 1 or hit == true then
+                pts[#pts + 1] = { dx, dy, pos.z }
+            else
+                miss = miss + 1
+            end
+            k = k + 1
+            if k % 120 == 0 then Wait(0) end
+            dx = dx + step
+        end
+        dy = dy + step
+    end
+
+    local N = #pts
+    local res = { center = { r(cx, 2), r(cy, 2), r(base.z, 3) }, half = half, step = step,
+                  probes = k, hits = N, misses = miss }
+    if N >= 8 then
+        -- plan des moindres carres ; la grille etant symetrique, le systeme normal se decouple
+        local Sz, Sxx, Syy, Sxz, Syz = 0, 0, 0, 0, 0
+        for _, q in ipairs(pts) do
+            Sz = Sz + q[3]
+            Sxx = Sxx + q[1] * q[1]
+            Syy = Syy + q[2] * q[2]
+            Sxz = Sxz + q[1] * q[3]
+            Syz = Syz + q[2] * q[3]
+        end
+        local a = Sz / N
+        local b = (Sxx > 1e-9) and (Sxz / Sxx) or 0.0
+        local c = (Syy > 1e-9) and (Syz / Syy) or 0.0
+        local rmax, rsum, zlo, zhi = 0.0, 0.0, 1e9, -1e9
+        for _, q in ipairs(pts) do
+            local e = math.abs(q[3] - (a + b * q[1] + c * q[2]))
+            rmax = math.max(rmax, e)
+            rsum = rsum + e
+            zlo = math.min(zlo, q[3])
+            zhi = math.max(zhi, q[3])
+        end
+        res.plane = { z0 = r(a, 4), slopeX = r(b, 5), slopeY = r(c, 5) }
+        res.slopePct = r(100.0 * math.sqrt(b * b + c * c), 3)
+        res.residMax = r(rmax, 4)
+        res.residMean = r(rsum / N, 4)
+        res.zSpan = r(zhi - zlo, 3)
+        -- plus grand rayon, centre sur le centre, ou le residu reste sous le seuil
+        local tol = p.tol or 0.03
+        local best = 0.0
+        for rad = step, half, step do
+            local ok = true
+            for _, q in ipairs(pts) do
+                local d = math.sqrt(q[1] * q[1] + q[2] * q[2])
+                if d <= rad + 1e-9 and math.abs(q[3] - (a + b * q[1] + c * q[2])) > tol then
+                    ok = false
+                    break
+                end
+            end
+            if ok then best = rad else break end
+        end
+        res.flatRadius = r(best, 2)
+        res.tol = tol
+    end
+    if p.profile then
+        res.columns = { 'dx', 'dy', 'zSol' }
+        res.grid = pts
+    end
+    return res
+end
+
 function Tests.hillprobe(v, p)
     local cx, cy, cz = p.x + 0.0, p.y + 0.0, (p.z or 20.0) + 0.0
     SetEntityCoordsNoOffset(v, cx, cy, cz + 2.0, false, false, false)

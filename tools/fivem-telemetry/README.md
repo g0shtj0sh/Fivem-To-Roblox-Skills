@@ -63,10 +63,12 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 | `stepsteer` | créneau de braquage à vitesse tenue | `maxYawRate`, `tTo90`, `maxRoll` |
 | `steerfade` | **consigne constante en créneaux alternés** : loi de braquage roue / consigne / vitesse | `plateaus` (`wheelDeg`, `yawRate`, `kmh`, `slip`, `roll`) |
 | `slalom` | braquage sinusoïdal | `maxRoll`, `maxYawRate`, `maxSlip` |
+| `skidpad` | **cercle à consigne constante, vitesse tenue** : sépare la dérive de la vitesse | `plateau` (`wheelDeg`, `beta`, `yawRate`, `latG`, `radius`, `tyreFront/Rear`), `buckets` (½ s) |
 | `raw` | entrées constantes (diagnostic) | cap parcouru, angle de roue |
 | `surfscan` | relevé du sol le long d'une ligne | profil `d, z, matériau, pitch, roll` |
 | `roadscan` | relevé **en travers** d'une route (noeud routier le plus proche) | profil `offset, z, matériau` |
 | `heightprobe` | hauteur exacte du sol par rayons verticaux, le long d'une ligne | profil `offset, zSol` |
+| `gridprobe` | le même sur une **grille carrée**, avec plan ajusté : cherche une zone plate large | `residMax`, `residMean`, `slopePct`, `flatRadius`, grille `dx, dy, zSol` |
 | `hillprobe` | profil **en long** d'une route, pour en lire la pente | profil `offset, zSol`, `roadHeading` |
 | `modelprobe` | validité et encombrement d'une liste de modèles | `dimX, dimY, dimZ, minZ, maxZ` |
 | `buildstep` | **construit** une marche calibrée (prop enfoncé) et en renvoie la coupe mesurée | `placed`, profil `offset, zSol` |
@@ -75,7 +77,43 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 Paramètres communs : `start` (`{x, y, z, h}` : le véhicule est réparé, remis à plat et
 arrêté là avant l'essai), `seconds`, `kmh`, `steer`.
 
-### Mesurer la direction sur une piste étroite
+### Mesurer la direction en cercle
+
+Les essais en virage ne peuvent pas identifier une loi de direction : la vitesse tombe, la dérive monte et
+le temps avance **ensemble**, donc n'importe quelle fonction décroissante colle. `skidpad` tient une
+consigne **fixe** et une vitesse **tenue par le régulateur**, donc la dérive s'établit et on balaye les deux
+axes l'un à l'autre fixé. Voir `calibration/m422/README.md`, « La direction a deux étages ».
+
+Il faut un **carré** plat, pas un couloir : `gridprobe` le trouve. Son critère est le résidu autour d'un
+plan ajusté **sur le disque testé** — l'ajuster sur toute la grille laisse la périphérie corrompre le plan
+et pollue jusqu'au centre.
+
+```bash
+# 1) trouver la zone plate (grille de 120 m de côté, pas de 2 m)
+curl -s -X POST http://127.0.0.1:26060/vehicle-telemetry/run -H 'Content-Type: application/json' \
+  -d '{"test":"gridprobe","label":"grille","params":{"x":-1201,"y":-3044,"z":13.5,
+       "half":60,"step":2,"tol":0.03,"profile":true}}'
+
+# 2) un cercle : droite d'élan, puis virage déclenché à (tx, ty)
+curl -s -X POST http://127.0.0.1:26060/vehicle-telemetry/run -H 'Content-Type: application/json' \
+  -d '{"test":"skidpad","label":"skid_60_085","params":{"x":-1115,"y":-3056,"z":13.5,"h":90,
+       "tx":-1205,"ty":-3056,"kmh":60,"steer":0.85,"spin":6,"tail":1.5}}'
+```
+
+Déclenché sur le **bord** du disque plat, un cercle de rayon R y est inscrit exactement quel que soit
+R ≤ R(disque) : une seule géométrie suffit pour toutes les vitesses.
+
+Deux choses à savoir en lisant les résultats :
+
+- **La vitesse demandée n'est pas toujours tenue.** À pleine butée le véhicule n'a pas la puissance de
+  tenir 60 km/h dans un cercle de 3 m : il trouve son équilibre vers 45, puis part en toupie. Ce n'est pas
+  un défaut de l'essai — `plateau.kmh` donne la vitesse réellement obtenue, et c'est elle qui compte. Il
+  faut simplement rejeter les essais où elle s'écarte trop de la cible si on voulait un point à vitesse
+  donnée.
+- **`buckets` donne les moyennes par demi-seconde** sur tout le cercle, pour vérifier **hors jeu** que le
+  régime était établi, plutôt que de le supposer.
+
+## Mesurer la direction sur une piste étroite
 
 `steerfade` existe parce qu'un créneau classique sort de la piste : à pleine butée le
 véhicule s'écarte de plus de 10 m en 1,5 s. Il alterne donc la consigne (une première
