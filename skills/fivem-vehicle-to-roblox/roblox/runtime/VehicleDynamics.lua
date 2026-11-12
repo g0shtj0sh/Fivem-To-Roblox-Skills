@@ -87,21 +87,37 @@ Dyn.Tuning = {
 	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
 	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
 	LowSpeedFade = 8, -- m/s : vitesse où la perte d'adhérence au démarrage (burnout) disparaît
-	SteerFade = 25.3, -- m/s : vitesse où le braquage atteint son minimum. MESURÉ : essai `steerfade`,
-	-- consigne constante en créneaux alternés, 20 plateaux de 15 à 102 km/h. L'angle de roue réellement
+	-- La direction, MESURÉE : essai `steerfade` (consigne constante en créneaux alternés), 20 plateaux
+	-- établis de 15 à 105 km/h, calibration/m422/steerfade-analyse.json. Le braquage de roue réellement
 	-- obtenu à pleine demande vaut 30,62 ° jusqu'à 30 km/h (butée mécanique), puis 21,20 / 14,69 / 10,81 /
-	-- 8,27 / 6,61 ° à 45 / 60 / 75 / 90 / 105 km/h. L'ancien réglage (28 ; 0,3 ; 1,6) donnait 1,05 × la
-	-- mesure à 15 km/h mais 2,30 × à 105 km/h : c'est là toute la direction « deux fois trop forte ».
-	SteerMinPct = 0.189, -- braquage minimal (fraction de SteeringLock) à haute vitesse. MESURÉ avec
-	-- SteerFade ci-dessus : ajustement conjoint sur les 7 vitesses, RMS 2,07 ° (écart relatif max 16 %,
-	-- à 30 km/h). Une forme en 35/(1+(v/15,1)^2,6) plafonnée à 30,62 ° tomberait à 0,89 ° de RMS (14 %
-	-- d'écart relatif max) : la forme linéaire du moteur ne peut pas être à la fois plate sous 30 km/h et
-	-- lente au-delà. Raffinement possible, non adopté — le gain en relatif est marginal.
+	-- 8,27 / 6,61 ° à 45 / 60 / 75 / 90 / 105 km/h. Les six consignes relevées à 60 km/h donnent la même
+	-- valeur à 0,39 ° près. L'ancien réglage (fondu linéaire, 28 ; 0,3 ; 1,6) collait à 15 km/h mais
+	-- braquait 2,30 × trop à 105 : c'était là toute la direction « deux fois trop forte » vue en 3D.
+	SteerFade = 15.0, -- m/s : vitesse où le braquage tombe à la MOITIÉ de SteeringLock (sens changé avec la
+	-- forme de la loi, voir ci-dessous). MESURÉ avec SteerFadePower, les deux ajustés ensemble sur les sept
+	-- vitesses, plafond et plancher étant eux-mêmes mesurés et non ajustés : RMS 0,78 °, écart relatif
+	-- maximal 11,6 % (à 90 km/h). Le fondu linéaire précédent laissait 2,07 ° de RMS et 16 % d'écart.
+	SteerFadePower = 2.72, -- exposant du fondu : lock = SteeringLock / (1 + (v/SteerFade)^SteerFadePower).
+	-- La forme linéaire ne pouvait pas être à la fois plate sous 30 km/h et lente au-delà, et son résidu
+	-- tombait justement dans la bande 30-45 km/h où vivent les essais de virage : au virage 40 km/h elle
+	-- donnait 23,6 ° contre 26,17 ° mesurés (−9,7 %), cette forme donne 26,03 ° (−0,5 %). C'est ce qui a
+	-- décidé l'adoption : le balayage de PeakFactor se fait sur ce virage.
+	SteerLockMeanPct = 0.875, -- butée mécanique, en fraction de SteeringLock. MESURÉ : 30,625 ° pour
+	-- fSteeringLock = 35 °. C'est la MOYENNE des deux roues avant — l'intérieure va à 35 °, l'extérieure à
+	-- 26,25 °, soit un rapport d'Ackermann de 0,75 — et le moteur n'appliquant qu'un angle unique aux deux
+	-- roues, c'est bien la moyenne qu'il doit viser. À 15 et 30 km/h les consignes 0,80 et 1,00 donnent
+	-- toutes deux exactement cette valeur. Mettre 1 pour l'ancien comportement.
+	SteerMinPct = 0.1889, -- braquage minimal (fraction de SteeringLock) à haute vitesse. MESURÉ : 6,61 °
+	-- à 105 km/h. Ce plancher n'agit qu'au-delà de 95 km/h, où il rattrape la queue de la courbe.
 	SteerPeakGain = 0, -- CONTREDIT PAR LA MESURE, désactivé. Ce garde-fou imposait au braquage de rester
 	-- au-dessus de 1,6 × l'angle de dérive du pic, soit 15,2 ° : il était donc actif dès 100 km/h et
 	-- expliquait l'essentiel de l'écart haute vitesse. GTA ne le respecte pas : à 105 km/h il ne braque que
 	-- 6,61 °, bien SOUS l'angle du pic latéral (9,5 ° pour PeakFactor 0,5). Le véhicule n'est pas censé
 	-- pouvoir atteindre son pic latéral à haute vitesse.
+	-- Le lacet, lui, est PUREMENT CINÉMATIQUE dans GTA : sur 20 plateaux, de 15 à 102 km/h et de 0,56 ° à
+	-- 16,6 ° de braquage, lacet = v × braquage / 2,811 m à 3,9 % près (écart-type 0,038 m). Ni sous-virage
+	-- ni survirage dans cette plage : si le braquage est juste, le lacet suit. C'est le critère de
+	-- vérification en 3D.
 	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée
 	AbsSlip = 0.18, -- ABS : glissement au-delà duquel le frein est relâché
 	AbsRelease = 0.35, -- ABS : fraction du freinage gardée quand il relâche
@@ -419,12 +435,16 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		shift(S, S.gear - 1, -1)
 	end
 
-	-- direction : braquage réduit avec la vitesse
-	local target = math.max(P.alphaPeak * T.SteerPeakGain, P.steerLock * T.SteerMinPct)
-	local lock = P.steerLock + (math.min(target, P.steerLock) - P.steerLock) * math.clamp(math.abs(vf) / T.SteerFade, 0, 1)
+	-- direction : braquage réduit avec la vitesse. Forme MESURÉE dans GTA (essai `steerfade`, 20 plateaux
+	-- à consigne constante de 15 à 105 km/h) : une décroissance en 1/(1 + (v/SteerFade)^SteerFadePower),
+	-- plafonnée par la butée mécanique et planchée à haute vitesse. Voir Dyn.Tuning pour les mesures.
+	local cap = P.steerLock * T.SteerLockMeanPct
+	local floor = math.min(math.max(P.alphaPeak * T.SteerPeakGain, P.steerLock * T.SteerMinPct), cap)
+	local fade = 1 + (math.abs(vf) / T.SteerFade) ^ T.SteerFadePower
+	local lock = math.clamp(math.max(P.steerLock / fade, floor), 0, cap)
 	local beta = (math.abs(vf) > 2) and math.atan2(vBody.X, math.abs(vf)) or 0
 	S.lock = lock
-	S.steerAngle = math.clamp(-(inp.Steer or 0) * lock + T.CounterSteer * beta, -P.steerLock, P.steerLock)
+	S.steerAngle = math.clamp(-(inp.Steer or 0) * lock + T.CounterSteer * beta, -cap, cap)
 
 	-- suspension -> charges normales
 	local N = {}

@@ -533,11 +533,24 @@ ce que montrait la 3D en négatif — 69 °/s au lieu de 29 parce que la roue br
 
 ### Ce qui est appliqué
 
-| Réglage | Avant | Après | Pourquoi |
+La loi du moteur **change de forme**. Elle descendait linéairement de `SteeringLock` jusqu'à un plancher
+atteint à `SteerFade` ; elle suit maintenant la forme mesurée :
+
+```
+lock(v) = min( SteeringLock × SteerLockMeanPct,
+               max( SteeringLock / (1 + (v / SteerFade) ^ SteerFadePower), SteeringLock × SteerMinPct ) )
+```
+
+| Réglage | Avant | Après | Origine |
 |---|---|---|---|
-| `SteerFade` | 28 m/s | **25,3 m/s** | ajustement conjoint sur les 7 vitesses |
-| `SteerMinPct` | 0,3 | **0,189** | idem ; cible 6,61 ° à haute vitesse |
+| `SteerFade` | 28 m/s | **15,0 m/s** | ajusté — sens changé : vitesse où le braquage tombe de moitié |
+| `SteerFadePower` | — | **2,72** | ajusté conjointement |
+| `SteerLockMeanPct` | — | **0,875** | **mesuré** : butée 30,625 ° pour `fSteeringLock` 35 ° |
+| `SteerMinPct` | 0,3 | **0,1889** | **mesuré** : 6,61 ° à 105 km/h |
 | `SteerPeakGain` | 1,6 | **0** | contredit par la mesure |
+
+Seuls deux paramètres sont ajustés : le plafond et le plancher sont des mesures directes. RMS **0,78 °**
+contre 2,07 ° pour la forme linéaire.
 
 `SteerPeakGain` imposait au braquage de rester au-dessus de 1,6 × l'angle de dérive du pic, soit 15,2 ° :
 il était donc **actif dès 100 km/h** et causait l'essentiel de l'écart. GTA ne braque que 6,61 ° à
@@ -548,20 +561,28 @@ pouvoir atteindre son pic latéral à haute vitesse.
 
 | Vitesse | GTA | Avant | Après |
 |---|---|---|---|
-| 15 km/h | 30,62 ° | 32,06 ° (+5 %) | 30,33 ° (−1 %) |
-| 30 km/h | 30,62 ° | 29,14 ° (−5 %) | 25,65 ° (−16 %) |
-| 45 km/h | 21,20 ° | 26,31 ° (+24 %) | 20,98 ° (−1 %) |
-| 60 km/h | 14,69 ° | 23,39 ° (+59 %) | 16,30 ° (+11 %) |
-| 75 km/h | 10,81 ° | 20,61 ° (+91 %) | 11,63 ° (+8 %) |
-| 90 km/h | 8,27 ° | 17,70 ° (+114 %) | 6,95 ° (−16 %) |
+| 15 km/h | 30,62 ° | 32,06 ° (+5 %) | 30,62 ° (0 %) |
+| 30 km/h | 30,62 ° | 29,14 ° (−5 %) | 29,11 ° (−5 %) |
+| 45 km/h | 21,20 ° | 26,31 ° (+24 %) | 21,75 ° (+3 %) |
+| 60 km/h | 14,69 ° | 23,39 ° (+59 %) | 15,01 ° (+2 %) |
+| 75 km/h | 10,81 ° | 20,61 ° (+91 %) | 10,16 ° (−6 %) |
+| 90 km/h | 8,27 ° | 17,70 ° (+114 %) | 6,98 ° (−13 %) |
 | 105 km/h | 6,61 ° | 15,20 ° (+130 %) | 6,61 ° (0 %) |
 
-**Ce qui reste.** La forme linéaire du moteur (35 ° à l'arrêt, descente droite jusqu'à `SteerFade`) ne peut
-pas être à la fois plate sous 30 km/h et lente au-delà : il reste ±16 % d'écart, RMS 2,07 °. Une forme en
-`35 / (1 + (v/15,1)^2,6)` plafonnée à 30,62 ° tombe à **0,89 ° de RMS** (14 % d'écart relatif maximal, et
-seulement −5,5 % à 30 km/h). Non adoptée : le gain en relatif est marginal, et changer la forme de la loi
-en même temps que ses coefficients rendrait la vérification en 3D illisible. À reprendre si la 3D montre
-que les 16 % à 30 km/h se voient.
+**Pourquoi changer la forme, et pas seulement les coefficients.** La forme linéaire ne peut pas être à la
+fois plate sous 30 km/h et lente au-delà, et son résidu tombait **justement dans la bande 30–45 km/h où
+vivent les essais de virage** — donc sur le virage 40 qui sert à balayer `PeakFactor`. Le braquage de roue
+relevé dans les traces GTA, comparé aux deux formes à la même vitesse et à la même consigne effective :
+
+| Essai | Consigne | GTA | Forme linéaire | Forme mesurée |
+|---|---|---|---|---|
+| Virage 40 (36,5 km/h) | 1,00 | 26,17 ° | 23,63 ° (**−9,7 %**) | 26,03 ° (**−0,5 %**) |
+| Créneau (58,1 km/h) | 0,50 | 5,07 ° | 5,63 ° (+11 %) | 5,25 ° (+3,6 %) |
+| Slalom (59,4 km/h) | 0,50 | 4,95 ° | 5,50 ° (+11 %) | 5,08 ° (+2,7 %) |
+
+Garder la forme linéaire aurait livré un virage 40 sous-braqué de 10 %, avec le risque que le balayage de
+`PeakFactor` compense ce défaut par de l'adhérence — exactement l'erreur qui avait figé `PeakFactor` à 0,5.
+Ce qui reste : −13 % vers 90 km/h, loin des essais de virage, et −5 % à 30 km/h.
 
 ### Ce que la pleine butée ne permet pas de mesurer
 
