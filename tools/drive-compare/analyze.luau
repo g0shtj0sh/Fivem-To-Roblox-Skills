@@ -96,6 +96,35 @@ local function lateral(g, r)
 	return lat, slip
 end
 
+-- braquage de roue (°, positif à GAUCHE comme GTA) : moyenne des deux roues avant de la télémétrie FiveM
+-- (w0str, w1str en rad) ou angle unique du moteur Roblox (steerDeg, DriveBench)
+local function wheelSteerDeg(g, r)
+	local a, b = g(r, "w0str"), g(r, "w1str")
+	if a and b then
+		return deg((a + b) / 2)
+	end
+	return g(r, "steerDeg")
+end
+
+-- Dérive des pneus (°) : angle entre le plan de la roue et la vitesse au milieu de l'essieu. Repère des deux
+-- télémétries : x (vLat) à DROITE, z (wz) vers le haut. Vitesse latérale à l'essieu avant (distance a du
+-- centre de gravité) : vLat − a·wz ; à l'arrière : vLat + b·wz. Ce signe est imposé par ω × r ; l'autre
+-- combinaison donne 34 ° de dérive avant au virage 40 GTA, incompatible avec β = b/R − α_arrière.
+local function tyreSlips(g, r, a, b)
+	local v = g(r, "vFwd")
+	if math.abs(v) < 2 then
+		return nil
+	end
+	local d = wheelSteerDeg(g, r)
+	if not d then
+		return nil
+	end
+	local vy, wz = g(r, "vLat"), g(r, "wz")
+	local thF = -deg(math.atan((vy - a * wz) / v)) -- positif à gauche
+	local thR = -deg(math.atan((vy + b * wz) / v))
+	return math.abs(d - thF), math.abs(thR), math.abs(d)
+end
+
 local function manoeuvre(test, g, rows, opts)
 	local W = A.Windows[test] or {}
 	local i0 = startIndex(g, rows, W.start)
@@ -104,6 +133,7 @@ local function manoeuvre(test, g, rows, opts)
 	local m = { window = (g(rows[i1], "t") - t0) / 1000, cutByStep = cut }
 	local maxRoll, maxYaw, maxLat, maxSlip, minWheels = 0, 0, 0, 0, 4
 	local sLat, sSlip, sRoll, sV, sW = {}, {}, {}, {}, {}
+	local sTF, sTR, sSt = {}, {}, {}
 	for i = i0, i1 do
 		local r = rows[i]
 		local t = (g(r, "t") - t0) / 1000
@@ -121,8 +151,18 @@ local function manoeuvre(test, g, rows, opts)
 			table.insert(sRoll, math.abs(g(r, "roll")))
 			table.insert(sV, math.abs(g(r, "vFwd")))
 			table.insert(sW, math.abs(g(r, "wz")))
+			if opts.axleFront and opts.axleRear then
+				local f, rr, st = tyreSlips(g, r, opts.axleFront, opts.axleRear)
+				if f then
+					table.insert(sTF, f)
+					table.insert(sTR, rr)
+					table.insert(sSt, st)
+				end
+			end
 		end
 	end
+	-- dérives des pneus et braquage de roue établis (seulement si les distances d'essieu sont fournies)
+	m.steadyTyreSlipFront, m.steadyTyreSlipRear, m.steadyWheelSteer = mean(sTF), mean(sTR), mean(sSt)
 	m.maxRoll, m.maxYaw, m.peakLatG, m.maxSlip, m.minWheels = maxRoll, maxYaw, maxLat, maxSlip, minWheels
 	if #sLat > 0 then
 		m.steadyLatG = mean(sLat)
@@ -241,6 +281,8 @@ end
 
 -- opts.stepCut : couper aussi au premier écart d'altitude de caisse > 8 mm (traces FiveM du tablier ;
 -- pas sur la piste Roblox, plate, où la caisse s'enfonce de plus de 8 mm en virage)
+-- opts.axleFront / opts.axleRear : distances (m) du centre de gravité aux essieux avant / arrière ; si elles
+-- sont données, ajoute steadyTyreSlipFront / steadyTyreSlipRear / steadyWheelSteer (fenêtre établie)
 function A.run(test, columns, rows, opts)
 	opts = opts or {}
 	local g = col(columns)

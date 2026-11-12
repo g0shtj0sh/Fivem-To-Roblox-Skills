@@ -37,6 +37,12 @@ local r = Bench.corner(40, 1, 4)
 local m = A.run("corner40", Bench.Columns, r.samples)   -- sans stepCut : la piste Roblox est plate
 ```
 
+Avec `{ axleFront = a, axleRear = b }` (m du centre de gravité aux essieux ; m422 : 1,38 / 1,41), l'analyseur
+ajoute les dérives des pneus avant / arrière et le braquage de roue établis (`steadyTyreSlipFront`,
+`steadyTyreSlipRear`, `steadyWheelSteer`) ; côté GTA : `lune run tools/drive-compare/gta.luau <dossier> 1.38 1.41`.
+Signe : `vLat` est positif vers la droite dans les deux télémétries, donc la vitesse latérale à l'essieu avant
+vaut `vLat − a·wz` et à l'arrière `vLat + b·wz`.
+
 Essais reconnus : `corner40`, `corner80`, `stepsteer`, `slalom`, `handbrake`, `curb20`, `curb60`
 (tout autre nom est analysé comme une manœuvre sans fenêtre).
 
