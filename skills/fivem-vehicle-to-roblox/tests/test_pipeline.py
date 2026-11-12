@@ -39,7 +39,7 @@ def test_pipeline():
         out = tmp / "out" / "testcar"
         gltf = read_glb(out / "testcar.glb")
         names = {n["name"] for n in gltf["nodes"]}
-        cfg = json.loads((out / "vehicle_config.json").read_text())["roblox_config"]
+        cfg = json.loads((out / "vehicle_config.json").read_text(encoding="utf-8"))["roblox_config"]
 
         # roues : 1 seule modélisée, 4 en sortie, aux positions des os
         for w in ("wheel_lf", "wheel_rf", "wheel_lr", "wheel_rr"):
@@ -70,18 +70,18 @@ def test_pipeline():
         for f in cfg["Audio"]["Files"].values():
             assert (out / "sounds" / f).exists(), f
         assert cfg["HasSiren"] is True
-        setup = (out / "testcar_Setup.lua").read_text()
+        setup = (out / "testcar_Setup.lua").read_text(encoding="utf-8")
         assert "__CONFIG_TABLE__" not in setup and "local SOURCES" in setup
         assert "__RUNTIME_VERSION__" not in setup and "F2RExpectedParts" in setup
         # variante studio/ pour l'automatisation par execute_luau
         sdir = out / "studio"
-        man = json.loads((sdir / "manifest.json").read_text())
+        man = json.loads((sdir / "manifest.json").read_text(encoding="utf-8"))
         assert man["vehicle"] == "testcar" and len(man["runtime_version"]) == 12
-        compact = (sdir / "testcar_Setup.studio.lua").read_text()
+        compact = (sdir / "testcar_Setup.studio.lua").read_text(encoding="utf-8")
         assert "local SOURCES = nil" in compact and "local CONFIG_SOURCE = nil" in compact
         assert man["runtime_version"] in compact
         assert (sdir / "Verify.lua").exists() and (sdir / "ApplySoundIds.lua").exists()
-        runtime = (sdir / "FiveMRuntime.lua").read_text()
+        runtime = (sdir / "FiveMRuntime.lua").read_text(encoding="utf-8")
         assert "__RUNTIME_SOURCES__" not in runtime and "VehicleCustomization" in runtime
         assert "VehicleAccess" in runtime and 'SOURCES.VehicleAccess' in runtime
         # moteur de conduite : modules installés, lest et actionneurs créés par le Setup
@@ -89,7 +89,7 @@ def test_pipeline():
             assert f"SOURCES.{mod}" in runtime, mod
         assert '"Ballast"' in compact and '"DriveForce"' in compact and '"DriveTorque"' in compact
         assert (sdir / "DriveBench.lua").exists() and (sdir / "TestTrack.lua").exists()
-        access = (ROOT / "roblox" / "runtime" / "VehicleAccess.lua").read_text()
+        access = (ROOT / "roblox" / "runtime" / "VehicleAccess.lua").read_text(encoding="utf-8")
         assert "function Access.RecoverFromVoid" in access and "function Access.PlaceOnGround" in access
         # monter / descendre : une invite F par siège, invite de remise sur les roues, attributs
         assert "EnterPrompt" in compact and "Enum.KeyCode.F" in compact and "RecoverPrompt" in compact
@@ -100,13 +100,13 @@ def test_pipeline():
             calls = next(s["calls"] for s in man["steps"] if s["key"] == step)
             parts = []
             for c in calls:
-                code = (sdir / c).read_text()
+                code = (sdir / c).read_text(encoding="utf-8")
                 assert len(code.encode()) < 21000, c
                 m = re.search(r"table\.insert\(_G\.F2R_BUF\[\"[^\"]+\"\], \[(=+)\[\n(.*)\]\1\]\)\n", code, re.S)
                 assert m, c
                 parts.append(m.group(2))
             assert "".join(parts) == src, step
-            assert "loadstring" in (sdir / calls[-1]).read_text()
+            assert "loadstring" in (sdir / calls[-1]).read_text(encoding="utf-8")
         # étape 3 : physique complète du véhicule
         hd = cfg["Handling"]
         assert hd["TractionCurveLateralDeg"] == 22.5 and abs(hd["TractionCurveLateralRad"] - 0.392699) < 1e-5

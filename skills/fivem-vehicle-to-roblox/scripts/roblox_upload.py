@@ -85,7 +85,7 @@ def main() -> int:
     creator = {"userId": str(args.user_id)} if args.user_id else {"groupId": str(args.group_id)}
     d = Path(args.sounds_dir)
     out = d / "sound_ids.json"
-    ids = json.loads(out.read_text()) if out.exists() else {}
+    ids = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
     files = sorted(p for p in d.iterdir() if p.suffix.lower() in TYPES)
     # si .ogg et .wav coexistent, on n'envoie que le .ogg (plus léger)
     stems_ogg = {p.stem for p in files if p.suffix == ".ogg"}

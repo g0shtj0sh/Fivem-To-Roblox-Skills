@@ -689,10 +689,10 @@ def main(argv=None) -> int:
         root = work / "src"
     else:
         root = src
-    register_names(line.strip() for line in (EXTRACTOR_DIR / "extra_strings.txt").read_text().splitlines()
+    register_names(line.strip() for line in (EXTRACTOR_DIR / "extra_strings.txt").read_text(encoding="utf-8").splitlines()
                    if line.strip() and not line.startswith("//"))
     register_names(s + ".sps" for s in list(line.strip() for line in (EXTRACTOR_DIR / "extra_strings.txt")
-                                            .read_text().splitlines() if line.startswith("vehicle_")))
+                                            .read_text(encoding="utf-8").splitlines() if line.startswith("vehicle_")))
 
     inv = inventory.scan(root)
     if inventory.needs_conversion(inv):
