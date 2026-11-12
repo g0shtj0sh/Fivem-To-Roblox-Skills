@@ -1,5 +1,5 @@
 {
- "quoi": "Campagne des essais ajoutes le 2026-11-12 : burnout, frein a main en virage, puissance en glisse, reduction d'adherence, retournement, vol. Vehicule m422, 3 passes par essai sauf la reduction d'adherence et le retournement (1 par cas).",
+ "quoi": "Campagne des essais ajoutes le 2026-11-12 : burnout, frein a main en virage, puissance en glisse, reduction d'adherence, retournement, vol. Vehicule m422, 3 passes par essai sauf la reduction d'adherence et le retournement (1 par cas). Reprise du 2026-11-12 : le controle en l'air separe en couple, plafond et borne d'assiette, et la puissance en glisse tranchee a regime apparie.",
  "quand": "2026-11-12",
  "resultats": {
   "burnout_1": {
@@ -2090,17 +2090,6 @@
   ],
   "essieuxMoteurs": "les deux",
   "graviteParVehicule": 9.8,
-  "coupleDeRoulisEnVol": {
-   "degParSeconde2ParUnite": 78.4,
-   "radParSeconde2": 1.368,
-   "plus1": 77.1,
-   "moins1": -79.6,
-   "sansEntree": 0.4,
-   "fiabilite": "sure, 3 passes, ecart-type 2 a 4"
-  },
-  "coupleDeTangageEnVol": {
-   "fiabilite": "non obtenue : le tremplin imprime sa propre rotation"
-  },
   "autoRedressementEnVol": {
    "valeur": 0.0,
    "mesure": "+1,8 et +0,4 deg/s2 sans entree",
@@ -2138,7 +2127,110 @@
    "note": "resout l ecart annonce a 0,29, qui venait d un echantillon etroit"
   },
   "coupureDePuissanceEnGlisse": {
-   "fiabilite": "non tranchee : regime et rapport non controles"
+   "existe": false,
+   "quoi": "A regime et rapport apparies, la puissance de roue est PLUS elevee en glisse. Comparaison faite sur une courbe de reference puissance/regime construite en ligne droite au rapport 2, plein gaz, puis lue au regime exact de la glisse.",
+   "ecartMoyen": "+9,7 %",
+   "ecartParPasse": [
+    "+16,6 %",
+    "+6,1 %",
+    "+5,8 %"
+   ],
+   "ligneDroite": {
+    "images": 349,
+    "puissance": 0.336,
+    "patinage": 0.236,
+    "roueSurCaisse": 1.005,
+    "embrayage": 0.882,
+    "derive_deg": 0.2
+   },
+   "glisse": {
+    "images": 28,
+    "puissance": 0.368,
+    "patinage": 3.694,
+    "roueSurCaisse": 0.889,
+    "embrayage": 1.0,
+    "derive_deg": 28.2
+   },
+   "pasDuPatinage": "en glisse la roue tourne MOINS vite que la caisse ne se deplace (0,889 contre 1,005), la vitesse de caisse contenant les 28 deg de derive ; l'embrayage est completement engage (1,000 contre 0,882)",
+   "fiabilite": "signe ferme ; ampleur a +-10 %, 28 images de glisse franche, un seul vehicule"
+  },
+  "controleEnVol": {
+   "quoi": "Le controle en l'air a trois constantes : un couple constant, un plafond de vitesse angulaire, et une borne d'assiette en piquer. La premiere analyse, qui moyennait l'acceleration sur tout le vol, melangeait la montee et le plateau : d'ou un roulis sous-estime a 78,4 et un tangage incoherent.",
+   "coupleDegParSeconde2ParUnite": 90.8,
+   "coupleRadParSeconde2": 1.585,
+   "coupleIdentiqueSurLesDeuxAxes": true,
+   "parCas": {
+    "rien_p": {
+     "couple": 1.07,
+     "coupleEcartType": 0.0,
+     "extremes": [
+      -32.5,
+      -29.9,
+      -28.9
+     ],
+     "plafondAtteint": "3/3"
+    },
+    "roulis_m": {
+     "couple": -91.87,
+     "coupleEcartType": 1.49,
+     "extremes": [
+      -61.5,
+      -60.3,
+      -62.0
+     ],
+     "plafondAtteint": "3/3"
+    },
+    "roulis_p": {
+     "couple": 89.81,
+     "coupleEcartType": 0.64,
+     "extremes": [
+      62.9,
+      62.5,
+      60.6
+     ],
+     "plafondAtteint": "3/3"
+    },
+    "tangage_m": {
+     "couple": -88.76,
+     "coupleEcartType": 0.97,
+     "extremes": [
+      -59.6,
+      -60.4,
+      -59.7
+     ],
+     "plafondAtteint": "3/3"
+    },
+    "tangage_p": {
+     "couple": 92.9,
+     "coupleEcartType": 1.1,
+     "extremes": [
+      50.7,
+      51.2,
+      55.1
+     ],
+     "plafondAtteint": "1/3"
+    }
+   },
+   "plafondDegParSeconde": 61.1,
+   "plafondRadParSeconde": 1.066,
+   "plafondEcartType": 1.1,
+   "plafondVolsQuiLAtteignent": "9/15",
+   "borneAssietteEnPiquer_deg": -37.7,
+   "borneAssietteParPasse": [
+    -37.6,
+    -37.4,
+    -38.2
+   ],
+   "borneAssietteRetourDuTauxAZero": [
+    -37.5,
+    -37.2,
+    -38.0
+   ],
+   "borneAutresSens": "non atteinte : le roulis plafonne a +-35 deg d'assiette et le cabrage a +27 deg avant de se poser",
+   "methode": "pente ajustee sur la montee seule, jusqu'a l'extreme ; plafond lu comme l'extreme quand au moins 3 images y restent ; vol libre = les quatre compressions de suspension nulles",
+   "fiabilite": "couple sur (3 passes par cas, symetrie 96 a 98 %, ecart-type ~1) ; plafond sur (9 vols sur 15) ; borne en piquer sure dans ce sens seulement",
+   "plafondNonAtteintPar": "tangage +1 : part a -30 deg/s au decollage et le vol s'arrete avant qu'il ait franchi les 91 deg/s necessaires (atteint +50,7 a +55,1)",
+   "plafondEstDuVolLibre": "un vol tient +60 a +63 deg/s pendant 0,15 s a 1,5 a 2 m du sol, les quatre suspensions a zero : ce n'est pas un contact"
   }
  }
 }

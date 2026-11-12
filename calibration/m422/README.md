@@ -1314,26 +1314,63 @@ doux (3). Réserve : une passe par cas, et le véhicule glisse beaucoup aux pali
 17 à 41 °), donc le plateau n'est pas un régime établi franc. L'ordre et les ordres de grandeur sont sûrs,
 les valeurs à ±10 %.
 
-### Contrôle en l'air et auto-redressement
+### Contrôle en l'air : un couple, un plafond, et une borne d'assiette
 
 Le vol se fait sur un **tremplin posé** (`prop_mp_ramp_02`), approché à 70 km/h : environ une seconde de
 vol libre, mesurée sur les images où les quatre compressions de suspension sont nulles. L'entrée n'est
-appliquée que pendant ce vol. Trois passes par cas.
+appliquée que pendant ce vol. Trois passes par cas, quinze vols en tout.
 
-| Axe | +1 | −1 | sans entrée | **Couple par unité de consigne** |
+La première analyse moyennait l'accélération angulaire sur tout le vol et donnait un roulis à 78,4 °/s²
+et un tangage incohérent — positif dans les deux sens. **Les deux résultats étaient des artefacts de
+cette moyenne.** La vitesse angulaire ne croît pas indéfiniment : elle monte à couple constant, puis se
+fige sur un plafond. Toute fenêtre moyennée mélange donc la montée et le plateau, dans une proportion qui
+dépend de la durée du vol. En piqué c'est pire encore, le tremplin imprimant déjà −30 °/s au décollage :
+le plafond est atteint en 0,33 s et le reste du vol est du plateau. Il faut lire les deux séparément.
+
+**Le couple**, ajusté sur la montée seule, est le même sur les deux axes :
+
+| Axe | +1 | −1 | **Couple par unité de consigne** | Symétrie |
 |---|---|---|---|---|
-| **roulis** | +77,1 °/s² | −79,6 °/s² | +0,4 °/s² | **78,4 °/s², soit 1,37 rad/s²** |
-| tangage | +91,7 °/s² | +46,6 °/s² | +1,8 °/s² | non séparable |
+| **tangage** | +92,9 °/s² (σ 1,1) | −88,8 °/s² (σ 1,0) | **90,8 °/s², soit 1,585 rad/s²** | 96 % |
+| **roulis** | +89,8 °/s² (σ 0,6) | −91,9 °/s² (σ 1,5) | **90,8 °/s², soit 1,586 rad/s²** | 98 % |
 
-Le **roulis est net** : symétrique, biais nul, écart-type de 2 à 4 °/s² sur trois passes. Le **tangage ne
-l'est pas** : l'accélération sort positive dans les deux sens, parce que le tremplin imprime lui-même une
-rotation de tangage qui domine et diffère d'une passe à l'autre. L'entrée agit bien — l'assiette finale
-passe de +25,4 ° à −33,9 ° selon son signe — mais son gain n'est pas isolé par cet essai.
+Un seul chiffre pour les deux axes, à la troisième décimale en radians, avec un biais résiduel de +2,1 et
+−1,0 °/s². Le tangage, que l'essai précédent déclarait non obtenu, se mesure donc aussi bien que le roulis
+dès qu'on cesse de moyenner le plateau.
 
-**Il n'y a pas de couple d'auto-redressement en vol.** Sans entrée, les accélérations angulaires valent
-+1,8 et +0,4 °/s² : le véhicule **conserve** sa rotation. Un essai antérieur, où il partait à plat et sans
-rotation, le confirme en négatif — sa vitesse angulaire est restée exactement nulle pendant toute la chute.
-Ce que les mods appellent « auto-correction en vol » n'est donc pas un couple de redressement continu.
+**Le plafond** est franc. Neuf vols sur quinze butent sur la même valeur :
+
+| Cas | Extrême atteint | Vols concernés |
+|---|---|---|
+| roulis +1 | +62,9 / +62,5 / +60,6 °/s | 3 / 3 |
+| roulis −1 | −61,5 / −60,3 / −62,0 °/s | 3 / 3 |
+| tangage −1 | −59,6 / −60,4 / −59,7 °/s | 3 / 3 |
+| tangage +1 | n'a pas le temps (+50,7 à +55,1) | 0 / 3 |
+
+Soit **61,1 °/s, c'est-à-dire 1,066 rad/s**, écart-type 1,1 sur les neuf vols (0,4 en piqué seul). Le cas tangage +1
+ne contredit rien : il part à −30 °/s et le vol s'arrête avant qu'il ait franchi les 91 °/s nécessaires.
+Le plateau est bien du vol libre, pas un contact : un vol tient +60 à +63 °/s pendant 0,15 s à 1,5 à 2 m
+du sol, les quatre suspensions à zéro.
+
+**En piqué, l'assiette est bornée.** Les trois vols en tangage −1 s'arrêtent de piquer exactement au même
+endroit, et le nez remonte ensuite tout seul :
+
+| Passe | Assiette extrême | Assiette au retour du taux à zéro |
+|---|---|---|
+| 1 | −37,6 ° | −37,5 ° |
+| 2 | −37,4 ° | −37,2 ° |
+| 3 | −38,2 ° | −38,0 ° |
+
+Soit **−37,7 ° (σ 0,4)**. Ce n'est pas l'atterrissage : au moment où le taux est déjà repassé à +20 °/s, le
+véhicule est à 1,50 m du sol avec ses quatre suspensions nulles. Les autres directions n'atteignent pas
+leur borne dans ce vol — le roulis plafonne à ±35 ° d'assiette et le cabrage à +27 ° avant de se poser —
+donc **seule la borne en piqué est mesurée**, et on ne sait pas si elle est symétrique.
+
+**Il n'y a pas de couple d'auto-redressement en vol.** Sans entrée, l'accélération angulaire vaut
++1,1 °/s² : le véhicule **conserve** sa rotation, à −28 à −32 °/s pendant toute la seconde de vol. Un essai
+antérieur, où il partait à plat et sans rotation, le confirme en négatif — sa vitesse angulaire est restée
+exactement nulle pendant toute la chute. Ce que les mods appellent « auto-correction en vol » n'est donc
+pas un couple de redressement continu : c'est le plafond, plus la borne d'assiette en piqué.
 
 ### Retournement
 
@@ -1397,33 +1434,45 @@ le dépassent. La décélération en roue libre ne sépare pas proprement la tra
 les deux sites n'étant pas assez homogènes sur la distance de roue libre (0,19 à 0,45 g sur sable, 0,22 à
 0,31 sur bitume).
 
-### Deux questions tranchées, une qui reste
+### Trois questions tranchées
 
 **L'écart d'embrayage est un artefact d'échantillon.** Le rapport notait 0,1 dans le code du jeu contre
 ~0,29 dans la télémétrie. Sur **283 traces**, le minimum de `GetVehicleClutch` vaut exactement **0,1000**,
 observé sur 5033 images. La native descend donc bien à la valeur du code ; le 0,29 venait d'un essai où
 l'embrayage n'est jamais descendu plus bas.
 
-**La coupure de puissance en glisse n'est ni prouvée ni réfutée.** En ligne droite à plein gaz la puissance
-de roue vaut 0,32 à 0,34 pour un régime de 0,86 ; en glisse tenue (dérive 27 à 29 °) elle vaut 0,52 à 0,53
-pour un régime de 0,46 à 0,48. La puissance est donc **plus élevée** en glisse, ce qui contredit la coupure
-— mais le régime et le rapport diffèrent entre les deux phases, donc la comparaison n'est pas valide. Pour
-trancher il faudrait tenir le **même rapport et le même régime** des deux côtés, ce que cet essai ne force
-pas encore.
+**Il n'y a pas de coupure de puissance en glisse.** La première comparaison n'était pas valide, le régime
+et le rapport différant entre les deux phases. On la refait donc **à régime et rapport appariés** : une
+courbe de référence puissance/régime est construite sur 349 images de ligne droite à plein gaz au rapport 2,
+puis lue au régime exact de la glisse.
+
+| Rapport 2, plein gaz, régime 0,52 à 0,59 | Puissance de roue | Patinage | Roue / caisse | Embrayage | Dérive |
+|---|---|---|---|---|---|
+| ligne droite (349 images) | 0,336 | 0,236 | 1,005 | 0,882 | 0,2 ° |
+| **glisse tenue (28 images)** | **0,368** | 3,694 | **0,889** | **1,000** | 28,2 ° |
+
+La puissance de roue est **+9,7 % plus élevée** en glisse, et passe par passe de +5,8 à +16,6 % selon où
+l'on lit la courbe. Et ce n'est pas du patinage qui gonfle la lecture : en glisse la roue tourne **moins**
+vite que la caisse ne se déplace (0,889 contre 1,005), puisque la vitesse de caisse contient les 28 ° de
+dérive. L'embrayage, lui, est **complètement engagé** (1,000 contre 0,882). Le moteur ne lâche donc rien :
+il délivre au moins autant qu'en ligne droite au même régime. Réserve : 28 images de glisse franche contre
+349 de ligne droite, un seul véhicule, et une dérive tenue autour de 28 à 30 ° — l'ampleur de la hausse est
+mal cernée, mais son **signe est ferme**.
 
 ### Fiabilité des constantes
 
 | Constante | Valeur | Fiabilité |
 |---|---|---|
 | Étagement | 3,333 / 1,949 / 1,392 / 1,095 / 0,946 / 0,900 | **sûre** — lue directement, une fois |
-| Couple de roulis en l'air | 1,37 rad/s² par unité de consigne | **sûre** — 3 passes, symétrique, σ 2 à 4 °/s² |
+| Couple de contrôle en l'air | 1,585 rad/s² par unité, **identique en tangage et en roulis** | **sûre** — 3 passes par cas, symétrie 96 à 98 %, σ ≈ 1 °/s² |
+| Plafond de vitesse angulaire en vol | ≈ 61 °/s (1,07 rad/s) | **sûre** — 9 vols sur 15 l'atteignent, σ 0,9 |
+| Borne d'assiette en piqué | −37,7 ° | **sûre dans ce sens** — 3 passes à σ 0,4 ; les autres sens non atteints |
 | Auto-redressement en vol | nul | **sûre** — deux essais indépendants |
 | Redressement depuis le toit | 2,25 s sans entrée | **sûre** sur le principe, 1 passe par cas |
 | Paliers de réduction d'adhérence | 11 / 11 / 35 / 42 / 73 % | **ordre sûr, valeurs à ±10 %** — 1 passe, régime pas franc |
 | Glissement au démarrage | 0,08 (4×4) contre 1,2 à 1,8 (propulsion) | **sûre** — 3 passes chacun |
 | Vitesse de pointe sur sable | −14 % | **sûre** — 5 passes bitume, 4 sable |
-| Couple de tangage en l'air | — | **non obtenue** — le tremplin imprime sa propre rotation |
-| Coupure de puissance en glisse | — | **non tranchée** — régime et rapport non contrôlés |
+| Coupure de puissance en glisse | **inexistante** — +9,7 % à régime et rapport appariés | **signe sûr**, ampleur à ±10 % — 28 images de glisse |
 
 ## Limites de cette campagne
 
@@ -1449,6 +1498,8 @@ pas encore.
   chargée, `SetVehicleOnGroundProperly` ne fait rien : le véhicule garde l'assiette imposée
   et on lit une pente exactement nulle sur des kilomètres. Deux « pistes » de 2 km trouvées
   ainsi étaient du vide. Toute ligne droite a été validée en la conduisant.
-- **Un seul véhicule, un seul conducteur, une seule session.** Ni propulsion, ni moto, ni
-  véhicule lourd. Le `m422` est à 4 roues motrices (`DriveBiasFront` 0,5).
+- **Un conducteur, et presque un seul véhicule.** Le `m422` est à 4 roues motrices
+  (`DriveBiasFront` 0,5) et porte toutes les mesures fines. Une **propulsion puissante du jeu de
+  base** n'a été passée que sur trois essais — démarrage, vol, surfaces — pour séparer ce qui tient
+  au véhicule de ce qui tient au moteur du jeu. Ni moto, ni véhicule lourd.
 - Les traces contiennent **uniquement des mesures** : aucun fichier du jeu ni du mod.
