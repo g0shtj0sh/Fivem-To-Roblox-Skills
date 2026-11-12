@@ -357,11 +357,12 @@ local function record(v)
     samples[#samples + 1] = true
 end
 
--- MESURE : a 250, un essai de quelques secondes envoie plusieurs lots pendant que la
--- synchronisation d'entite est deja chargee, et le serveur ejecte le client pour depassement de
--- limite de debit (journal cfx : « dropped for going over a rate limit »). A 5000, un essai court
--- n'envoie qu'un seul lot, a la fin.
-local CHUNK <const> = 5000
+-- 250 lignes par lot, et PAS PLUS. MESURE : a 5000, le client est ejecte avec « Malformed network
+-- event payload » — un lot de cette taille depasse la limite d'un evenement reseau FiveM. A 80
+-- images par seconde, 250 lignes font un envoi toutes les 3 secondes environ, ce qui est tres en
+-- dessous de la limite de debit : les ejections « rate limit » observees pendant l'essai de vol
+-- venaient de la synchronisation d'entite pendant la culbute, pas de l'enregistreur.
+local CHUNK <const> = 250
 local curLabel = nil
 
 local function flush(force)
