@@ -11,7 +11,15 @@
 		Bench.reverse(4)                         -- marche arrière
 		Bench.curb(20, 160)                      -- bordure abordée à 20 km/h, jusqu'à 160 m parcourus
 		Bench.hill(20)                           -- démarrage en côte : arrêt, maintien, recul, reprise
+		Bench.stepsteer(60, 0.5)                 -- créneau : braquage brusque maintenu à vitesse tenue
+		Bench.slalom(60, 0.5, 2, 12)             -- slalom : braquage sinus (amplitude, période s, durée s)
 		Bench.trace(seconds, inputs)             -- trace libre, échantillons à chaque image
+
+	Échantillons : chaque essai garde aussi `r.samples`, une ligne par image pendant la manœuvre, avec les
+	MÊMES colonnes que la télémétrie FiveM (tools/fivem-telemetry) : Bench.Columns. Le comparateur
+	tools/drive-compare/compare.py calcule les mêmes grandeurs sur les deux traces.
+	Repère : vFwd + vers l'avant, vLat + vers la droite (m/s) ; wz lacet (rad/s, + = vers la gauche, comme le
+	z vers le haut de GTA) ; roll, pitch en degrés (pitch + = nez levé) ; pz hauteur de VehicleRoot (m).
 
 	Chaque essai commence là où se trouve le véhicule : prévoir une piste dégagée devant lui.
 ]]
@@ -59,6 +67,22 @@ local function state(a)
 	}
 end
 
+Bench.Columns = { "t", "str", "thr", "brk", "hb", "vFwd", "vLat", "wz", "roll", "pitch", "pz", "wheelsOnGround", "gear" }
+
+local function r3(x)
+	return math.floor((x or 0) * 1000 + 0.5) / 1000
+end
+
+-- une ligne d'échantillon (colonnes Bench.Columns), `t` en ms comme les traces FiveM
+local function sampleRow(a, t0, inputs)
+	local s = state(a)
+	local i = inputs or Drive.Override or {}
+	return {
+		math.floor((os.clock() - t0) * 1000 + 0.5), r3(i.Steer), r3(i.Throttle), r3(i.Brake), i.Handbrake and 1 or 0,
+		r3(s.speed), r3(s.lat), r3(s.yawRate), r3(s.roll), r3(s.pitch), r3(s.pos.Y), s.grounded, s.gear or 0,
+	}
+end
+
 -- Tenue de ligne (comme un conducteur) : en ligne droite, le volant corrige l'écart latéral et le cap
 -- par rapport à la ligne de départ. Sans elle, une petite dissymétrie (conducteur assis d'un côté)
 -- fait tourner le véhicule sur un très grand rayon (mesuré : ~3,7 km).
@@ -79,7 +103,8 @@ end
 
 -- `inputs` : table fixe, ou fonction (a) -> table recalculée à chaque image (régulateur de vitesse…).
 -- Les entrées sont posées AVANT le pas de simulation ; `each` ne sert qu'à mesurer / arrêter.
-local function hold(inputs, seconds, each, keepLine)
+-- `rec` : table où ajouter une ligne d'échantillon par image (voir Bench.Columns), ou nil.
+local function hold(inputs, seconds, each, keepLine, rec)
 	local a = Drive.Get()
 	local t0 = os.clock()
 	while os.clock() - t0 < seconds do
@@ -89,10 +114,17 @@ local function hold(inputs, seconds, each, keepLine)
 		end
 		Drive.SetOverride(i)
 		RunService.Heartbeat:Wait()
+		if rec and a then
+			table.insert(rec.rows, sampleRow(a, rec.t0, i))
+		end
 		if each and each(os.clock() - t0) then
 			break
 		end
 	end
+end
+
+local function newRec()
+	return { t0 = os.clock(), rows = {} }
 end
 
 -- arrêt : frein en marche avant ; en marche arrière c'est l'accélérateur qui freine (comme dans GTA :
@@ -167,6 +199,7 @@ function Bench.brake(fromKmh, opts)
 	local inputs = opts.handbrake and { Throttle = 0, Brake = 0, Steer = 0, Handbrake = true }
 		or { Throttle = 0, Brake = 1, Steer = 0, Handbrake = false }
 	local r = { from = s0.speed * 3.6 }
+	local rec = newRec()
 	hold(inputs, 15, function(t)
 		local s = state(a)
 		r.maxYaw = math.max(r.maxYaw or 0, math.abs(math.deg(s.yawRate)))
@@ -175,7 +208,8 @@ function Bench.brake(fromKmh, opts)
 			return true
 		end
 		return false
-	end, not opts.handbrake)
+	end, not opts.handbrake, rec)
+	r.samples = rec.rows
 	r.distance = (state(a).pos - s0.pos).Magnitude
 	r.decelG = r.time and (s0.speed / r.time / 9.8) or nil
 	settle(a)
@@ -188,27 +222,89 @@ function Bench.corner(kmh, steer, seconds)
 	hold({ Throttle = 1, Brake = 0, Steer = 0 }, 30, function()
 		return state(a).speed * 3.6 >= kmh
 	end, true)
-	-- maintient la vitesse (gaz proportionnels) en braquant à fond
+	-- maintient la vitesse (gaz proportionnels, même loi que tools/fivem-telemetry) en braquant à fond
 	local r = { kmh = kmh }
-	local t0 = os.clock()
-	Drive.SetOverride({ Throttle = 0.5, Brake = 0, Steer = steer or 1 })
-	while os.clock() - t0 < (seconds or 4) do
-		RunService.Heartbeat:Wait()
+	local rec = newRec()
+	local p0 = state(a).pos
+	hold(function()
+		local err = kmh / 3.6 - state(a).speed
+		return { Throttle = math.clamp(0.4 + err * 0.4, 0, 1), Brake = 0, Steer = steer or 1, Handbrake = false }
+	end, seconds or 4, function()
 		local s = state(a)
-		local err = kmh / 3.6 - s.speed
-		Drive.SetOverride({ Throttle = math.clamp(0.4 + err * 0.4, 0, 1), Brake = 0, Steer = steer or 1 })
 		r.maxRoll = math.max(r.maxRoll or 0, math.abs(s.roll))
 		r.maxYawRate = math.max(r.maxYawRate or 0, math.abs(math.deg(s.yawRate)))
 		r.minUp = math.min(r.minUp or 1, s.up)
+		r.minWheels = math.min(r.minWheels or 4, s.grounded)
 		if math.abs(s.speed) > 2 then
 			local beta = math.deg(math.atan2(s.lat, math.abs(s.speed)))
 			r.maxSlip = math.max(r.maxSlip or 0, math.abs(beta))
 			-- accélération latérale ≈ v × lacet
 			r.maxLatG = math.max(r.maxLatG or 0, math.abs(s.speed * s.yawRate) / 9.8)
 		end
-	end
+		return false
+	end, false, rec)
+	r.samples = rec.rows
 	r.endSpeed = state(a).speed * 3.6
+	r.displacement = (state(a).pos - p0).Magnitude
 	r.rolledOver = (r.minUp or 1) < 0.3
+	settle(a)
+	return r
+end
+
+-- Créneau : vitesse atteinte, 1 s de stabilisation en ligne droite, puis braquage brusque maintenu.
+function Bench.stepsteer(kmh, steer, seconds)
+	local a = active()
+	kmh = kmh or 60
+	settle(a)
+	hold({ Throttle = 1, Brake = 0, Steer = 0 }, 60, function()
+		return state(a).speed * 3.6 >= kmh
+	end, true)
+	hold(function()
+		local th, br = Bench._cruise(state(a), kmh)
+		return { Throttle = th, Brake = br, Steer = 0, Handbrake = false }
+	end, 1.0, nil, true)
+	local r = { kmh = kmh, steer = steer or 0.5, entrySpeed = state(a).speed * 3.6 }
+	local rec = newRec()
+	hold(function()
+		local th, br = Bench._cruise(state(a), kmh)
+		return { Throttle = th, Brake = br, Steer = steer or 0.5, Handbrake = false }
+	end, seconds or 4, function()
+		local s = state(a)
+		r.maxYawRate = math.max(r.maxYawRate or 0, math.abs(math.deg(s.yawRate)))
+		r.maxRoll = math.max(r.maxRoll or 0, math.abs(s.roll))
+		r.minUp = math.min(r.minUp or 1, s.up)
+		return false
+	end, false, rec)
+	r.samples = rec.rows
+	r.endSpeed = state(a).speed * 3.6
+	settle(a)
+	return r
+end
+
+-- Slalom : braquage sinus d'amplitude `amp` et de période `period` (s) à vitesse tenue.
+function Bench.slalom(kmh, amp, period, seconds)
+	local a = active()
+	kmh, amp, period = kmh or 60, amp or 0.5, period or 2
+	settle(a)
+	hold({ Throttle = 1, Brake = 0, Steer = 0 }, 60, function()
+		return state(a).speed * 3.6 >= kmh
+	end, true)
+	local r = { kmh = kmh, amplitude = amp, period = period }
+	local rec = newRec()
+	local start = os.clock()
+	hold(function()
+		local th, br = Bench._cruise(state(a), kmh)
+		local t = os.clock() - start
+		return { Throttle = th, Brake = br, Steer = amp * math.sin(2 * math.pi * t / period), Handbrake = false }
+	end, seconds or 12, function()
+		local s = state(a)
+		r.maxRoll = math.max(r.maxRoll or 0, math.abs(s.roll))
+		r.maxYawRate = math.max(r.maxYawRate or 0, math.abs(math.deg(s.yawRate)))
+		r.minUp = math.min(r.minUp or 1, s.up)
+		return false
+	end, false, rec)
+	r.samples = rec.rows
+	r.endSpeed = state(a).speed * 3.6
 	settle(a)
 	return r
 end
@@ -237,6 +333,7 @@ local function cruise(s, kmh)
 	end
 	return math.clamp(0.25 + err * 0.5, 0, 1), 0
 end
+Bench._cruise = cruise
 
 -- Bordure de trottoir prise de face à vitesse tenue : tangage, roues décollées, vitesse perdue.
 function Bench.curb(kmh, untilMeters)
@@ -244,6 +341,7 @@ function Bench.curb(kmh, untilMeters)
 	settle(a)
 	local s0 = state(a)
 	local r = { kmh = kmh, maxPitch = 0, maxRoll = 0, minGrounded = 4, airborne = 0, minUp = 1 }
+	local rec = newRec()
 	local lastV = nil
 	local function cruiseInputs()
 		local th, br = cruise(state(a), kmh)
@@ -270,7 +368,8 @@ function Bench.curb(kmh, untilMeters)
 			lastV = s.speed
 		end
 		return dist >= (untilMeters or 160)
-	end, true)
+	end, true, rec)
+	r.samples = rec.rows
 	r.endSpeed = state(a).speed * 3.6
 	r.distance = (state(a).pos - s0.pos).Magnitude
 	settle(a)
@@ -300,6 +399,8 @@ function Bench.hill(kmh, minPitchDeg)
 	hold({ Throttle = 0, Brake = 1, Steer = 0 }, 6, function()
 		return math.abs(state(a).speed) < 0.1
 	end, true)
+	r.pitchStopped = state(a).pitch
+	r.gradeStopped = math.tan(math.rad(r.pitchStopped)) * 100
 	local p0 = state(a).pos
 	-- frein à main (frein maintenu à l'arrêt = marche arrière, comme dans GTA)
 	hold({ Throttle = 0, Brake = 0, Steer = 0, Handbrake = true }, 1.5, nil, true)
@@ -339,6 +440,25 @@ end
 
 function Bench.release()
 	Drive.SetOverride(nil)
+end
+
+-- Exporte un résultat en JSON par pages (execute_luau coupe sa réponse vers 64 Ko) :
+--   local n = Bench.exportPages(r, 40000) ; Bench.page(i) -> texte de la page i
+local pages = {}
+function Bench.exportPages(r, size)
+	local HttpService = game:GetService("HttpService")
+	local out = table.clone(r)
+	out.columns = Bench.Columns
+	local text = HttpService:JSONEncode(out)
+	pages = {}
+	size = size or 40000
+	for i = 1, #text, size do
+		table.insert(pages, string.sub(text, i, i + size - 1))
+	end
+	return #pages
+end
+function Bench.page(i)
+	return pages[i]
 end
 
 return Bench

@@ -2,7 +2,8 @@
 --[[
 	TestTrack.lua — piste d'essai temporaire pour les mesures de conduite (SERVEUR, en Play).
 	À créer en Play seulement (rien n'est enregistré dans la place), loin du reste de la carte :
-	une plaque de 2048 × 6144 studs (≈ 573 × 1720 m, dont 400 studs derrière le départ), une bordure de trottoir et une côte.
+	une plaque de 2048 × 6144 studs (≈ 573 × 1720 m, dont 400 studs derrière le départ), une marche et une côte,
+	aux dimensions de la campagne FiveM du m422 (calibration/m422/README.md) pour que les deux colonnes se comparent.
 
 		local Track = require(module)
 		local t = Track.build(folder)              -- origine auto : au-delà de tout ce que contient Workspace
@@ -11,8 +12,9 @@
 
 	Voies (CFrame de départ, le véhicule regarde vers l'avant de la voie) :
 		straight  x = 0      : 0-100, vitesse de pointe, freinage, virages (la plaque fait ±1024 studs)
-		curb      x = -700   : bordure de 0,15 m de haut à CurbDistance studs devant le départ
-		hill      x = +700   : côte à HillGrade (15 %) de HillLength studs, plateau, puis descente
+		curb      x = -700   : marche de 0,149 m de haut et 12,2 m de long à 74 m devant le départ (les
+		                       conteneurs posés dans GTA : on monte la marche, on roule dessus, on redescend)
+		hill      x = +700   : côte à HillGrade (16,5 %, pente relevée dans GTA) de HillLength studs, plateau, descente
 	Le véhicule qui sort de la plaque tombe : VehicleAccess le remet à sa dernière position sûre
 	(attribut VoidRecoveries). Garder la piste loin des autres véhicules et décors.
 ]]
@@ -23,11 +25,14 @@ local Track = {}
 Track.Tile = 2048
 Track.Tiles = 3
 Track.Behind = 400 -- studs de plaque derrière le départ (marche arrière)
-Track.CurbDistance = 500 -- studs
-Track.CurbHeight = 0.15 -- m
+-- Marche : mesurée dans GTA à +0,149 m, dessus plat sur 12,2 m, à 74 m du départ. Avant le 2026-11-12 c'était
+-- une barre de 2 studs (0,56 m) de long à 500 studs : une bosse franchie par les deux essieux, pas une marche.
+Track.CurbDistance = 74 * 3.571 -- studs
+Track.CurbHeight = 0.149 -- m
+Track.CurbLength = 12.2 -- m
 Track.HillStart = 300 -- studs devant le départ
 Track.HillLength = 200 -- studs
-Track.HillGrade = 0.15
+Track.HillGrade = 0.165 -- pente au point d'arrêt dans GTA (16,5 %, 9,35 °) ; 0,15 avant le 2026-11-12
 Track.LaneOffset = 700
 Track.StudsPerMeter = 3.571
 
@@ -81,10 +86,11 @@ function Track.build(parent, origin)
 		local m = part(folder, "Marker", Vector3.new(1, 3, 1), origin * CFrame.new(-12, 1.5, -d), Color3.fromRGB(240, 240, 240))
 		m.CanCollide, m.CanQuery, m.CanTouch = false, false, false -- repère visuel seulement
 	end
-	-- bordure de trottoir (voie curb)
+	-- marche (voie curb) : plateau de CurbLength m à CurbHeight m, arête franche des deux côtés
 	local ch = Track.CurbHeight * spm
-	part(folder, "Curb", Vector3.new(40, ch, 2), origin * CFrame.new(-Track.LaneOffset, ch / 2, -Track.CurbDistance),
-		Color3.fromRGB(200, 200, 200))
+	local cl = Track.CurbLength * spm
+	part(folder, "Curb", Vector3.new(40, ch, cl),
+		origin * CFrame.new(-Track.LaneOffset, ch / 2, -Track.CurbDistance - cl / 2), Color3.fromRGB(200, 200, 200))
 	-- côte (voie hill) : montée, plateau, descente
 	local rise = Track.HillLength * Track.HillGrade
 	local z0 = -Track.HillStart
