@@ -34,6 +34,24 @@ Dyn.Tuning = {
 	-- précédents était la boîte (DownshiftRpm 0,45 : rétrogradage 2→1 à 36 km/h en virage), pas le pneu.
 	KappaPeak = 0.12, -- glissement longitudinal du pic (champ absent de GTA V)
 	Falloff = 1.5, -- largeur (en multiples du pic) de la descente de Max vers Min
+	-- Plafond de la force LATERALE, proportionnel à la vitesse latérale au contact :
+	--     |Fy| ≤ LatVCap × |vitesse latérale| × charge
+	-- MESURÉ (2026-11-12) sur 33 plateaux établis : 22 cercles `skidpad` (dont 10 à rayon imposé, pour
+	-- séparer la vitesse du rayon), le virage 40, le virage 80 et le créneau. Sans ce plafond, le modèle
+	-- latéral a un résidu qui suit la VITESSE et non le rayon : à rayon fixé (18 m) il passe de +25 % à
+	-- 30 km/h à −17 % à 66 km/h, corrélation −0,84 avec la vitesse contre −0,56 avec le rayon. Avec le
+	-- plafond, les deux corrélations tombent à −0,17 et +0,02, et l'écart de 0,137 g à 0,083 g, pour UN seul
+	-- paramètre. C'est vraisemblablement le `fTractionSpringDeltaMax` du handling, décrit comme un
+	-- débattement latéral de flanc qui ramène le véhicule à l'arrêt après une glisse.
+	-- CE QUE ÇA RÉSOUT : le point ouvert « un seul `PeakFactor` ne tient pas à la fois le créneau (qui
+	-- voudrait 0,4) et le virage 40 (0,55) ». Ce n'était pas la forme de la courbe mais ce plafond : avec
+	-- lui et un `PeakFactor` unique, le créneau passe de −32,7 % à −3,8 % et le virage 40 de −12,6 % à
+	-- −3,6 %. Les deux essais diffèrent autant en vitesse (58,9 et 36,8 km/h) qu'en dérive.
+	-- CE QUI RESTE : la forme de la courbe n'est toujours PAS identifiable — linéaire, sinus, tanh, Möbius
+	-- et puissance tiennent dans 0,001 g l'une de l'autre — donc elle reste linéaire jusqu'au pic. Et il
+	-- reste +10 à +14 % vers 38-48 km/h, là où le plafond cesse de mordre : la transition est sans doute
+	-- trop brutale (un min dur), un raccord progressif ferait mieux.
+	LatVCap = 1.25, -- par (m/s) de vitesse latérale ; 0 = désactivé
 	FalloffKappa = 0.1, -- poids du glissement LONGITUDINAL dans cette descente. MESURÉ : au freinage les roues
 	-- se bloquent complètement (glissement −1,0) et l'adhérence reste à son pic (1,88 g pour 1,90) : dans GTA
 	-- la chute d'adhérence est pilotée par la dérive, pas par le blocage. 1 = ancien comportement.
@@ -645,6 +663,15 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				end
 				if hand then
 					Fy *= T.HandbrakeGripRear
+				end
+				-- plafond latéral proportionnel à la vitesse latérale au contact (MESURÉ ; voir Dyn.Tuning).
+				-- Il ne touche QUE le latéral : en ligne droite vLat ≈ 0, donc Fy ≈ 0 de toute façon, et la
+				-- motricité n'est pas concernée.
+				if T.LatVCap > 0 then
+					local latCap = T.LatVCap * math.abs(vLat) * N[i]
+					if math.abs(Fy) > latCap then
+						Fy = sign(Fy) * latCap
+					end
 				end
 				-- à basse vitesse, ne jamais renvoyer plus que la vitesse latérale à annuler (pas de tremblement)
 				local kill = math.abs(vLat) * w.massFrac / dt

@@ -772,7 +772,10 @@ séparément.
 
 ### 7. Ce qui reste
 
-- **Forme du pneu** : un seul `PeakFactor` ne tient pas à la fois le créneau (0,4) et le virage 40 (0,55).
+- ~~**Forme du pneu**~~ : **expliqué** le 2026-11-12, voir « La courbe du pneu ». Ce n'était pas la forme
+  de la courbe mais un **plafond latéral proportionnel à la vitesse latérale** (`LatVCap`) ; avec lui, un
+  `PeakFactor` unique tient le créneau à −3,8 % et le virage 40 à −3,6 %. `PeakFactor` à rebalayer en 3D
+  avec le plafond actif (prédiction : 0,385 à 0,45).
 - ~~**Réduction du braquage en glisse**~~ : **mesurée et calée** le 2026-11-12 après-midi, voir « La
   direction a deux étages ». Le virage 80 redevient utilisable au calage ; à rejouer en 3D.
 - **Roulis à 0,76 °/g** au lieu de 1,0 : bloqué par le patinage de la roue intérieure délestée (§ 5).
@@ -1009,6 +1012,110 @@ pas causale.
   réduction y sature à son plancher de 0,30 alors que GTA braque encore. Régime non calé, et sans intérêt
   pour le calage.
 - Le résidu de −0,064 au créneau est celui de la loi de base à 60 km/h, pas de la réduction.
+
+## La courbe du pneu : ce n'est pas sa forme qui manquait (2026-11-12)
+
+Le point ouvert disait : « un seul `PeakFactor` ne tient pas à la fois le créneau, qui voudrait 0,4, et le
+virage 40, qui veut 0,55 ; le pneu de Roblox est linéaire jusqu'au pic, celui de GTA s'infléchit tôt ; il
+faudrait une courbe à inflexion progressive ». **La forme n'était pas le problème.**
+
+### Ce que les cercles permettent de mesurer
+
+En régime établi, l'équilibre des moments de lacet donne `a·Ff = b·Fr`, et les charges statiques valent
+`Nf = m·g·b/L` et `Nr = m·g·a/L` : donc `Ff/Nf = Fr/Nr =` l'accélération latérale en g, **quelles que soient
+a et b**. Chaque plateau donne ainsi deux points de la courbe. Et la télémétrie donne, par roue, le
+braquage individuel (donc l'Ackermann), la vitesse d'avance (qui diffère d'une roue à l'autre de
+`lacet × voie/2`) et la **charge**, par la compression de suspension — dont le sens est vérifié sur des cas
+connus : au freinage l'avant passe à 0,241 contre 0,159 à l'arrière, et en virage l'extérieur à 0,218 contre
+0,172. Plus aucune hypothèse de charge, de moment ni de voie n'est donc nécessaire.
+
+### Premier résultat : la forme n'est pas identifiable
+
+Cinq formes ajustées sur 33 plateaux, chacune avec son `alphaPic` libre :
+
+| Forme | Écart |
+|---|---|
+| linéaire jusqu'au pic | 0,1365 g |
+| sinus | 0,1491 g |
+| tanh | 0,1365 g |
+| Möbius `(1+k)s/(1+ks)` | 0,1385 g |
+| puissance `s^k` | 0,1310 g |
+
+Elles tiennent dans 0,006 g l'une de l'autre, parce qu'un résidu bien plus grand les domine. **Choisir une
+forme là-dessus n'aurait rien mesuré.**
+
+### Le résidu suit la VITESSE, et c'est un défaut de conception de ma campagne
+
+La première campagne de cercles faisait varier la vitesse et le rayon **ensemble** (chaque vitesse avec ses
+consignes), donc le résidu n'était pas attribuable. Dix cercles de plus, à **rayon imposé** (8, 12 et 18 m,
+la consigne étant calculée à chaque vitesse depuis la loi de braquage), le séparent :
+
+| Rayon 18 m | 29,8 km/h | 39,2 | 48,6 | 57,6 | 66,5 |
+|---|---|---|---|---|---|
+| écart du modèle en angle | **+25 %** | +10 % | −2 % | −12 % | **−17 %** |
+
+Corrélation de l'écart avec la vitesse **−0,84**, avec le rayon −0,56, avec le patinage longitudinal +0,45.
+C'est donc la vitesse. Deux explications écartées en route :
+
+- **la charge** : un offset de précontrainte sur la compression (la compression sous-estime le report, 1,52
+  au freinage là où la géométrie impose 1,99) ne gagne que 4 % et laisse la corrélation à −0,85 ;
+- **le cercle de frottement** : la roue intérieure délestée patine bel et bien en cercle serré (`sk` jusqu'à
+  1,04), mais le plan à rayon imposé montre que la vitesse domine, pas le rayon.
+
+### Le mécanisme : un plafond proportionnel à la vitesse latérale
+
+```
+|Fy| ≤ LatVCap × |vitesse latérale au contact| × charge,   LatVCap = 1,25 par (m/s)
+```
+
+| | Écart | Corr. vitesse | Corr. rayon |
+|---|---|---|---|
+| sans plafond | 0,1365 g | −0,840 | −0,560 |
+| **avec plafond** | **0,0829 g** | **−0,167** | **+0,022** |
+
+Un seul paramètre tue les deux corrélations et retire 39 % du résidu. La variable « angle de dérive »
+sous-corrigeait la vitesse, la variable « vitesse latérale » la sur-corrigeait (corrélation +0,43) : le
+plafond fait la bonne chose, puisqu'il n'applique la dépendance que là où elle mord. C'est vraisemblablement
+le `fTractionSpringDeltaMax` du handling, décrit comme un débattement latéral de flanc qui ramène le
+véhicule à l'arrêt après une glisse — une **longueur**, pas un angle.
+
+### Ce que ça résout
+
+Avec le plafond et un `PeakFactor` **unique** :
+
+| Essai | Avant (linéaire, 0,55, sans plafond) | Après |
+|---|---|---|
+| Créneau (58,9 km/h) | **−32,7 %** | **−3,8 %** |
+| Virage 40 (36,8 km/h) | −12,6 % | −3,6 % |
+
+Les deux essais diffèrent autant en **vitesse** qu'en dérive : c'est pour ça qu'un modèle sans dépendance à
+la vitesse ne pouvait pas tenir les deux, et pourquoi le balayage en voulait 0,4 pour l'un et 0,55 pour
+l'autre.
+
+### ⚠ Les deux réglages sont couplés — et le plafond seul ne fait presque rien
+
+À `PeakFactor` 0,55, le plafond est **quasi inerte** (0,2611 → 0,2619 g dans le modèle statique) : la courbe
+y est déjà sous le plafond partout. Il ne mord que si la courbe est plus raide. C'est le **couple** qui
+compte :
+
+| `PeakFactor` | sans plafond | avec plafond |
+|---|---|---|
+| 0,385 | 0,1746 g | **0,0829 g** |
+| 0,45 | 0,1402 g | 0,1249 g |
+| 0,55 (en place) | 0,2611 g | 0,2619 g |
+
+`LatVCap` = 1,25 est donc posé dans le moteur, mais **`PeakFactor` reste à 0,55 en attendant un rebalayage
+en 3D**, pour deux raisons : le modèle ci-dessus est statique (il prédit l'accélération latérale à partir des
+dérives et des charges mesurées, il n'est pas le moteur), et le balayage en 3D est l'autorité sur ce que le
+moteur produit vraiment. Prédiction à vérifier : avec le plafond actif, `PeakFactor` devrait descendre vers
+**0,385 à 0,45**.
+
+### Ce qui reste
+
+- **La forme de la courbe reste non identifiable** : elle reste donc linéaire jusqu'au pic.
+- Il reste **+10 à +14 % vers 38-48 km/h**, là où le plafond cesse de mordre : la transition est un `min`
+  dur, un raccord progressif ferait sans doute mieux.
+- Mesures complètes : [`tyre-analyse.json`](tyre-analyse.json).
 
 ## Limites de cette campagne
 
