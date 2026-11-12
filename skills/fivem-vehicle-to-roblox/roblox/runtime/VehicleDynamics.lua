@@ -124,7 +124,11 @@ Dyn.Tuning = {
 	-- 16,6 ° de braquage, lacet = v × braquage / 2,811 m à 3,9 % près (écart-type 0,038 m). Ni sous-virage
 	-- ni survirage dans cette plage : si le braquage est juste, le lacet suit. C'est le critère de
 	-- vérification en 3D.
-	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée
+	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée.
+	-- MESURÉ : GTA n'en applique aucune, du moins pas sur l'entrée. Au virage 80, la commande (`steerAngle`,
+	-- le volant) monte à 35 ° et y RESTE pendant que la dérive de caisse passe de 0 à 15 ° et que l'angle de
+	-- roue tombe de 12,2 ° à 3,1 °. Si le jeu corrigeait la consigne, la commande baisserait. Elle ne baisse
+	-- pas : tout se joue en aval, et c'est `SteerSlideV0/K/Min` qui le décrit.
 	-- Réduction du braquage quand l'ARRIÈRE glisse, appliquée au braquage disponible APRÈS le fondu en
 	-- vitesse et le plancher, mais AVANT la butée mécanique. MESURÉ (2026-11-12) sur 7972 images et
 	-- 27 traces (18 cercles à consigne constante `skidpad` + virage 40, virage 80, créneau, slalom) :
