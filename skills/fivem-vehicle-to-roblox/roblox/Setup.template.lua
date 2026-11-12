@@ -871,6 +871,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleDrive", SOURCES.VehicleDrive)
 	upsert(folder, "ModuleScript", "VehicleSeatFit", SOURCES.VehicleSeatFit)
 	upsert(folder, "ModuleScript", "VehicleLights", SOURCES.VehicleLights)
+	upsert(folder, "ModuleScript", "VehicleCollision", SOURCES.VehicleCollision)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()
@@ -910,6 +911,21 @@ if okLights then
 	end
 else
 	warnf("Impossible de charger VehicleLights dans Studio : %s", tostring(Lights))
+end
+
+-- hitbox : passages de roues creusés dans la collision GTA (module du runtime ; voir VehicleCollision)
+local okColl, CollisionMod = pcall(function()
+	return require(folder.VehicleCollision:Clone())
+end)
+if okColl then
+	local okCarve, carve = pcall(CollisionMod.CarveWheelWells, model)
+	if not okCarve then
+		warnf("VehicleCollision.CarveWheelWells : %s", tostring(carve))
+	elseif carve.failed and #carve.failed > 0 then
+		warnf("Passages de roues non creusés : %s", table.concat(carve.failed, " ; "))
+	end
+else
+	warnf("Impossible de charger VehicleCollision dans Studio : %s", tostring(CollisionMod))
 end
 
 -- ------------------------------------------------------------------ 14. pose au sol

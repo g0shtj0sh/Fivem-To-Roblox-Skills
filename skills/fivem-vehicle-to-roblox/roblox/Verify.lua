@@ -458,6 +458,41 @@ function groups.collision()
 	check(c.agree / nV >= 0.8, "hitbox fidèle à la carrosserie",
 		fmt("%d %% des %d rayons à moins de %.2f stud (ancienne boîte : %d %%) ; trop large %d %%, trop juste %d %% (boîte : %d %% / %d %%)",
 			pct(c.agree), nV, tol, pct(b.agree), pct(c.big), pct(c.small), pct(b.big), pct(b.small)))
+
+	-- passages de roues : la coque ne doit rien occuper sous le haut d'une roue comprimée au maximum
+	-- (VehicleCollision). Sinon une roue qui monte sur un obstacle le fait toucher à la coque, dans le
+	-- passage de roue : véhicule posé « sur rien » ou bloqué sans contact visible (m422, 2026-11-12).
+	local hull = pieces
+	local hd = CONFIG.Handling or {}
+	local upper = (hd.SuspensionUpperLimit or 0.1) + (hd.SuspensionRaise or 0)
+	local blocked = {}
+	local rp = RaycastParams.new()
+	rp.FilterType = Enum.RaycastFilterType.Include
+	rp.FilterDescendantsInstances = hull
+	for bone, w in pairs(CONFIG.Wheels or {}) do
+		local pos = v3(w.Position)
+		local worst = nil
+		for _, fx in ipairs({ -0.35, 0, 0.35 }) do
+			for _, fz in ipairs({ -0.6, -0.3, 0, 0.3, 0.6 }) do
+				-- dessus du pneu (profil rond) à cet endroit, roue comprimée au maximum, moins 1 cm de tolérance
+				local top = (pos.Y + upper + w.Radius * math.sqrt(1 - fz * fz) - 0.01) * spm
+				local lp = Vector3.new(pos.X + fx * w.Width, 0, pos.Z + fz * w.Radius) * spm
+				local o = root.CFrame:PointToWorldSpace(Vector3.new(lp.X, pos.Y * spm - 3 * spm, lp.Z))
+				local r = workspace:Raycast(o, root.CFrame.UpVector * (6 * spm), rp)
+				if r then
+					local y = root.CFrame:PointToObjectSpace(r.Position).Y
+					if y < top and (worst == nil or top - y > worst) then
+						worst = top - y
+					end
+				end
+			end
+		end
+		if worst then
+			table.insert(blocked, fmt("%s (coque à %.0f cm sous le dessus du pneu)", bone, worst / spm * 100))
+		end
+	end
+	check(#blocked == 0, "passages de roues dégagés", #blocked == 0 and "les 4 roues peuvent monter sans toucher la coque"
+		or table.concat(blocked, ", "))
 end
 
 function groups.access()

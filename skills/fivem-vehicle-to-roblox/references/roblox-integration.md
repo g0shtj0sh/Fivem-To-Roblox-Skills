@@ -79,6 +79,26 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 
 Mobile : les invites s'affichent en bouton ; à bord, bouton « Descendre ».
 
+## Hitbox : passages de roues creusés (`VehicleCollision.CarveWheelWells`)
+
+La collision officielle GTA (`col__chassis__1`) est une coque presque convexe à fond plat **sous toute la
+voiture, passages de roues compris** : sur le m422 elle descendait à −34 cm sous `VehicleRoot` au droit des
+roues, la carrosserie visible à 0 / −2 cm. Ici la suspension est faite de rayons et les cylindres de roues
+ne collisionnent pas en conduite : une roue qui montait sur une rampe ou un rondin faisait toucher l'obstacle
+**à la coque, dans le passage de roue** — voiture posée « sur rien », roue en l'air, bloquée sans contact
+visible. Le Setup (et `CarveWheelWells(model)` sur un véhicule déjà installé, idempotent) retire de chaque
+pièce `col__*` qui les recoupe le volume que chaque roue balaie : un « stade » d'axe X entre détente et
+compression maximales, du rayon de la roue braquée au maximum (roues directrices) + 3 cm, de la face
+intérieure de la roue braquée jusqu'au-delà de l'aile. Soustraction `GeometryService:SubtractAsync` ; la
+pièce creusée remplace l'ancienne (nom, réglages, attributs, groupe, soudure). `Verify` (groupe
+`collision`) contrôle « passages de roues dégagés » sous le profil rond du pneu comprimé au maximum.
+
+Mesuré sur le m422 (Play, PC Studio) : bosses alternées de 30 cm franchies sur 22 m (bloqué net avant) et de
+50 cm jusqu'au contact du plancher, tremplin de 10° monté sur les seules roues (charge répartie, coque jamais en
+contact). Les blocages restants sont ceux d'une sportive à ~15 cm de garde : pare-chocs contre une marche de
+30 cm ou un rondin de Ø 24 cm, plancher sur une bosse de 50 cm. Reste non corrigé : le fond de la coque GTA est
+2 à 3 cm sous le plancher visible au centre, 3 à 7 cm à l'arrière (diffuseur).
+
 ## Pièces mobiles : ce qui est monté dessus les suit
 
 Le convertisseur répartit les triangles par os (`group_of`). Certains mods pondèrent sur un os du châssis
