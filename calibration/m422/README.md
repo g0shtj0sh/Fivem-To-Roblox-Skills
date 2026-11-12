@@ -1372,6 +1372,55 @@ antérieur, où il partait à plat et sans rotation, le confirme en négatif —
 exactement nulle pendant toute la chute. Ce que les mods appellent « auto-correction en vol » n'est donc
 pas un couple de redressement continu : c'est le plafond, plus la borne d'assiette en piqué.
 
+### Le contrôle en l'air, porté dans le moteur
+
+Les trois constantes sont appliquées, et le modèle qu'elles imposent remplace celui qui était en
+place. Le moteur avait déjà un bloc de vol, mais ses valeurs étaient posées au doigt (`AirPitch` 4,
+`AirRoll` 3) et il **amortissait** la rotation (`AirDamp` 1,5) — ce que la mesure réfute
+directement, puisque sans entrée le véhicule conserve la sienne. L'amortissement est donc passé à
+zéro et c'est le plafond qui borne désormais la rotation.
+
+Deux choix méritent d'être dits. D'abord, **l'écrêtage est à sens unique** : quand un axe tourne
+déjà à la vitesse maximale, le couple est coupé, mais il ne devient jamais négatif pour ramener la
+rotation vers zéro. C'est la traduction de l'auto-redressement nul — un véhicule qui part en vrille
+après un choc garde sa vrille, GTA refuse seulement d'en ajouter. Ensuite, les deux écrêtages
+**visent pile la limite** dans le pas courant au lieu de couper après l'avoir franchie : couper
+après dépassait de `a·dt`, soit 1,5 °/s à 60 Hz, et le résultat dépendait du pas.
+
+`lune run tools/roblox-drive-rig/rig.luau vol` rejoue le vol libre sans contact et relit les quatre
+faits mesurés :
+
+| | Moteur | GTA | Écart |
+|---|---|---|---|
+| couple, cabrage | +90,8 °/s² | +90,8 | +0,0 % |
+| couple, piqué | −90,8 °/s² | −90,8 | −0,0 % |
+| couple, roulis (les deux sens) | ±90,9 °/s² | ±90,8 | ±0,1 % |
+| plafond de vitesse angulaire | 61,1 °/s | 61,1 | −0,0 % |
+| borne d'assiette en piqué | −38,2 ° | −37,7 | −1,2 % |
+| sans entrée, après 1 s à −30 °/s | −30,0 °/s | conservée | — |
+
+La borne s'arrête à −38,2 ° au lieu de −37,7. Ce n'est **pas** un artefact de pas : le banc rend
+exactement la même valeur à 30, 60, 120 et 240 Hz. C'est le résidu du freinage, dont la raideur
+(`AirBoundTorque`) n'est connue qu'à l'ordre de grandeur — 710 °/s², estimés sur un passage de
+−58 à +13 °/s en ≈ 0,10 s. Et −38,2 ° est littéralement l'une des trois valeurs mesurées en jeu
+(−37,4 / −37,6 / −38,2), donc la régler pour effacer ces 0,5 ° serait de la fausse précision.
+
+Un bug trouvé en route, qui vaut d'être noté parce qu'il ne se voit pas sur une seconde de vol :
+freiner le piqué **après** avoir franchi la borne ne suffit pas. Le taux annulé, le besoin de
+freinage retombe à zéro, l'entrée de piqué est réinjectée pour un pas, le freinage l'efface au
+suivant — et l'assiette descend en escalier, indéfiniment, à 0,75 °/s. Il faut **refuser** l'entrée
+à la borne, comme le plafond refuse la sienne. Les deux limites ont donc la même forme : d'abord
+l'entrée ne peut pas pousser au-delà de ce qui reste admissible, ensuite seulement on freine un
+excès déjà installé.
+
+Ce qui n'est **pas** modélisé : le retour du nez au-delà de la borne. En jeu l'assiette revient de
+−37,6 à −35,5 °, mais une partie de ce retour est l'atterrissage et je n'ai pas isolé le couple qui
+le produit. Le véhicule reste donc à la borne plutôt que d'être repoussé par une valeur inventée.
+Les bornes en roulis et en cabrage ne sont pas posées non plus : aucun vol ne les a atteintes.
+
+Les deux bancs au sol sont inchangés — 5,3 % en longitudinal, côte identique — le bloc ne s'armant
+que lorsque les quatre roues sont hors contact.
+
 ### Retournement
 
 Véhicule posé sur le toit ou sur le côté, puis gauche, droite, ou rien.

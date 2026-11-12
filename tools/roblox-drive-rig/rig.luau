@@ -63,7 +63,7 @@ local cfg = {
 	},
 }
 
-local DT = 1 / 60
+local DT = 1 / 60 -- modifiable par le banc de vol, pour prouver l'independance au pas
 local function newSim(ov) return Dyn.new(cfg, Vector3.new(0, 0, 0), ov) end
 
 -- `pente` est en pourcentage (montee positive). Une pente en ligne droite ne demande que deux
@@ -275,6 +275,143 @@ if mode == "kstick" then
 		end
 	end
 	print(("%-21s %12s   %12.4f"):format("CIBLE", "GTA", 0.0))
+	return
+end
+
+if mode == "vol" then
+	-- Banc de VOL LIBRE : aucun contact, on integre la vitesse angulaire et l'assiette a partir du
+	-- couple que rend le moteur, puis on relit les trois constantes mesurees en jeu.
+	--
+	-- Reperes. Le moteur travaille en X a droite, Y en haut, Z vers l'arriere (`vf = -vBody.Z`),
+	-- donc la rotation autour de X est le tangage et celle autour de Z le roulis. Un couple X
+	-- POSITIF leve le nez : c'est la convention du moteur lui-meme, ou les gaz donnent
+	-- `-AirPitch` et "piquent du nez". Le haut du monde exprime en repere local vaut alors
+	-- (0, cos t, -sin t) pour une assiette t, le roulis se faisant autour de Z et ne touchant pas
+	-- la composante Z. C'est ce que le moteur relit par asin(-up.Z).
+	--
+	-- Cibles GTA (15 vols au tremplin, 3 passes par cas, essai `airtime` de tools/fivem-telemetry) :
+	--   couple  90,8 deg/s2 par unite d'entree, sur les DEUX axes
+	--   plafond 61,1 deg/s
+	--   borne d'assiette en piquer -37,7 deg
+	--   sans entree : rotation CONSERVEE (acceleration mesuree +1,1 deg/s2)
+	local sim = newSim(nil)
+	local GY = sim.T.GyrationSq
+
+	-- wx0 : le taux de tangage initial, comme celui que le tremplin imprime en jeu (-30 deg/s)
+	local pas = DT
+	local function voler(inp, wx0, duree, pitch0)
+		local wx, wz, pitch = math.rad(wx0 or 0), 0, math.rad(pitch0 or 0)
+		local h = {}
+		for k = 1, math.floor(duree / pas) do
+			local out = Dyn.step(sim, inp, {}, pas, {
+				vBody = Vector3.new(0, 0, -20),
+				wBody = Vector3.new(wx, 0, wz),
+				up = Vector3.new(0, math.cos(pitch), -math.sin(pitch)),
+			})
+			local a = out.torque / GY
+			wx += a.X * pas
+			wz += a.Z * pas
+			pitch += wx * pas
+			h[k] = { t = k * pas, wx = math.deg(wx), wz = math.deg(wz),
+				pitch = math.deg(pitch), ax = math.deg(a.X), az = math.deg(a.Z) }
+		end
+		return h
+	end
+
+	-- 1) LE COUPLE : lu sur les premieres images, loin du plafond, a partir du repos
+	print("1) couple de controle, par unite d'entree (loin du plafond)")
+	print(("   %-26s %14s %14s   %s"):format("entree", "obtenu", "GTA", "ecart"))
+	local cas = {
+		{ "cabrage (frein = S)", { Brake = 1 }, "ax", 90.8 },
+		{ "piquer (gaz = W)", { Throttle = 1 }, "ax", -90.8 },
+		{ "roulis gauche", { Steer = -1 }, "az", 90.8 },
+		{ "roulis droite", { Steer = 1 }, "az", -90.8 },
+	}
+	for _, c in ipairs(cas) do
+		local h = voler(c[2], 0, 0.1, 0)
+		local got = h[1][c[3]]
+		print(("   %-26s %11.1f /s2 %11.1f /s2   %+6.1f %%")
+			:format(c[1], got, c[4], (got - c[4]) / math.abs(c[4]) * 100))
+	end
+
+	-- 2) LE PLAFOND : on pousse une seconde pleine et on regarde ou le taux se fige
+	print("")
+	print("2) plafond de vitesse angulaire (1 s d'entree pleine)")
+	print(("   %-26s %14s %14s   %s"):format("entree", "taux final", "GTA", "ecart"))
+	for _, c in ipairs({
+		{ "cabrage", { Brake = 1 }, "wx", 61.1 },
+		{ "roulis gauche", { Steer = -1 }, "wz", 61.1 },
+		{ "roulis droite", { Steer = 1 }, "wz", -61.1 },
+	}) do
+		local h = voler(c[2], 0, 1.0, 0)
+		local got = h[#h][c[3]]
+		print(("   %-26s %11.1f /s  %11.1f /s    %+6.1f %%")
+			:format(c[1], got, c[4], (got - c[4]) / math.abs(c[4]) * 100))
+	end
+
+	-- 3) LA BORNE D'ASSIETTE EN PIQUER : on rejoue le vol du jeu, nez en bas, en partant du
+	-- tangage que le tremplin imprime (-30 deg/s) et de son assiette au decollage (+6 deg)
+	print("")
+	print("3) borne d'assiette en piquer (gaz plein, depart comme au tremplin)")
+	local h = voler({ Throttle = 1 }, -30, 1.4, 6)
+	local amin, tmin = 0, 0
+	for _, r in ipairs(h) do
+		if r.pitch < amin then amin, tmin = r.pitch, r.t end
+	end
+	print(("   %-26s %11.1f deg  %11.1f deg   %+6.1f %%")
+		:format("assiette la plus basse", amin, -37.7, (amin + 37.7) / 37.7 * 100))
+	print(("   %-26s %11.2f s"):format("atteinte a", tmin))
+	print(("   %-26s %11.1f /s   (plafond %.1f)"):format("taux le plus negatif",
+		(function() local m = 0 for _, r in ipairs(h) do if r.wx < m then m = r.wx end end return m end)(),
+		-61.1))
+	-- sonde du franchissement
+	if process.args[2] == "sonde" then
+		print("   sonde du franchissement :")
+		local T = sim.T
+		for _, r in ipairs(h) do
+			local marge = math.rad(r.pitch) - T.AirPitchFloor
+			if marge < 0.10 and marge > -0.06 then
+				print(("      t %.3f  assiette %+7.3f  marge %+7.3f deg  taux %+7.2f  "
+					.. "taux admis %+7.2f  couple %+8.1f"):format(r.t, r.pitch, math.deg(marge),
+					r.wx, math.deg(math.min(math.sqrt(2 * T.AirBoundTorque * math.max(marge, 0)),
+						math.max(marge, 0) / DT)), r.ax))
+			end
+		end
+	end
+	print("   assiette au cours du vol :")
+	local pas = math.max(1, math.floor(#h / 8))
+	local l = "      "
+	for k = 1, #h, pas do
+		l = l .. ("%.2fs:%+.1f  "):format(h[k].t, h[k].pitch)
+	end
+	print(l)
+
+	-- 4) SANS ENTREE : la rotation doit etre CONSERVEE, pas amortie
+	print("")
+	print("4) sans entree : la rotation est-elle conservee ?")
+	local h0 = voler({}, -30, 1.0, 0)
+	print(("   %-26s %11.1f /s -> %8.1f /s   GTA : conservee (-28 a -32)")
+		:format("taux de tangage", -30.0, h0[#h0].wx))
+	print(("   %-26s %11.1f /s2  GTA %10.1f /s2"):format("acceleration moyenne",
+		(h0[#h0].wx + 30.0) / 1.0, 1.1))
+
+	-- 5) INDEPENDANCE AU PAS. Les deux ecretages visent PILE la limite au lieu de couper apres
+	-- l'avoir franchie ; si c'est bien fait, plafond et borne ne doivent pas bouger avec le pas.
+	print("")
+	print("5) independance au pas de temps")
+	print(("   %-12s %14s %16s"):format("pas", "plafond /s", "borne d'assiette"))
+	for _, hz in ipairs({ 30, 60, 120, 240 }) do
+		pas = 1 / hz
+		local hp = voler({ Brake = 1 }, 0, 1.5, 0)
+		local hb = voler({ Throttle = 1 }, -30, 1.6, 6)
+		local amin = 0
+		for _, r in ipairs(hb) do
+			if r.pitch < amin then amin = r.pitch end
+		end
+		print(("   %-12s %11.2f /s %13.2f deg"):format(("%d Hz"):format(hz), hp[#hp].wx, amin))
+	end
+	pas = DT
+	print(("   %-12s %11.2f /s %13.2f deg"):format("GTA", 61.1, -37.7))
 	return
 end
 

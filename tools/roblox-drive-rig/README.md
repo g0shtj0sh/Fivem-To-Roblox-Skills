@@ -25,11 +25,22 @@ lune run tools/roblox-drive-rig/rig.luau report 2.1 0.9 1.5 0.03
 lune run tools/roblox-drive-rig/rig.luau scan
 ```
 
+```bash
+lune run tools/roblox-drive-rig/rig.luau vol
+```
+
 - `cote [pente %] [pente du lancement %]` rejoue l'essai de **côte** : recul tout relâché pendant
   2 s, puis lancement plein gaz pendant 4 s. Sans second argument, le lancement suit le **profil de
   pente mesuré** dans GTA (17,1 % → 37 %, pas de 0,1 s) ; `trace` en troisième argument affiche le
   détail image par image. La côte ne demande donc plus Studio : une pente en ligne droite ne demande
   que la gravité le long de la pente et les charges corrigées.
+- `vol [sonde]` rejoue le **vol libre** : aucun contact, on intègre la vitesse angulaire et
+  l'assiette à partir du couple rendu par le moteur, puis on relit les trois constantes mesurées au
+  tremplin — couple de contrôle, plafond de vitesse angulaire, borne d'assiette en piqué — plus le
+  cas sans entrée, où la rotation doit être **conservée**. Le dernier bloc rejoue le tout à 30, 60,
+  120 et 240 Hz : les deux écrêtages visent *pile* la limite au lieu de couper après l'avoir
+  franchie, donc les résultats ne doivent pas bouger avec le pas. `sonde` en second argument affiche
+  le franchissement de la borne image par image (marge, taux admissible, couple appliqué).
 - `report` affiche chaque essai et son écart avec la mesure GTA. Sans argument il utilise les
   réglages par défaut du module ; avec quatre arguments il surcharge `KDrag`, `EngineBrakeG`,
   `FirstGearForce` et `IwRel`.

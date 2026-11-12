@@ -230,9 +230,32 @@ Dyn.Tuning = {
 	-- VÉRIFIÉ EN STUDIO (2026-11-12) : 60-0 au frein à main volant droit, lacet max 0,8–1,0 °/s (GTA 0,13 ; 69 °/s
 	-- avant le calage). Mais à 0,75 il reste droit aussi (1,35 °/s) : sur le plat, ce n'était pas ce réglage qui
 	-- faisait pivoter. Il reste la valeur mesurée ; le tête-à-queue d'avant venait d'ailleurs (non isolé).
-	AirPitch = 4, -- contrôle en l'air (rad/s² par unité d'entrée), tangage
-	AirRoll = 3, -- contrôle en l'air, roulis
-	AirDamp = 1.5, -- amortissement angulaire en l'air
+	-- CONTRÔLE EN L'AIR. MESURÉ (2026-11-12) sur 15 vols au tremplin, 3 passes par cas. GTA
+	-- n'applique pas un couple amorti : il applique un couple CONSTANT, saturé par un PLAFOND de
+	-- vitesse angulaire, et borne l'assiette en piqué. Les trois valeurs ci-dessous sont lues
+	-- séparément, parce qu'une accélération angulaire moyennée sur tout le vol mélange la montée
+	-- et le plateau — c'est ce qui donnait 78,4 °/s² en roulis et un tangage incohérent.
+	AirPitch = 1.585, -- rad/s² par unité d'entrée, tangage. MESURÉ : +92,9 et −88,8 °/s² (σ 1,0 à
+	-- 1,1), soit 90,8 °/s² par unité, symétrie 96 %.
+	AirRoll = 1.586, -- idem en roulis : +89,8 et −91,9 °/s² (σ 0,6 à 1,5), symétrie 98 %. Les deux
+	-- axes tombent sur le MÊME chiffre à la troisième décimale en radians ; ils restent deux
+	-- réglages parce que rien ne garantit que ce soit vrai pour tous les véhicules.
+	AirRateMax = 1.066, -- rad/s : plafond de vitesse angulaire en vol, soit 61,1 °/s. MESURÉ : 9
+	-- vols sur 15 y butent (σ 1,1) ; les 6 autres sont des cas qui n'ont pas le temps de
+	-- l'atteindre. Le plateau est bien du vol libre — un vol tient +60 à +63 °/s pendant 0,15 s à
+	-- 1,5 m du sol, les quatre suspensions à zéro. À 0, pas de plafond.
+	AirPitchFloor = -0.658, -- rad : assiette minimale en vol, soit −37,7 °. MESURÉ : les trois
+	-- passes en piqué s'arrêtent à −37,6 / −37,4 / −38,2 ° et le taux y repasse par zéro à −37,5 /
+	-- −37,2 / −38,0. Ce n'est pas l'atterrissage : le véhicule est alors à 1,50 m du sol. Les
+	-- autres sens ne sont PAS bornés ici faute de les avoir atteints (roulis ±35 °, cabrage +27 °).
+	AirBoundTorque = 12.4, -- rad/s² : couple maximal d'arrêt à la borne d'assiette, soit 710 °/s².
+	-- MESURÉ grossièrement — le taux passe de −58 à +13 °/s en ≈ 0,10 s, sur 3 passes. Un ordre de
+	-- grandeur au-dessus du couple de contrôle : à la borne, GTA ARRÊTE la rotation, il ne la
+	-- contre pas doucement. La valeur exacte n'est pas calée, seul son ordre l'est.
+	AirDamp = 0, -- amortissement angulaire en l'air. MESURÉ NUL : sans entrée l'accélération
+	-- angulaire vaut +1,1 °/s² et le véhicule garde ses −28 à −32 °/s pendant toute la seconde de
+	-- vol. C'est le plafond qui borne la rotation, pas un amortissement. Le réglage reste exposé
+	-- pour qui veut l'ancien comportement (il valait 1,5, posé au doigt).
 	RightingK = 6, -- couple de redressement doux (rad/s² à 90°), véhicule couché et lent
 	RightingSpeed = 3, -- m/s : au-dessus, pas de redressement
 	GyrationSq = 1.6, -- m² : rayon de giration² nominal pour convertir accélérations angulaires en couples spécifiques
@@ -506,6 +529,10 @@ renvoie out :
   lock (rad), steerAngle (rad), reverse (bool)
 --- `ctx.slopeSin` (optionnel) : sinus de la pente longitudinale, positif en montee. Sert a l'apport
 --- de poussee en pente (SlopeAssist). Absent ou nul, le comportement est celui d'un sol plat.
+--- `ctx.up` sert aussi a la borne d'assiette en vol : l'assiette se lit par asin(-up.Z), le roulis
+--- se faisant autour de Z et ne touchant donc pas sa composante Z. Un appelant qui omet `up` garde
+--- le plafond de vitesse angulaire mais perd la borne (asin(0) place la marge hors d'atteinte).
+--- `ctx.wBody` : X = tangage (positif leve le nez), Y = lacet, Z = roulis.
 ]]
 function Dyn.step(sim, inp, contacts, dt, ctx)
 	local P, S, T = sim.P, sim.S, sim.T
@@ -830,10 +857,62 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	end
 	local w = ctx.wBody or Vector3.zero
 	if grounded == 0 then
-		-- en l'air : tangage aux gaz / frein, roulis à la direction, amorti
-		local pitch = ((inp.Brake or 0) - (inp.Throttle or 0)) * T.AirPitch -- W pique du nez, S le relève
-		local roll = -(inp.Steer or 0) * T.AirRoll
-		torque += (Vector3.new(pitch, 0, roll) - w * T.AirDamp) * T.GyrationSq
+		-- EN L'AIR : couple constant, plafond de vitesse angulaire, borne d'assiette en piqué.
+		-- Voir les mesures sur AirPitch / AirRateMax / AirPitchFloor dans Dyn.Tuning.
+		local ax = ((inp.Brake or 0) - (inp.Throttle or 0)) * T.AirPitch -- W pique du nez, S le relève
+		local az = -(inp.Steer or 0) * T.AirRoll
+		-- Le plafond. On ne coupe pas le couple APRÈS franchissement — ça dépasserait de a·dt, soit
+		-- 1,5 °/s à 60 Hz, et le résultat dépendrait du pas. On plafonne le couple à ce qui atteint
+		-- PILE la limite dans ce pas. L'écrêtage reste à SENS UNIQUE, volontairement : la marge
+		-- restante est planchée à zéro, donc le couple ne devient jamais négatif pour ramener une
+		-- rotation déjà au-delà. GTA ne ramène rien (c'est la mesure de l'auto-redressement nul),
+		-- il refuse seulement d'en ajouter : un véhicule qui part en vrille garde sa vrille.
+		if T.AirRateMax > 0 then
+			if ax > 0 then
+				ax = math.min(ax, math.max(T.AirRateMax - w.X, 0) / dt)
+			elseif ax < 0 then
+				ax = math.max(ax, -math.max(T.AirRateMax + w.X, 0) / dt)
+			end
+			if az > 0 then
+				az = math.min(az, math.max(T.AirRateMax - w.Z, 0) / dt)
+			elseif az < 0 then
+				az = math.max(az, -math.max(T.AirRateMax + w.Z, 0) / dt)
+			end
+		end
+		-- La borne d'assiette en piqué. `ctx.up` est le haut du monde exprimé en repère local ; le
+		-- roulis se fait autour de Z et ne touche donc pas sa composante Z, si bien que asin(−up.Z)
+		-- est l'assiette seule, sans couplage avec le roulis.
+		--
+		-- `AirPitchFloor` est l'assiette où la rotation S'ARRÊTE, pas celle où le freinage commence.
+		-- C'est ce que la mesure donne : en jeu le taux tient −58 °/s puis s'annule en ≈ 0,10 s, et
+		-- l'assiette finale est la même aux trois passes. On limite donc le taux de piqué par ce
+		-- qu'il reste de marge, comme un freinage qui doit s'arrêter pile au mur :
+		-- ω ≤ √(2·AirBoundTorque·marge). À marge nulle la limite vaut zéro, donc le cas « déjà à la
+		-- borne » est le même calcul, sans branche séparée.
+		local pitchAngle = math.asin(math.clamp(-(ctx.up or Vector3.yAxis).Z, -1, 1))
+		local margin = math.max(pitchAngle - T.AirPitchFloor, 0)
+		local dive = -w.X -- taux de piqué, compté positif
+		-- `margin / dt` borne aussi le taux : c'est celui qui amène exactement à la borne en un
+		-- pas, donc rien ne peut la franchir même quand la racine est encore large.
+		local diveMax = math.min(math.sqrt(2 * T.AirBoundTorque * margin), margin / dt)
+		-- Même structure que le plafond : d'abord l'entrée ne peut pas pousser le piqué au-delà de
+		-- ce qui reste admissible. À la borne `diveMax` vaut zéro, donc l'entrée de piqué est
+		-- REFUSÉE. C'est indispensable : si on se contente de freiner après coup, l'entrée
+		-- réinjecte un pas de rotation que le freinage efface au pas suivant, et l'assiette
+		-- descend en escalier indéfiniment (mesuré : 0,75 °/s de fuite, sans fin).
+		if ax < 0 then
+			ax = math.max(ax, -math.max(diveMax - dive, 0) / dt)
+		end
+		-- ensuite, si le piqué dépasse déjà ce qui est admissible, il est freiné. C'est le seul
+		-- rappel du modèle : le plafond, lui, ne ramène jamais rien.
+		local need = (dive - diveMax) / dt
+		if need > 0 then
+			ax = math.max(ax, math.min(need, T.AirBoundTorque))
+		end
+		-- Le nez ne REMONTE pas tout seul au-delà : en jeu il revient de −37,6 à −35,5 °, mais une
+		-- partie de ce retour est l'atterrissage et je n'ai pas isolé le couple qui le produit.
+		-- Le véhicule reste donc à la borne plutôt que d'être repoussé par une valeur inventée.
+		torque += (Vector3.new(ax, 0, az) - w * T.AirDamp) * T.GyrationSq
 	end
 	local up = ctx.up or Vector3.yAxis
 	if up.Y < 0.7 and speed < T.RightingSpeed and grounded < #P.wheels then
