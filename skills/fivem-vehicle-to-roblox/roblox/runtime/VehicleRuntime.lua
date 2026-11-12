@@ -29,6 +29,7 @@ local LIGHT_COLORS = {
 	indicator = Color3.fromRGB(255, 120, 0),
 	reverse = Color3.fromRGB(255, 255, 255),
 	drl = Color3.fromRGB(255, 252, 245),
+	plate = Color3.fromRGB(255, 244, 220),
 }
 
 local function bit(seq, beat)
@@ -238,14 +239,24 @@ function Runtime:_updateJoints(dt, s)
 end
 
 -- ------------------------------------------------------------------ lumières
+-- Une optique allumée est du Neon SANS texture : un MeshPart Neon qui garde son TextureID (texture GTA
+-- sombre) reste presque éteint (mesuré sur le m422, 2026-11-12). La texture revient à l'extinction
+-- (attribut OffTexture, posé par VehicleLights.Rig).
 local function setPart(part, on, color)
+	local offTex = part:GetAttribute("OffTexture")
 	if on then
 		part.Material = Enum.Material.Neon
 		part.Color = color
+		if offTex ~= nil and part:IsA("MeshPart") then
+			part.TextureID = ""
+		end
 		if part:GetAttribute("Visible") ~= false then
 			part.Transparency = 0
 		end
 	else
+		if offTex ~= nil and part:IsA("MeshPart") then
+			part.TextureID = offTex
+		end
 		part.Material = Enum.Material[part:GetAttribute("OffMaterial") or "Glass"]
 		part.Color = part:GetAttribute("OffColor") or Color3.new(0.6, 0.6, 0.6)
 		if part:GetAttribute("Visible") ~= false then
@@ -294,25 +305,38 @@ function Runtime:_updateLights(s)
 	local wigL = s.Siren and sirenCfg and sirenCfg.HeadLightLeft and sirenCfg.HeadLightLeft ~= 0 and bit(sirenCfg.HeadLightLeft, beat)
 	local wigR = s.Siren and sirenCfg and sirenCfg.HeadLightRight and sirenCfg.HeadLightRight ~= 0 and bit(sirenCfg.HeadLightRight, beat)
 
-	self:_setRole("headlight_l", hl >= 1 or wigL, headColor, hl >= 2 and 4 or 2)
-	self:_setRole("headlight_r", hl >= 1 or wigR, headColor, hl >= 2 and 4 or 2)
+	-- croisement / route ; ombres portées seulement pour la voiture du joueur local
+	self:_setRole("headlight_l", hl >= 1 or wigL, headColor, hl >= 2 and 6 or 3)
+	self:_setRole("headlight_r", hl >= 1 or wigR, headColor, hl >= 2 and 6 or 3)
+	local shadows = self.IsLocalOccupant == true
+	if self.HeadShadows ~= shadows then
+		self.HeadShadows = shadows
+		for _, r in ipairs({ "headlight_l", "headlight_r" }) do
+			for _, l in ipairs(self.LightObjects[r] or {}) do
+				l.Shadows = shadows
+			end
+		end
+	end
+	self:_setRole("plate", hl >= 1, LIGHT_COLORS.plate, 1.5)
 	self:_setRole("always_on", s.Engine, LIGHT_COLORS.drl)
 	local hasBrakeParts = self.LightParts.brakelight_l or self.LightParts.brakelight_r or self.LightParts.brakelight_m
 	local tailOn = hl >= 1 or (s.Brake and not hasBrakeParts)
 	local tailColor = (s.Brake and not hasBrakeParts) and LIGHT_COLORS.brake or LIGHT_COLORS.tail
-	self:_setRole("taillight_l", tailOn, tailColor, s.Brake and 3 or 1)
-	self:_setRole("taillight_r", tailOn, tailColor, s.Brake and 3 or 1)
-	for _, r in ipairs({ "brakelight_l", "brakelight_r", "brakelight_m" }) do
-		self:_setRole(r, s.Brake, LIGHT_COLORS.brake, 3)
+	local tailBright = (s.Brake and not hasBrakeParts) and 1.2 or 0.35
+	self:_setRole("taillight_l", tailOn, tailColor, tailBright)
+	self:_setRole("taillight_r", tailOn, tailColor, tailBright)
+	for _, r in ipairs({ "brakelight_l", "brakelight_r" }) do
+		self:_setRole(r, s.Brake, LIGHT_COLORS.brake, 1.2)
 	end
-	self:_setRole("reversinglight_l", s.Reverse, LIGHT_COLORS.reverse, 2)
-	self:_setRole("reversinglight_r", s.Reverse, LIGHT_COLORS.reverse, 2)
+	self:_setRole("brakelight_m", s.Brake, LIGHT_COLORS.brake, 0.6)
+	self:_setRole("reversinglight_l", s.Reverse, LIGHT_COLORS.reverse, 1.2)
+	self:_setRole("reversinglight_r", s.Reverse, LIGHT_COLORS.reverse, 1.2)
 	local left = (s.Indicator == "Left" or s.Indicator == "Hazard") and blink
 	local right = (s.Indicator == "Right" or s.Indicator == "Hazard") and blink
-	self:_setRole("indicator_lf", left, LIGHT_COLORS.indicator, 2)
-	self:_setRole("indicator_lr", left, LIGHT_COLORS.indicator, 2)
-	self:_setRole("indicator_rf", right, LIGHT_COLORS.indicator, 2)
-	self:_setRole("indicator_rr", right, LIGHT_COLORS.indicator, 2)
+	self:_setRole("indicator_lf", left, LIGHT_COLORS.indicator, 1)
+	self:_setRole("indicator_lr", left, LIGHT_COLORS.indicator, 1)
+	self:_setRole("indicator_rf", right, LIGHT_COLORS.indicator, 1)
+	self:_setRole("indicator_rr", right, LIGHT_COLORS.indicator, 1)
 	for i = 1, 4 do
 		local on = s.Siren and ((beat + i) % 2 == 0) or (self.Model:GetAttribute("ExtraLights") == true)
 		self:_setRole("extralight_" .. i, on, i % 2 == 0 and Color3.fromRGB(255, 30, 30) or Color3.fromRGB(30, 60, 255), 3)

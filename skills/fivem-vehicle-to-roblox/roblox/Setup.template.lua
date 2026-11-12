@@ -593,33 +593,8 @@ local function attachmentAt(bone, parentPart, role, worldPos)
 	return a
 end
 local ls = CONFIG.LightSettings or {}
-for role, pos in pairs(CONFIG.Lights or {}) do
-	local owner = pivots[CONFIG.LightOwners and CONFIG.LightOwners[role] or ""] or root
-	local a = attachmentAt(role, owner, role, L2W(pos))
-	local light
-	if string.find(role, "^headlight") then
-		light = Instance.new("SpotLight")
-		light.Face = Enum.NormalId.Front
-		local h = ls.headLight or {}
-		light.Range = math.clamp((h.falloffMax or 30) * spm * 0.6, 20, 60)
-		light.Angle = math.clamp((h.outerConeAngle or 60) * 1.2, 45, 120)
-		light.Brightness = 2
-		light.Shadows = true
-	elseif string.find(role, "^reversinglight") then
-		light = Instance.new("SpotLight")
-		light.Face = Enum.NormalId.Back
-		light.Range = 16
-		light.Angle = 90
-		light.Brightness = 1.5
-	else
-		light = Instance.new("PointLight")
-		light.Range = string.find(role, "^indicator") and 6 or 8
-		light.Brightness = 1
-		light.Color = string.find(role, "^indicator") and Color3.fromRGB(255, 120, 0) or Color3.fromRGB(255, 20, 20)
-	end
-	light.Enabled = false
-	light.Parent = a
-end
+-- Feux (CONFIG.Lights) : posés par VehicleLights.Rig après l'installation du runtime (plus bas), pour
+-- que le Setup et un véhicule déjà installé reçoivent le même équipement.
 for i, siren in pairs(CONFIG.Sirens and CONFIG.Sirens.Lights or {}) do
 	local bone = "siren" .. i
 	if CONFIG.Bones[bone] then
@@ -895,6 +870,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleDynamics", SOURCES.VehicleDynamics)
 	upsert(folder, "ModuleScript", "VehicleDrive", SOURCES.VehicleDrive)
 	upsert(folder, "ModuleScript", "VehicleSeatFit", SOURCES.VehicleSeatFit)
+	upsert(folder, "ModuleScript", "VehicleLights", SOURCES.VehicleLights)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()
@@ -921,6 +897,19 @@ if okCustom then
 	Custom.Apply(model, Custom.Serialize(model))
 else
 	warnf("Impossible de charger VehicleCustomization dans Studio : %s", tostring(Custom))
+end
+
+-- feux : lumières hors des optiques, lampe de plaque, état éteint des optiques (module du runtime)
+local okLights, Lights = pcall(function()
+	return require(folder.VehicleLights:Clone())
+end)
+if okLights then
+	local okRig, rig = pcall(Lights.Rig, model)
+	if not okRig then
+		warnf("VehicleLights.Rig : %s", tostring(rig))
+	end
+else
+	warnf("Impossible de charger VehicleLights dans Studio : %s", tostring(Lights))
 end
 
 -- ------------------------------------------------------------------ 14. pose au sol

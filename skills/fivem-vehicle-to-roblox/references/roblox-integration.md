@@ -79,6 +79,24 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 
 Mobile : les invites s'affichent en bouton ; à bord, bouton « Descendre ».
 
+## Feux (`VehicleLights.Rig`, état par `VehicleRuntime`)
+
+Les optiques sont les maillages du shader GTA `vehicle_lightsemissive`, une pièce par feu (`LightRole`). GTA les
+montre texturées éteintes et les fait briller (`emissiveMultiplier` 3) allumées. `VehicleLights.Rig(model)`
+(appelé par le Setup, relançable sur un véhicule déjà installé) pose l'équipement ; le runtime le pilote.
+
+| Élément | Ce qui est fait | Pourquoi (mesuré en Studio sur le m422, 2026-11-12) |
+|---|---|---|
+| Optique allumée | Neon de la couleur du feu, **`TextureID` retiré** (gardé dans `OffTexture`, remis à l'extinction) | un MeshPart Neon qui garde la texture GTA sombre reste presque éteint ; sans elle la signature lumineuse s'allume |
+| Lumière d'un feu | `SpotLight` posé **hors de l'optique** (extrême de la pièce + 5–6 cm) et tourné vers l'extérieur ; les clignotants de côté éclairent de côté | les anciennes `PointLight` sans ombre, au centre de l'optique, éclairaient l'habitacle et le sol à travers la carrosserie |
+| Phares | cône de 60°, portée 60, luminosité 3 (croisement) / 6 (route) ; **ombres seulement pour la voiture du joueur local** | posés au centre de l'optique avec ombres, ils étaient masqués par le boîtier : aucun faisceau au sol |
+| Feux arrière | cône de 120°, portée 5 (position, 0,35) / 7 (stop, 1,2 ; 3ᵉ feu 0,6) ; recul 14 (1,2) | lueur rouge douce derrière, au lieu d'une flaque saturée de 4 `PointLight` de luminosité 3 |
+| Plaques | textes `LightInfluence` 1 ; **lampe de plaque** au-dessus de la plaque arrière, vers le bas, allumée avec les feux | les plaques étaient pleinement lumineuses jour et nuit, l'avant compris |
+
+`Verify` (groupe `lights`) contrôle aussi : cônes tournés vers l'extérieur, lampe de plaque arrière, optique allumée
+sans texture. Non fait : halo (« corona ») des feux vus de loin, qui demanderait un `BloomEffect` réglé pour tout le
+jeu ou un halo par `BillboardGui` ; tableau de bord émissif (`vehicle_dash_emissive`) éteint.
+
 ## Monter, descendre, stationnement (serveur)
 
 ```lua

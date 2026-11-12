@@ -1320,6 +1320,39 @@ function groups.lights()
 		end
 		return n
 	end
+	-- équipement (VehicleLights.Rig) : chaque cône éclaire vers l'extérieur du véhicule (sinon il éclaire la
+	-- carrosserie ou l'habitacle à travers les pièces), et la plaque arrière a sa lampe
+	do
+		local root = model.PrimaryPart
+		local inward, spots, plateLamp, rearPlate = {}, 0, false, false
+		for role, list in pairs(lightsByRole) do
+			for _, l in ipairs(list) do
+				if l:IsA("SpotLight") and role ~= "plate" and not string.find(role, "^siren") then
+					spots += 1
+					local a = l.Parent
+					local dir = a.WorldCFrame:VectorToWorldSpace(Vector3.FromNormalId(l.Face))
+					if dir:Dot(a.WorldPosition - root.Position) <= 0 then
+						table.insert(inward, role)
+					end
+				elseif role == "plate" then
+					plateLamp = true
+				end
+			end
+		end
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("SurfaceGui") and d.Name == "Plate" and d.Parent:IsA("BasePart") then
+				local n = d.Parent.CFrame:VectorToWorldSpace(Vector3.FromNormalId(d.Face))
+				if n:Dot(root.CFrame.LookVector) < -0.5 then
+					rearPlate = true
+				end
+			end
+		end
+		check(spots > 0 and #inward == 0, "cônes tournés vers l'extérieur",
+			#inward > 0 and ("vers l'intérieur : " .. table.concat(inward, ", ")) or fmt("%d SpotLight", spots))
+		if rearPlate then
+			check(plateLamp, "lampe de plaque arrière", plateLamp and "ok" or "absente (VehicleLights.Rig)")
+		end
+	end
 	resetAttributes()
 	task.wait(0.4)
 	local litAtRest = {}
@@ -1410,6 +1443,18 @@ function groups.lights()
 			elseif not byRole[role] then
 				table.insert(lightOnly, role)
 			end
+		end
+		-- une optique allumée doit être du Neon SANS texture : la texture GTA sombre éteint la lueur
+		local textured = {}
+		for _, role in ipairs(roles) do
+			for _, p in ipairs(byRole[role] or {}) do
+				if p:IsA("MeshPart") and p.Material == Enum.Material.Neon and p.TextureID ~= "" then
+					table.insert(textured, p.Name)
+				end
+			end
+		end
+		if #textured > 0 then
+			check(false, label .. " → optique sans texture", "Neon texturé (lueur éteinte) : " .. table.concat(textured, ", "))
 		end
 		local present = #roles - #absent
 		if #missing > 0 and frames < 5 then
