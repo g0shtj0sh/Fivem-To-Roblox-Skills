@@ -114,6 +114,33 @@ compartiment moteur (essai rejeté sur le m422 : calandre et optiques rattachée
 `tests/test_attach.py`. Sur le m422 : feux intérieurs, verres et lampe de plaque → coffre ; poignées →
 portières ; rien d'autre.
 
+## Compteur de vitesse (`VehicleDashboard`)
+
+**Ce que fait GTA V** : aucun compteur dans le HUD du jeu de base. La vitesse se lit sur les cadrans du tableau
+de bord intérieur, dont le modèle est désigné par `dashboardType` dans `vehicles.meta` (`VDT_*` ; le m422 :
+`VDT_TRUCKDIGI`). La graduation appartient au modèle de cadran, pas au véhicule : un cadran plafonne (200 mph
+d'après la communauté du modding), si bien que l'aiguille d'un véhicule de mod est souvent fausse. Les HUD des
+serveurs FiveM affichent donc leur propre compteur, nourri par les natives : vitesse de l'entité (m/s ;
+×3,6 = km/h, ×2,236936 = mph), régime normalisé (0,2 ralenti → 1,0 rupteur), rapport engagé (0 = marche
+arrière), moteur, feux. Le convertisseur garde `dashboardType` (`CONFIG.DashboardType`) pour référence ; on
+ne reproduit pas les cadrans 3D.
+
+**Ce que fait le runtime** : le client du conducteur affiche un compteur simple, en bas au centre (hors du
+stick et des boutons tactiles, dans la zone sûre `CoreUISafeInsets`), à l'échelle de l'écran (1 à 720 px de
+haut, bornée 0,78–1,5 pour garder 12 px dessinés). Il se construit à partir du véhicule :
+
+| Affiché | Source | Adapté au véhicule par |
+|---|---|---|
+| vitesse | `VehicleRoot`, vitesse le long de l'avant (comme `VehicleDrive`), lissée (1 − e^(−10·dt)) | — |
+| rapport | `State.Gear` (télémétrie du moteur de conduite) | `Handling.Gears`, `Handling.Gearbox = "electric"` → « D » |
+| barre de régime | `State.Rpm` entre `Audio.IdleRpm` et `Audio.MaxRpm` | régimes du véhicule ; zone rouge = 10 derniers % |
+
+`VehicleDashboard.Read(model)` rend les mêmes valeurs à un HUD du jeu : `Speed`, `Unit`, `Gear`, `GearCount`,
+`Rpm`, `Rpm01`, `RpmGta`, `Redline`, `TopSpeed` (vitesse au rupteur sur le dernier rapport,
+`Handling.RedlineTopGearKmh`), `DialMax` (haut d'un cadran : pointe + 10 %, arrondi à 20), `Engine`,
+`Headlights`, `Indicator`, `Brake`, `Reverse`, `DashboardType`. Désactiver le compteur intégré :
+`BuiltinSpeedometer = false` (dossier `FiveMVehicles` pour tout le jeu, ou un véhicule).
+
 ## Feux (`VehicleLights.Rig`, état par `VehicleRuntime`)
 
 Les optiques sont les maillages du shader GTA `vehicle_lightsemissive`, une pièce par feu (`LightRole`). GTA les

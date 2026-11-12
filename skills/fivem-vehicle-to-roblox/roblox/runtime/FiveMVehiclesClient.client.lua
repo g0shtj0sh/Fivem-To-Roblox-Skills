@@ -14,6 +14,7 @@ local Runtime = require(folder:WaitForChild("VehicleRuntime"))
 local Input = require(folder:WaitForChild("VehicleInput"))
 local Drive = require(folder:WaitForChild("VehicleDrive"))
 local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
+local Dashboard = require(folder:WaitForChild("VehicleDashboard"))
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -210,8 +211,11 @@ local function onSeated(active, seat)
 		if model:GetAttribute("UseBuiltinDrive") ~= false then
 			Drive.Start(model)
 		end
+		-- compteur de vitesse (désactivable : attribut BuiltinSpeedometer = false, cf. VehicleDashboard)
+		Dashboard.Start(model)
 	else
 		Drive.Stop()
+		Dashboard.Stop()
 		if driving then
 			set("Horn", false)
 		end
@@ -221,6 +225,7 @@ local function onSeated(active, seat)
 end
 
 local function hookCharacter(char)
+	Dashboard.Stop() -- réapparition : plus au volant
 	local hum = char:WaitForChild("Humanoid")
 	hum.Seated:Connect(onSeated)
 	if hum.SeatPart then

@@ -872,6 +872,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleSeatFit", SOURCES.VehicleSeatFit)
 	upsert(folder, "ModuleScript", "VehicleLights", SOURCES.VehicleLights)
 	upsert(folder, "ModuleScript", "VehicleCollision", SOURCES.VehicleCollision)
+	upsert(folder, "ModuleScript", "VehicleDashboard", SOURCES.VehicleDashboard)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()

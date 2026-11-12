@@ -594,6 +594,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Make": vinfo.get("make", ""),
         "Class": vinfo.get("class", ""),
         "Type": vinfo.get("type", ""),
+        "DashboardType": vinfo.get("dashboardType", ""),  # VDT_* de vehicles.meta (référence, cf. VehicleDashboard)
         "ConverterVersion": __version__,
         "StudsPerMeter": args.studs_per_meter,
         "ProbePart": ref[0],

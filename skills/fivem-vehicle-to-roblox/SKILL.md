@@ -216,6 +216,12 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 - **Conduite** (`VehicleDynamics` + `VehicleDrive`, client du conducteur) : le véhicule roule dès qu'un joueur
   prend le volant (boîte, freins, ABS, frein à main, suspension par rayons, son et compte-tours) ;
   `UseBuiltinDrive = false` pour brancher un autre châssis. Mesures : `docs/drive-tests.md` du dépôt.
+- **Compteur de vitesse** (`VehicleDashboard`, client du conducteur, automatique) : vitesse (km/h, ou mph
+  avec l'attribut `SpeedUnit = "mph"`), rapport (« R », « N » moteur coupé, « D » boîte électrique) et barre de
+  régime du ralenti au rupteur du véhicule, zone rouge sur les 10 derniers %. Tout se lit dans la
+  configuration (rapports, régimes, vitesse de pointe) : aucun réglage par véhicule. `BuiltinSpeedometer =
+  false` (sur `ReplicatedStorage.FiveMVehicles` ou le véhicule) pour le remplacer par un HUD du jeu, qui lit
+  `VehicleDashboard.Read(model)` (mêmes grandeurs que les natives GTA : `references/roblox-integration.md`).
 - **Corps adapté à l'habitacle** (`VehicleSeatFit`, automatique) : le convertisseur voxelise l'habitacle
   (`CONFIG.Cabin`, 4 cm, ≈ 7 Ko) ; à l'assise, le client de l'occupant mesure son corps et cherche le réglage
   qui le garde entièrement dedans — corps le plus grand, puis le plus large, puis siège le moins reculé, puis
