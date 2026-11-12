@@ -539,6 +539,11 @@ function Tests.hill(v, p)
     end
 
     hold(v, { brake = 1.0 }, 6, function() return math.abs(fwdSpeed(v)) < 0.1 end, true)
+    -- La pente ou le vehicule s'immobilise n'est pas tout a fait celle du
+    -- declenchement : c'est elle qui compte pour le frein a main, le recul et
+    -- le demarrage en cote.
+    res.pitchStopped = r(GetEntityRotation(v, 2).x, 3)
+    res.gradeStopped = r(math.tan(math.rad(res.pitchStopped)) * 100.0, 2)
     local pA = GetEntityCoords(v)
     hold(v, { handbrake = true }, 1.5, nil, true)
     res.creepHandbrake = r(#(GetEntityCoords(v) - pA), 4)
@@ -698,14 +703,281 @@ function Tests.surfscan(v, p)
         Wait(p.settleMs or 120)
         local pos = GetEntityCoords(v)
         local rot = GetEntityRotation(v, 2)
+        -- HasCollisionLoadedAroundEntity peut dire oui alors que le sol SOUS le
+        -- vehicule n'est pas la : le vehicule reste alors a la hauteur imposee,
+        -- assiette exactement nulle, et le releve est faux. Le seul test sur
+        -- lequel on peut compter : au moins une roue touche un materiau.
+        local m0 = GetVehicleWheelSurfaceMaterial(v, 0)
+        local m2 = GetVehicleWheelSurfaceMaterial(v, 2)
+        local grounded = (m0 ~= 0 and m0 ~= -1) or (m2 ~= 0 and m2 ~= -1)
         out[#out + 1] = {
-            r(d, 1), r(pos.z, 3),
-            GetVehicleWheelSurfaceMaterial(v, 0), GetVehicleWheelSurfaceMaterial(v, 2),
-            r(rot.x, 2), r(rot.y, 2), loaded and 1 or 0,
+            r(d, 1), grounded and r(pos.z, 3) or nil,
+            m0, m2, r(rot.x, 2), r(rot.y, 2),
+            (loaded and grounded) and 1 or 0,
         }
         d = d + step
     end
     return { columns = { 'd', 'z', 'matAvG', 'matArG', 'pitch', 'roll', 'collision' }, profile = out }
+end
+
+--- Hauteur EXACTE du sol le long d'une ligne, par rayons verticaux.
+---
+--- Poser le vehicule et lire sa hauteur ne marche pas pour chercher une bordure :
+--- une marche de 15 cm sous une caisse de 2 m de large donne une rampe etalee, pas
+--- une marche. Ici on amene le vehicule au centre de la zone (pour que la collision
+--- soit chargee), puis on tire un rayon vertical tous les `step` metres.
+function Tests.heightprobe(v, p)
+    local cx, cy, cz = p.x + 0.0, p.y + 0.0, (p.z or 20.0) + 0.0
+    -- amener le vehicule sur zone et attendre la collision
+    SetEntityCoordsNoOffset(v, cx, cy, cz + 2.0, false, false, false)
+    SetEntityVelocity(v, 0.0, 0.0, 0.0)
+    RequestCollisionAtCoord(cx, cy, cz)
+    local tw = GetGameTimer()
+    while GetGameTimer() - tw < (p.collisionMs or 4000) do
+        RequestCollisionAtCoord(cx, cy, cz)
+        Wait(50)
+        if HasCollisionLoadedAroundEntity(v) then break end
+    end
+    SetVehicleOnGroundProperly(v)
+    Wait(300)
+    local base = GetEntityCoords(v)
+
+    local h = math.rad(p.h or 0.0)
+    local fx, fy = -math.sin(h), math.cos(h)
+    local step = p.step or 0.1
+    local half = p.half or 12.0
+    local out = {}
+    local d = -half
+    while d <= half do
+        local x, y = cx + fx * d, cy + fy * d
+        local probe = StartExpensiveSynchronousShapeTestLosProbe(
+            x, y, base.z + 6.0, x, y, base.z - 6.0, 1, v, 7)
+        local _, hit, pos = GetShapeTestResult(probe)
+        out[#out + 1] = { r(d, 2), (hit == 1 or hit == true) and r(pos.z, 4) or nil }
+        d = d + step
+    end
+    return { center = { r(cx, 2), r(cy, 2), r(base.z, 3) }, h = p.h or 0.0,
+             columns = { 'offset', 'zSol' }, profile = out }
+end
+
+--- Profil en long d'une route, pour chercher une cote d'une pente donnee.
+---
+--- On prend le noeud routier le plus proche, puis on tire des rayons verticaux
+--- LE LONG de la route : la pente se lit directement sur le profil, sans avoir
+--- a y conduire. Reposer le vehicule ne marcherait pas, la collision n'etant
+--- chargee qu'autour de lui.
+function Tests.hillprobe(v, p)
+    local cx, cy, cz = p.x + 0.0, p.y + 0.0, (p.z or 20.0) + 0.0
+    SetEntityCoordsNoOffset(v, cx, cy, cz + 2.0, false, false, false)
+    SetEntityVelocity(v, 0.0, 0.0, 0.0)
+    local tw = GetGameTimer()
+    while GetGameTimer() - tw < (p.collisionMs or 5000) do
+        RequestCollisionAtCoord(cx, cy, cz)
+        Wait(50)
+        if HasCollisionLoadedAroundEntity(v) then break end
+    end
+    SetVehicleOnGroundProperly(v)
+    Wait(300)
+
+    local ok, node, nh = GetClosestVehicleNodeWithHeading(cx, cy, cz, 1, 3.0, 0)
+    if not ok then return { error = 'aucun noeud routier pres de ce point' } end
+    local hRoad = (p.h ~= nil) and (p.h + 0.0) or (nh + 0.0)
+    local hr = math.rad(hRoad)
+    local fx, fy = -math.sin(hr), math.cos(hr)
+    local half, step = p.half or 60.0, p.step or 1.0
+    local out, d = {}, -half
+    while d <= half do
+        local x, y = node.x + fx * d, node.y + fy * d
+        local probe = StartExpensiveSynchronousShapeTestLosProbe(
+            x, y, node.z + 60.0, x, y, node.z - 60.0, 1, v, 7)
+        local _, hit, pos = GetShapeTestResult(probe)
+        out[#out + 1] = { r(d, 1), (hit == 1 or hit == true) and r(pos.z, 3) or nil }
+        d = d + step
+    end
+    return { node = { r(node.x, 2), r(node.y, 2), r(node.z, 2) }, roadHeading = r(hRoad, 1),
+             columns = { 'offset', 'zSol' }, profile = out }
+end
+
+--- Obstacle calibre : on CONSTRUIT la marche de l'essai de bordure.
+---
+--- Les bordures de rue sont PARALLELES a la chaussee : pour les aborder de face
+--- il faut traverser la rue, ce qui ne laisse qu'une demi-chaussee d'elan, 7 m
+--- environ. On ne peut pas y arriver a 60 km/h. On construit donc la marche :
+--- un prop parallelepipedique enfonce dans le terrain de facon que sa face
+--- superieure soit exactement `height` metres au-dessus du sol, pose au bout
+--- d'une ligne droite validee. La marche obtenue est ensuite RELEVEE au rayon
+--- vertical, pour verifier sa hauteur reelle avant de mesurer quoi que ce soit.
+
+local stepObjects = {}
+
+--- Hauteur du sol sous (x, y). flags : 1 = terrain seul, 17 = terrain + objets.
+local function groundZ(v, x, y, zHint, flags)
+    local probe = StartExpensiveSynchronousShapeTestLosProbe(
+        x, y, zHint + 8.0, x, y, zHint - 8.0, flags or 1, v, 7)
+    local _, hit, pos = GetShapeTestResult(probe)
+    if hit == 1 or hit == true then return pos.z end
+    return nil
+end
+
+local function clearStepObjects()
+    local n = 0
+    for _, obj in ipairs(stepObjects) do
+        if DoesEntityExist(obj) then
+            SetEntityAsMissionEntity(obj, true, true)
+            DeleteEntity(obj)
+            n = n + 1
+        end
+    end
+    stepObjects = {}
+    return n
+end
+
+--- Retire la marche construite.
+function Tests.clearstep(v, p)
+    return { deleted = clearStepObjects() }
+end
+
+--- Validite et encombrement d'une liste de modeles, pour choisir le prop.
+function Tests.modelprobe(v, p)
+    local out = {}
+    for _, name in ipairs(p.models or {}) do
+        local hash = GetHashKey(name)
+        local inCd = IsModelInCdimage(hash)
+        local row = { name, inCd and 1 or 0, IsModelValid(hash) and 1 or 0 }
+        if inCd then
+            RequestModel(hash)
+            local tw = GetGameTimer()
+            while not HasModelLoaded(hash) and GetGameTimer() - tw < 3000 do Wait(20) end
+            if HasModelLoaded(hash) then
+                local mn, mx = GetModelDimensions(hash)
+                row[4], row[5], row[6] = r(mx.x - mn.x, 2), r(mx.y - mn.y, 2), r(mx.z - mn.z, 2)
+                row[7], row[8] = r(mn.z, 3), r(mx.z, 3)
+                SetModelAsNoLongerNeeded(hash)
+            end
+        end
+        out[#out + 1] = row
+    end
+    return { columns = { 'modele', 'dansCdimage', 'valide', 'dimX', 'dimY', 'dimZ', 'minZ', 'maxZ' },
+             models = out }
+end
+
+--- Construit la marche et en renvoie la coupe mesuree au rayon vertical.
+function Tests.buildstep(v, p)
+    clearStepObjects()
+    local model = p.model or 'prop_container_01a'
+    local hash = GetHashKey(model)
+    if not IsModelInCdimage(hash) then return { error = 'modele absent : ' .. model } end
+    RequestModel(hash)
+    local tw = GetGameTimer()
+    while not HasModelLoaded(hash) and GetGameTimer() - tw < 10000 do Wait(20) end
+    if not HasModelLoaded(hash) then return { error = 'modele non charge : ' .. model } end
+
+    local mn, mx = GetModelDimensions(hash)
+    local dimX, dimY = mx.x - mn.x, mx.y - mn.y
+    -- Le grand cote va DANS le sens de la marche : le vehicule reste assez
+    -- longtemps sur le dessus pour que la suspension se stabilise avant la
+    -- redescente. Le petit cote sert de pas lateral entre les exemplaires.
+    local alongIsY = dimY >= dimX
+    local heading = (p.h or 0.0) + (alongIsY and 0.0 or 90.0)
+    local lateral = alongIsY and dimX or dimY
+
+    local cx, cy = p.x + 0.0, p.y + 0.0
+    local zHint = (p.z or 20.0) + 0.0
+    -- amener le vehicule sur zone, sinon la collision du terrain n'est pas la
+    SetEntityCoordsNoOffset(v, cx, cy, zHint + 2.0, false, false, false)
+    SetEntityVelocity(v, 0.0, 0.0, 0.0)
+    local tw2 = GetGameTimer()
+    while GetGameTimer() - tw2 < (p.collisionMs or 4000) do
+        RequestCollisionAtCoord(cx, cy, zHint)
+        Wait(50)
+        if HasCollisionLoadedAroundEntity(v) then break end
+    end
+    SetVehicleOnGroundProperly(v)
+    Wait(300)
+
+    local height = p.height or 0.15
+    local count = p.count or 3
+    local hr = math.rad(p.h or 0.0)
+    local rx, ry = math.cos(hr), math.sin(hr)          -- vecteur lateral (droite)
+    local fx, fy = -math.sin(hr), math.cos(hr)          -- sens de la marche
+    local placed = {}
+    local halfN = (count - 1) / 2.0
+    for i = 0, count - 1 do
+        local off = (i - halfN) * (lateral - (p.overlap or 0.05))
+        local x, y = cx + rx * off, cy + ry * off
+        local gz = groundZ(v, x, y, zHint, 1)
+        if gz then
+            local z = gz + height - mx.z
+            local obj = CreateObject(hash, x, y, z, false, false, false)
+            SetEntityHeading(obj, heading)
+            FreezeEntityPosition(obj, true)
+            SetEntityCollision(obj, true, true)
+            SetEntityInvincible(obj, true)
+            stepObjects[#stepObjects + 1] = obj
+            placed[#placed + 1] = { r(off, 2), r(x, 2), r(y, 2), r(gz, 3), r(z, 3) }
+        end
+    end
+    SetModelAsNoLongerNeeded(hash)
+    Wait(500)
+
+    -- coupe de verification dans le sens de la marche, objets inclus
+    local prof, half, step = {}, p.half or 20.0, p.step or 0.25
+    local d = -half
+    while d <= half do
+        local x, y = cx + fx * d, cy + fy * d
+        local z = groundZ(v, x, y, zHint, 17)
+        prof[#prof + 1] = { r(d, 2), z and r(z, 4) or nil }
+        d = d + step
+    end
+    return { model = model, heading = r(heading, 1), alongIsY = alongIsY and 1 or 0,
+             dim = { r(dimX, 2), r(dimY, 2), r(mx.z - mn.z, 2) }, maxZ = r(mx.z, 3),
+             targetHeight = height, placed = placed,
+             columns = { 'offset', 'zSol' }, profile = prof }
+end
+
+--- Releve en travers d'une route : on trouve le noeud routier le plus proche,
+--- puis on echantillonne perpendiculairement a la route. C'est ainsi qu'on
+--- repere un trottoir (marche nette de 10 a 20 cm) plutot qu'une rampe.
+function Tests.roadscan(v, p)
+    local sx, sy, sz = p.x + 0.0, p.y + 0.0, (p.z or 20.0) + 0.0
+    local ok, node, heading = GetClosestVehicleNodeWithHeading(sx, sy, sz, 1, 3.0, 0)
+    if not ok then
+        return { error = 'aucun noeud routier pres de ce point' }
+    end
+    local hRoad = heading + 0.0
+    -- perpendiculaire a la route
+    local hPerp = math.rad(hRoad + 90.0)
+    local fx, fy = -math.sin(hPerp), math.cos(hPerp)
+    local step = p.step or 0.2
+    local half = p.half or 14.0
+    local out = {}
+    local d = -half
+    while d <= half do
+        if abortFlag then break end
+        local x, y = node.x + fx * d, node.y + fy * d
+        SetEntityCoordsNoOffset(v, x, y, node.z + 1.5, false, false, false)
+        SetEntityVelocity(v, 0.0, 0.0, 0.0)
+        SetEntityRotation(v, 0.0, 0.0, hRoad, 2, true)
+        RequestCollisionAtCoord(x, y, node.z)
+        local tw = GetGameTimer()
+        while GetGameTimer() - tw < (p.collisionMs or 1200) do
+            Wait(40)
+            if HasCollisionLoadedAroundEntity(v) then break end
+        end
+        SetVehicleOnGroundProperly(v)
+        Wait(p.settleMs or 80)
+        local m0 = GetVehicleWheelSurfaceMaterial(v, 0)
+        local grounded = (m0 ~= 0 and m0 ~= -1)
+        local pos = GetEntityCoords(v)
+        out[#out + 1] = { r(d, 2), grounded and r(pos.z, 3) or nil, m0, grounded and 1 or 0 }
+        d = d + step
+    end
+    return {
+        node = { r(node.x, 2), r(node.y, 2), r(node.z, 2) },
+        roadHeading = r(hRoad, 1),
+        columns = { 'offset', 'z', 'materiau', 'valide' },
+        profile = out,
+    }
 end
 
 --- Essai brut : entrees constantes, pour diagnostiquer (signe du braquage,

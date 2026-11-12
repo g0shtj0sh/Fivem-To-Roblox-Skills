@@ -33,6 +33,22 @@ il correspond exactement à ce que le skill a exporté :
 (plein ouest) : **671 m de béton continu**, sans bordure ni obstacle, vérifiés **en
 conduisant**. Météo au beau fixe, midi, trafic, piétons et niveau de recherche neutralisés.
 
+**Bordure.** Il n'existe pas dans la carte de marche de 15 cm abordable de face avec de
+l'élan : une bordure de rue est **parallèle** à la chaussée, on ne peut donc l'aborder qu'en
+traversant la rue, soit 7 m d'élan — de quoi faire 20 km/h, pas 60. La marche a donc été
+**construite** sur la ligne droite du tablier, à 74 m du départ : trois conteneurs
+(`prop_container_01a`) enfoncés dans le béton de façon que leur face supérieure affleure à la
+hauteur voulue, figés, alignés côte à côte — 7,9 m de large, 12,2 m de long. La marche
+obtenue a été **relevée au rayon vertical avant toute mesure** : **+0,149 m**, dessus plat au
+millimètre sur 12,2 m ([`fivem/bordure_profil_1.json`](fivem/bordure_profil_1.json)). Les
+conteneurs ont été retirés après les essais et le tablier revérifié plat.
+
+**Côte.** Richman Glen, route montante repérée au rayon vertical (profil en long relevé tous
+les mètres sur 140 m), départ `(-1504,0 ; 259,4)`, cap 28,4. La pente **au point où le
+véhicule s'immobilise** est relevée dans chaque trace : **16,5 %** (assiette 9,35 °), un peu
+plus raide que les 15 % demandés — c'est la pente régulière la plus proche trouvée sur une
+route goudronnée.
+
 **Entrées.** Imposées à chaque image par `SetControlNormal` (accélérateur 71, frein 72,
 direction 59, frein à main 76). Les autres contrôles (sortie du véhicule, armes, klaxon) sont
 désactivés pendant l'essai ; les contrôles de conduite, eux, ne doivent **pas** l'être
@@ -44,7 +60,7 @@ rapport engagé et suivant, embrayage, `ThrottleOffset`, angle de volant, et **p
 vitesse, compression de suspension, braquage, longueur du vecteur de traction, puissance,
 pression de frein, vitesse de rotation et matériau du sol.
 
-**Répétition.** Chaque essai a été lancé **3 fois** (27 essais, 27 réussis). La dispersion
+**Répétition.** Chaque essai a été lancé **3 fois** (36 essais, 36 réussis). La dispersion
 est donnée sous forme d'écart-type ; elle est partout très faible (σ ≤ 0,15 % sur les temps,
 σ = 0 sur plusieurs mesures), ce qui veut dire que la physique GTA est **déterministe** à
 cadence d'images donnée.
@@ -84,6 +100,19 @@ cadence d'images donnée.
 | Slalom 60 km/h : roulis | **3,48 °** (σ 0,33) | non mesuré | — | `KArb`, `KSpring` |
 | Slalom 60 km/h : lacet max | 26,5 °/s | non mesuré | — | |
 | Slalom 60 km/h : dérive | 1,22 ° | non mesuré | — | |
+| Bordure 0,15 m à 20 km/h : **cabrage** | **3,29 °** (σ 0,02) | 7,6 ° | Roblox **×2,3** | `BumpK`, `DampVMax` |
+| Bordure 0,15 m à 20 km/h : roues au sol | **4 en permanence** | ≥ 2 | GTA ne décolle pas | `DampVMax` |
+| Bordure 0,15 m à 20 km/h : vitesse perdue | **0,06 km/h** (σ 0,02) | 0,9 km/h | Roblox **×15** | `BumpK` |
+| Bordure 0,15 m à 20 km/h : montée de caisse | **0,145 m** pour 0,149 m de marche | non mesuré | — | `KSpring` |
+| Bordure 0,15 m à 60 km/h : **cabrage** | **+2,18 / −2,64 °** (σ 0,10) | 17,6 ° | Roblox **×8** | `BumpK`, `DampVMax` |
+| Bordure 0,15 m à 60 km/h : temps en l'air | **0 image** | 0,15 s (9 images) | GTA reste collé | `DampVMax` |
+| Bordure 0,15 m à 60 km/h : vitesse perdue | **0,03 km/h** | ≈ 0 | ok | |
+| Bordure : vitesse de tangage max | 79,9 °/s à 20 km/h, **118,9 °/s** à 60 | non mesuré | — | `DampVMax` |
+| Bordure : compression de suspension | 0,193 → **0,289** à 20 km/h ; 0,199 → **0,326** à 60 | non mesuré | — | `KSpring`, `BumpK` |
+| Côte 16,5 % : frein à main 1,5 s | **5,9 cm** (σ 0,3) | 4,5 cm (à 15,0 %) | proche | `HandbrakeGripRear` |
+| Côte 16,5 % : tout relâché 2 s | **0,0 cm** — recul **strictement nul** | 6,7 cm | Roblox **recule** | maintien à l'arrêt |
+| Côte 16,5 % : plein gaz 4 s | **45,1 km/h** (σ 0,6), 32,5 m, 2ᵉ | 43 km/h | proche | `DriveForce` |
+| Côte 16,5 % : coût de la pente | −22,2 km/h et −11,7 m face aux **67,3 km/h / 44,1 m** du plat | non mesuré | — | |
 
 ## Ce qu'on apprend du moteur GTA
 
@@ -134,6 +163,31 @@ largement au-delà.
 moyenne, rapport engagé. Le moteur Roblox n'applique que `EngineBrakeG = 0,08 g` : le
 véhicule Roblox roule beaucoup trop loin en roue libre.
 
+**La bordure.** GTA **avale** la marche de 15 cm. À 20 km/h : 3,29 ° de cabrage, quatre
+roues toujours en contact, 0,06 km/h perdus ; la caisse monte de 0,145 m pour une marche de
+0,149 m, donc la suspension n'absorbe que 4 mm et le châssis suit le terrain. À 60 km/h le
+cabrage **diminue** (2,18 °) au lieu d'augmenter : le véhicule n'a plus le temps de suivre la
+marche, c'est la suspension qui travaille (compression 0,199 → 0,326, contre 0,193 → 0,289 à
+20 km/h) et la caisse ne monte plus que de 0,135 m. Les seules grandeurs qui croissent avec
+la vitesse sont la **vitesse de tangage** (80 → 119 °/s) et le mouvement vertical
+(0,33 → 0,47 m/s). Rien n'est perdu en vitesse : dans GTA, une bordure ne freine pas.
+
+Le moteur Roblox fait l'inverse : 7,6 ° à 20 km/h, puis 17,6 ° et 0,15 s en l'air à 60 km/h,
+avec 0,9 km/h perdus à 20 km/h. Le ressort est trop raide et la détente trop peu amortie : la
+roue est renvoyée vers le haut au lieu d'être rattrapée. Le critère de réglage est simple —
+le cabrage doit **baisser** quand la vitesse monte.
+
+**La côte.** À 16,5 % de pente, moteur tournant, **le véhicule ne recule pas du tout** : 2 s
+toutes commandes relâchées, déplacement strictement nul et vitesse minimale 0,0 km/h. GTA
+applique un maintien à l'arrêt total. Les 5,9 cm de la phase frein à main sont la fin du
+mouvement d'immobilisation, pas un glissement : cette phase précède la phase relâchée, qui
+elle est à zéro. Roblox recule de 6,7 cm en 2 s — c'est peu, mais ce n'est pas zéro.
+
+Au démarrage, plein gaz 4 s en côte : 45,1 km/h sur 32,5 m en 2ᵉ, contre **67,3 km/h sur
+44,1 m** sur le plat. La pente coûte 22 km/h et 12 m en 4 s, soit à peu près ce qu'enlèverait
+une composante de gravité de 0,16 g pendant 4 s (≈ 23 km/h) : en montée, GTA ne triche pas
+sur la pente — seulement à l'arrêt.
+
 **La marche arrière.** −48,8 km/h en 4 s sur 41,4 m, contre −58,4 km/h sur 34 m dans
 Roblox : confirme le point 5 de la liste « ce qui ne fait pas encore GTA ».
 
@@ -147,6 +201,9 @@ Roblox : confirme le point 5 de la liste « ce qui ne fait pas encore GTA ».
 6. `UpshiftRpm` : variable selon le rapport (0,805 en 1ʳᵉ, ≈ 0,95 ensuite), + 0,496 s de coupure.
 7. `EngineBrakeG` : ≈ 0,38 g en roue libre, rapport engagé.
 8. `IwRel` / `DriveForce` : 0-100 en 8,90 s.
+9. `BumpK` / `DampVMax` : sur une marche de 15 cm, le cabrage doit **baisser** avec la vitesse
+   (3,3 ° à 20 km/h, 2,2 ° à 60), sans décollage et sans perte de vitesse.
+10. Maintien à l'arrêt en côte : recul **nul** à 16,5 % de pente, contre 6,7 cm dans Roblox.
 
 ## Limites de cette campagne
 
@@ -154,10 +211,14 @@ Roblox : confirme le point 5 de la liste « ce qui ne fait pas encore GTA ».
   a été atteinte (plateau à 16,1 s, 378 m) parce que le véhicule plafonne à 119 km/h. La
   roue libre part donc de 110 km/h et non de 150 comme prévu : il n'existe pas de vitesse
   plus élevée à atteindre sur ce véhicule.
-- **Essais non faits : bordure et côte.** Ils demandent une marche de 15 cm et une pente de
-  15 % repérées et validées ; le tablier de l'aéroport n'en a pas, et le repérage par
-  téléportation s'est révélé non fiable (voir ci-dessous). Les lignes Roblox correspondantes
-  (cabrage 7,6 ° à 20 km/h, 17,6 ° à 60 km/h, recul en côte) restent donc sans vis-à-vis.
+- **La bordure est construite, pas trouvée.** Aucune marche de la carte n'est abordable de
+  face avec plus de 7 m d'élan (voir « Bordure » dans le protocole). La marche posée est plus
+  propre qu'une bordure réelle — arête franche, dessus plat, perpendiculaire au millimètre —
+  donc ces chiffres sont une borne **haute** du choc, pas une moyenne de ce qu'on rencontre
+  en ville.
+- **La côte fait 16,5 %, pas 15 %.** La ligne Roblox, elle, a été mesurée à 15,0 % (8,7 °).
+  Les deux colonnes ne sont donc pas exactement au même point de pente ; les 1,5 point d'écart
+  jouent sur le recul et sur le démarrage, pas sur la conclusion (recul nul contre 6,7 cm).
 - **Cadence d'images non pilotable.** Aucun convar de limitation n'est exposé par ce build
   (`game_maxFps`, `profile_maxFps`, `r_maxFps`, `cl_maxFps`… tous absents) : la comparaison
   30 / 60 i/s demandée n'a pas pu être faite. Les traces enregistrent en revanche la durée

@@ -210,7 +210,8 @@ SetHttpHandler(function(req, res)
     if path == '/tests' then
         return json_response(res, {
             'accel', 'brake', 'handbrake', 'corner', 'reverse', 'curb', 'hill',
-            'coast', 'stepsteer', 'slalom', 'handling', 'raw', 'surfscan',
+            'coast', 'stepsteer', 'slalom', 'handling', 'raw', 'surfscan', 'roadscan', 'heightprobe',
+            'modelprobe', 'buildstep', 'clearstep', 'hillprobe',
         })
     end
 

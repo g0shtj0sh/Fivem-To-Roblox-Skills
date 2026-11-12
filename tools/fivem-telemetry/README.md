@@ -64,6 +64,12 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 | `slalom` | braquage sinusoïdal | `maxRoll`, `maxYawRate`, `maxSlip` |
 | `raw` | entrées constantes (diagnostic) | cap parcouru, angle de roue |
 | `surfscan` | relevé du sol le long d'une ligne | profil `d, z, matériau, pitch, roll` |
+| `roadscan` | relevé **en travers** d'une route (noeud routier le plus proche) | profil `offset, z, matériau` |
+| `heightprobe` | hauteur exacte du sol par rayons verticaux, le long d'une ligne | profil `offset, zSol` |
+| `hillprobe` | profil **en long** d'une route, pour en lire la pente | profil `offset, zSol`, `roadHeading` |
+| `modelprobe` | validité et encombrement d'une liste de modèles | `dimX, dimY, dimZ, minZ, maxZ` |
+| `buildstep` | **construit** une marche calibrée (prop enfoncé) et en renvoie la coupe mesurée | `placed`, profil `offset, zSol` |
+| `clearstep` | retire la marche construite | `deleted` |
 
 Paramètres communs : `start` (`{x, y, z, h}` : le véhicule est réparé, remis à plat et
 arrêté là avant l'essai), `seconds`, `kmh`, `steer`.
@@ -85,6 +91,24 @@ reste légère.
 Au début de chaque essai, les valeurs de handling **réellement chargées** sont relevées
 (`GetVehicleHandlingFloat / Int / Vector`) : c'est ce qui permet de vérifier qu'elles
 correspondent bien à ce que le skill a exporté.
+
+## Construire la bordure
+
+Les bordures de la carte sont **parallèles** à la chaussée : les aborder de face impose de
+traverser la rue, soit 7 m d'élan. Pour mesurer une bordure à 60 km/h il faut donc la poser
+soi-même, sur une ligne droite longue :
+
+```
+POST /run {"test":"buildstep","label":"marche",
+           "params":{"x":-1281.0,"y":-3044.0,"z":13.5,"h":90.0,
+                     "height":0.15,"count":3,"half":20.0,"step":0.25}}
+```
+
+`buildstep` enfonce `count` exemplaires du prop (`prop_container_01a` par défaut) de façon
+que leur face supérieure soit à `height` mètres au-dessus du terrain, les fige, puis **relève
+la marche au rayon vertical** et renvoie la coupe : la hauteur réelle est donc vérifiée avant
+toute mesure, et non supposée. `clearstep` les retire ensuite — redémarrer la ressource les
+supprime aussi.
 
 ## Points à connaître
 
