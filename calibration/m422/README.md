@@ -404,50 +404,24 @@ Le banc longitudinal, relancé après ces changements, reste à **5,3 %** : `Pea
 
 ### `PeakFactor` : la dérive du pneu, calculée dans les traces
 
-> ⚠ **Corrigé le 2026-11-12 (après-midi)** — la formule ci-dessous prend le mauvais signe. Dans la
-> télémétrie FiveM, `vLat` est positif vers la **droite** (`GetEntitySpeedVector(veh, true).x`) et `wz`
-> vers le haut : la vitesse latérale à l'essieu avant vaut `vLat − a · wz` (ω × r), pas `vLat + a · wz`.
-> Avec le bon signe, GTA tient au virage 40 établi ses pneus avant à **9,35 °** et arrière à **8,34 °**
-> (3 passes, σ 0,05 °), et la géométrie se referme : β = atan(b/R) − α_arrière = 12,6 − 8,3 = 4,3 °, pour
-> 4,44 ° mesurés. Le texte d'origine est conservé ci-dessous ; la conclusion « pic au-delà de 15 °,
-> `PeakFactor` 0,8 à 1,0 » ne tient pas. Voir « `PeakFactor` rebalayé en 3D » plus bas.
+> **Section corrigée le 2026-11-12 (après-midi).** Ce qu'elle concluait — « le pneu de GTA n'est pas encore
+> à son pic à 15 ° de dérive, donc `PeakFactor` vaut 0,8 à 1,0 » — était **faux**, à cause d'un signe. Les
+> dérives justes sont dans « 2. La dérive des pneus de GTA, avec le bon signe » plus bas : **9,35 °** à
+> l'avant au virage 40, et non 13,7 à 17,2 °. `PeakFactor` retenu : **0,55**.
 
-La correction de 0,25 à 0,5 est juste : mes 4,4 ° étaient la dérive de la **caisse**. Mais les « ≈ 9 ° »
-retenus comme dérive du pneu sont en fait l'angle de la **vitesse à l'essieu avant**. La dérive d'un pneu
-est l'écart entre le plan de la roue et sa vitesse, donc il faut encore retirer le braquage :
+**Ce qui était juste.** La correction de 0,25 à 0,5 tenait, et pour la bonne raison : les 4,4 ° qui avaient
+servi à la poser étaient la dérive de la **caisse**. La dérive d'un pneu est l'écart entre le plan de la roue
+et sa vitesse, il faut donc bien retirer le braquage de l'angle de la vitesse à l'essieu.
 
-```
-alpha_pneu = braquage_roue − atan( (vLat + a · lacet) / vFwd )
-```
+**L'erreur.** La vitesse latérale à l'essieu avant vaut `vLat − a · wz`, et non `vLat + a · wz` : dans la
+télémétrie FiveM `vLat` est positif vers la **droite** et `wz` vers le haut, et ω × r impose ce signe. Le
+mauvais signe gonflait la dérive avant de 9,5 ° à 33,6 °, ce qui faisait croire que le pneu travaillait
+encore loin de son pic alors qu'il en est à 90 %.
 
-Virage 40 en régime établi, `a` = distance du centre de gravité à l'essieu avant :
-
-| Grandeur | Valeur mesurée |
-|---|---|
-| Braquage de roue (moyenne des deux avant ; Ackermann : −22,9 ° et −30,5 °) | 24,9 à 26,2 ° |
-| Lacet | 93,7 à 94,7 °/s |
-| Dérive de la **caisse** | 3,8 à 4,6 ° |
-| Angle de la vitesse **à l'essieu avant** | 7,7 à 11,1 ° |
-| **Dérive du pneu avant** | **13,7 à 17,2 °** (`a` de 1,7 à 1,3 m) |
-
-Les signes ont été vérifiés sur les valeurs brutes : en virage à droite (`str` > 0, braquage < 0, lacet < 0,
-`vLat` > 0), seule la combinaison `vLat + a · lacet` donne une dérive de pneu du même signe que le braquage
-et plus petite en module — l'autre donnerait 40 °, incompatible avec un rayon de 6,2 m.
-
-À cette dérive de ≈ 15 ° le véhicule ne tient que 1,69 g alors que `fTractionCurveMax` vaut 1,90 : le pneu
-n'est donc **pas encore à son pic**, ce qui place le pic de GTA au-delà de 15 ° et pointe vers
-`PeakFactor` ≈ **0,8 à 1,0** (19 ° × 0,8 = 15,2 °).
-
-**Pourquoi 0,5 tenait, et pourquoi il faut y revenir.** Le balayage en Studio trouvait 0,5 meilleur de bout
-en bout, et au-delà de 0,55 l'adhérence basculait. C'était cohérent avec un moteur dont **la direction
-braquait deux fois trop** : il lui fallait moins d'adhérence par degré de dérive pour retomber sur la
-dérive de caisse observée, et « au-delà de 0,55 ça bascule » était un symptôme de ce défaut, pas une
-limite physique.
-
-**Cette raison a disparu** : la direction est mesurée et corrigée (« La direction, à consigne constante »
-plus bas). `PeakFactor` est donc à **rebalayer en 3D**, en partant de 0,8 et non de 0,5 — et **avant**
-`RollCentreScale`, qui dépend de l'adhérence établie. 0,5 reste la valeur en place en attendant : la
-changer sans vérification en 3D ne ferait que remplacer une erreur par une autre.
+**Pourquoi la « vérification des signes » n'en était pas une.** L'autre combinaison avait été écartée parce
+qu'elle « donnerait 40 °, incompatible avec un rayon de 6,2 m » : c'était comparer un braquage **non signé**
+à un angle de vitesse **signé**, donc mélanger deux conventions. Départager demandait une grandeur
+extérieure au calcul, pas un argument de vraisemblance ; il y en a deux, données plus bas.
 
 ### Le roulis : la raideur ne vient pas des ressorts, mais du point d'application des forces latérales
 
@@ -655,6 +629,25 @@ tôt — et au virage 80 GTA **ne braque que 8,3 °** à 70 km/h, là où la loi
 11,6 ° : c'est la réduction du braquage en glisse (non modélisée, voir « Ce que la pleine butée ne permet
 pas de mesurer »). Le virage 80 ne peut donc pas servir à régler `PeakFactor` tant que ce comportement
 manque : Roblox y braque 10,6–11,8 ° et ses pneus avant passent le pic.
+
+**Deux contrôles extérieurs au calcul.** La fermeture géométrique du modèle bicyclette ne peut pas
+départager les deux signes : β, `b/R` et α_arrière sont liés algébriquement, et `|atan(b/R) − α_arrière|`
+vaut 4,3 ° dans les deux cas, au signe de β près. Il faut une grandeur prise ailleurs. Deux l'ont fait.
+
+- **La trajectoire monde**, reconstruite depuis `px`, `py` et `heading` seuls, sans aucune convention de
+  repère local : `wz` est bien la vitesse de lacet vraie (−91,46 °/s contre −91,52 lus sur la dérivée du
+  cap), et `atan(vLat/vFwd)` vaut bien la dérive de caisse mesurée sur la trajectoire (3,92 ° contre
+  3,90 °), avec le signe qui confirme que `vLat` est positif vers la **droite** (3 passes, virage 40
+  établi). Conséquence physique, elle aussi décisive : avec le bon signe les **deux** pneus ont leur
+  vitesse du côté extérieur de leur plan de roue, donc produisent une force vers le centre du virage ;
+  avec l'autre, le pneu arrière la pousserait **hors** du virage, ce qui ne peut pas tenir en régime
+  établi.
+- **Le point de fonctionnement du pneu.** Le modèle monte linéairement jusqu'au pic : la part du pic
+  d'adhérence tenue doit donc égaler la part du pic de dérive atteinte. À `PeakFactor` 0,55 le pic est à
+  19 × 0,55 = 10,45 °. GTA tient 1,694 g sur 1,90, soit **89,2 % du pic d'adhérence**, avec 9,47 ° de
+  dérive, soit **90,6 % du pic de dérive** : 1,4 point d'écart. Avec l'autre signe la voiture serait à
+  **3,2 fois** son pic de dérive, donc très au-delà du décrochage, tout en tenant 1,694 g. Ce contrôle
+  confirme du même coup la valeur 0,55 par un chemin qui ne passe pas par le balayage.
 
 ### 3. Une cause parasite : la boîte rétrogradait en virage
 
