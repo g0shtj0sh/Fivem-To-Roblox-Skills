@@ -63,6 +63,8 @@ le serveur est éteint.
   `tools/gta-extract` (basé sur [CodeWalker.Core](https://github.com/dexyfex/CodeWalker), MIT) est compilé
   automatiquement au premier lancement. Sans .NET : exporter les fichiers en XML avec CodeWalker
   (clic droit › *Export XML*) et donner ces XML au skill.
+  Le même outil sort les sons d'un `.awc` en `.wav`, un conteneur ou un pack entier :
+  [`tools/gta-extract/README.md`](skills/fivem-vehicle-to-roblox/tools/gta-extract/README.md).
 - Optionnel : `ffmpeg` (sons en .ogg), clé API Open Cloud pour uploader les sons automatiquement.
 
 ### Avec Roblox Studio connecté (MCP Roblox Studio)

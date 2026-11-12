@@ -150,3 +150,30 @@ indicator_on
 INDICATOR_ON
 indicator_off
 INDICATOR_OFF
+// Flux de moteur granulaire, retrouvés par recherche exhaustive sur les hash des
+// conteneurs du jeu : les noms sont préfixés du nom du conteneur par gta-extract.
+engine_low
+engine_high
+engine_mid
+exhaust_low
+exhaust_high
+exhaust_mid
+eng_idle_loop
+exh_idle_loop
+engine_idle_loop
+exhaust_idle_loop
+idle_loop
+engine_1
+engine_2
+exhaust_1
+exhaust_2
+bank
+dump_clutch_revs
+first_slow_low
+first_slow_high
+first_fast_low
+first_fast_high
+second_slow_low
+second_slow_high
+second_fast_low
+second_fast_high

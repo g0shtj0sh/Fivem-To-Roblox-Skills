@@ -14,5 +14,7 @@ _work/
 *.awc
 *.rpf
 *.bgra
+*.wav
+*.ogg
 bundles/
 .cache/
