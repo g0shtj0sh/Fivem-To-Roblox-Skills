@@ -11,8 +11,8 @@
 		Bench.reverse(4)                         -- marche arrière
 		Bench.curb(20, 160)                      -- bordure abordée à 20 km/h, jusqu'à 160 m parcourus
 		Bench.hill(20)                           -- démarrage en côte : arrêt, maintien, recul, reprise
-		Bench.stepsteer(60, 0.5)                 -- créneau : braquage brusque maintenu à vitesse tenue
-		Bench.slalom(60, 0.5, 2, 12)             -- slalom : braquage sinus (amplitude, période s, durée s)
+		Bench.stepsteer(60, 0.5)                 -- créneau : consigne GTA 0,5 (demande effective 1/3, zone morte)
+		Bench.slalom(60, 0.5, 2, 12)             -- slalom : consigne sinus (amplitude, période s, durée s), écrêtée par la zone morte
 		Bench.trace(seconds, inputs)             -- trace libre, échantillons à chaque image
 
 	Échantillons : chaque essai garde aussi `r.samples`, une ligne par image pendant la manœuvre, avec les
@@ -67,7 +67,24 @@ local function state(a)
 	}
 end
 
-Bench.Columns = { "t", "str", "thr", "brk", "hb", "vFwd", "vLat", "wz", "roll", "pitch", "pz", "wheelsOnGround", "gear" }
+-- `str` = consigne passée à GTA (brute, comme dans les traces FiveM : l'analyseur y cale ses fenêtres) ;
+-- `strEff` = demande réellement donnée au moteur après la zone morte ; `steerDeg` = braquage de roue
+-- appliqué par VehicleDynamics (°, angle unique des deux roues avant, signe du moteur).
+Bench.Columns = {
+	"t", "str", "thr", "brk", "hb", "vFwd", "vLat", "wz", "roll", "pitch", "pz", "wheelsOnGround", "gear",
+	"strEff", "steerDeg",
+}
+
+-- Zone morte de l'axe analogique de GTA, MESURÉE à 0,2501 (calibration/m422/README.md, « La direction, à
+-- consigne constante ») : une consigne c donne la demande sign(c) × max(0, (|c| − 0,25) / 0,75). Les essais
+-- FiveM ont été enregistrés avec des consignes brutes (créneau 0,50 → 1/3 ; slalom 0,5 sin → sinus écrêté) :
+-- le banc alimente donc le moteur avec la demande EFFECTIVE, pas la consigne.
+Bench.GtaDeadzone = 0.25
+function Bench.gtaAxis(c)
+	local dz = Bench.GtaDeadzone
+	local m = math.max(0, (math.abs(c) - dz) / (1 - dz))
+	return (c < 0 and -1 or 1) * math.min(m, 1)
+end
 
 local function r3(x)
 	return math.floor((x or 0) * 1000 + 0.5) / 1000
@@ -77,9 +94,12 @@ end
 local function sampleRow(a, t0, inputs)
 	local s = state(a)
 	local i = inputs or Drive.Override or {}
+	local S = a.sim and a.sim.S
 	return {
-		math.floor((os.clock() - t0) * 1000 + 0.5), r3(i.Steer), r3(i.Throttle), r3(i.Brake), i.Handbrake and 1 or 0,
+		math.floor((os.clock() - t0) * 1000 + 0.5), r3(i.Consigne or i.Steer), r3(i.Throttle), r3(i.Brake),
+		i.Handbrake and 1 or 0,
 		r3(s.speed), r3(s.lat), r3(s.yawRate), r3(s.roll), r3(s.pitch), r3(s.pos.Y), s.grounded, s.gear or 0,
+		r3(i.Steer), r3(S and math.deg(S.steerAngle or 0) or 0),
 	}
 end
 
@@ -228,7 +248,11 @@ function Bench.corner(kmh, steer, seconds)
 	local p0 = state(a).pos
 	hold(function()
 		local err = kmh / 3.6 - state(a).speed
-		return { Throttle = math.clamp(0.4 + err * 0.4, 0, 1), Brake = 0, Steer = steer or 1, Handbrake = false }
+		local c = steer or 1
+		return {
+			Throttle = math.clamp(0.4 + err * 0.4, 0, 1), Brake = 0, Steer = Bench.gtaAxis(c), Consigne = c,
+			Handbrake = false,
+		}
 	end, seconds or 4, function()
 		local s = state(a)
 		r.maxRoll = math.max(r.maxRoll or 0, math.abs(s.roll))
@@ -263,11 +287,12 @@ function Bench.stepsteer(kmh, steer, seconds)
 		local th, br = Bench._cruise(state(a), kmh)
 		return { Throttle = th, Brake = br, Steer = 0, Handbrake = false }
 	end, 1.0, nil, true)
-	local r = { kmh = kmh, steer = steer or 0.5, entrySpeed = state(a).speed * 3.6 }
+	local c = steer or 0.5
+	local r = { kmh = kmh, steer = c, steerEff = Bench.gtaAxis(c), entrySpeed = state(a).speed * 3.6 }
 	local rec = newRec()
 	hold(function()
 		local th, br = Bench._cruise(state(a), kmh)
-		return { Throttle = th, Brake = br, Steer = steer or 0.5, Handbrake = false }
+		return { Throttle = th, Brake = br, Steer = Bench.gtaAxis(c), Consigne = c, Handbrake = false }
 	end, seconds or 4, function()
 		local s = state(a)
 		r.maxYawRate = math.max(r.maxYawRate or 0, math.abs(math.deg(s.yawRate)))
@@ -295,7 +320,8 @@ function Bench.slalom(kmh, amp, period, seconds)
 	hold(function()
 		local th, br = Bench._cruise(state(a), kmh)
 		local t = os.clock() - start
-		return { Throttle = th, Brake = br, Steer = amp * math.sin(2 * math.pi * t / period), Handbrake = false }
+		local c = amp * math.sin(2 * math.pi * t / period)
+		return { Throttle = th, Brake = br, Steer = Bench.gtaAxis(c), Consigne = c, Handbrake = false }
 	end, seconds or 12, function()
 		local s = state(a)
 		r.maxRoll = math.max(r.maxRoll or 0, math.abs(s.roll))
