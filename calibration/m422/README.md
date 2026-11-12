@@ -1361,7 +1361,10 @@ endroit, et le nez remonte ensuite tout seul :
 | 2 | −37,4 ° | −37,2 ° |
 | 3 | −38,2 ° | −38,0 ° |
 
-Soit **−37,7 ° (σ 0,4)**. Ce n'est pas l'atterrissage : au moment où le taux est déjà repassé à +20 °/s, le
+Soit **−37,7 ° (σ 0,4)**. Les trois traces sont dans le dépôt —
+[`fivem/airr_tangage_m_1.json`](fivem/airr_tangage_m_1.json),
+[`_m_2`](fivem/airr_tangage_m_2.json), [`_m_3`](fivem/airr_tangage_m_3.json) — parce que ce sont
+elles, et elles seules, qui portent cette borne. Ce n'est pas l'atterrissage : au moment où le taux est déjà repassé à +20 °/s, le
 véhicule est à 1,50 m du sol avec ses quatre suspensions nulles. Les autres directions n'atteignent pas
 leur borne dans ce vol — le roulis plafonne à ±35 ° d'assiette et le cabrage à +27 ° avant de se poser —
 donc **seule la borne en piqué est mesurée**, et on ne sait pas si elle est symétrique.
@@ -1499,6 +1502,9 @@ puis lue au régime exact de la glisse.
 |---|---|---|---|---|---|
 | ligne droite (349 images) | 0,336 | 0,236 | 1,005 | 0,882 | 0,2 ° |
 | **glisse tenue (28 images)** | **0,368** | 3,694 | **0,889** | **1,000** | 28,2 ° |
+
+Traces : [`fivem/slidepower_1.json`](fivem/slidepower_1.json),
+[`_2`](fivem/slidepower_2.json), [`_3`](fivem/slidepower_3.json).
 
 La puissance de roue est **+9,7 % plus élevée** en glisse, et passe par passe de +5,8 à +16,6 % selon où
 l'on lit la courbe. Et ce n'est pas du patinage qui gonfle la lecture : en glisse la roue tourne **moins**
