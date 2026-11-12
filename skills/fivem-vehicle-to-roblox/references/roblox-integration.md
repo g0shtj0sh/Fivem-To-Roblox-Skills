@@ -198,7 +198,7 @@ celles marquées **mesuré** ci-dessous en viennent. Pour un véhicule : table `
 | `HandbrakeGripRear` | **1,0** | adhérence latérale arrière au frein à main — **mesuré** : GTA bloque l'arrière sans lui faire perdre son adhérence latérale (0,1 °/s de lacet volant droit). Studio : reste droit (1,4–2 °/s) depuis un départ propre, mais 0,75 aussi ; entré en correction de cap, 36,5 °/s |
 | `AirPitch`, `AirRoll` | **1,585** / **1,586** | couple de contrôle en l'air, rad/s² par unité. **MESURÉ** : 90,8 °/s² sur les deux axes, symétrie 96 à 98 % |
 | `AirRateMax` | **1,066** | plafond de vitesse angulaire en vol, rad/s (61,1 °/s). **MESURÉ** : 9 vols sur 15 y butent. Écrêtage à sens unique — il n'annule jamais une rotation subie |
-| `AirPitchFloor` | **−0,658** | assiette minimale en vol, rad (−37,7 °). **MESURÉ** : les 3 passes s'arrêtent à −37,4 / −37,6 / −38,2 °. Les autres sens ne sont pas bornés, faute de les avoir atteints |
+| `AirPitchFloor` | **−0,658** | assiette minimale en vol, rad (−37,7 °). **MESURÉ** : les 3 passes s'arrêtent à −37,4 / −37,6 / −38,2 °. La borne est **propre au piqué** : aucune borne de roulis sous 52 ° (6 passes, taux encore à ±63 °/s à l'atterrissage, libre jusqu'à 89,6 °) ni de cabrage sous 40 ° — elle n'est donc pas symétrique |
 | `AirBoundTorque` | 12,4 | couple d'arrêt à la borne, rad/s². Ordre de grandeur seul (710 °/s², mesuré grossièrement sur 3 passes) |
 | `AirDamp` | **0** | amortissement angulaire en l'air. **MESURÉ NUL** : sans entrée le véhicule conserve sa rotation (+1,1 °/s²). Valait 1,5, posé au doigt |
 | `RightingK`, `RightingSpeed` | 6 / 3 m/s | redressement doux |

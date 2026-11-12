@@ -246,8 +246,13 @@ Dyn.Tuning = {
 	-- 1,5 m du sol, les quatre suspensions à zéro. À 0, pas de plafond.
 	AirPitchFloor = -0.658, -- rad : assiette minimale en vol, soit −37,7 °. MESURÉ : les trois
 	-- passes en piqué s'arrêtent à −37,6 / −37,4 / −38,2 ° et le taux y repasse par zéro à −37,5 /
-	-- −37,2 / −38,0. Ce n'est pas l'atterrissage : le véhicule est alors à 1,50 m du sol. Les
-	-- autres sens ne sont PAS bornés ici faute de les avoir atteints (roulis ±35 °, cabrage +27 °).
+	-- −37,2 / −38,0. Ce n'est pas l'atterrissage : le véhicule est alors à 1,50 m du sol.
+	-- La borne est PROPRE AU PIQUÉ, vérifié avec un vol allongé (tremplin à 450 m, approche à
+	-- 90 km/h, 1,24 s de vol) : le roulis atteint ±51 à ±52 ° sur six passes en tournant ENCORE à
+	-- ±63 °/s quand il se pose, et jusqu'à 89,6 ° en rotation libre ; le cabrage monte à +40,6 °,
+	-- au-delà des 37,7 du piqué, sans fléchir. Il n'y a donc ni borne de roulis ni borne de
+	-- cabrage à ajouter, et celle du piqué n'est pas symétrique. Au-delà de +40 ° de cabrage la
+	-- queue touche le sol : le tremplin ne peut pas répondre plus loin.
 	AirBoundTorque = 12.4, -- rad/s² : couple maximal d'arrêt à la borne d'assiette, soit 710 °/s².
 	-- MESURÉ grossièrement — le taux passe de −58 à +13 °/s en ≈ 0,10 s, sur 3 passes. Un ordre de
 	-- grandeur au-dessus du couple de contrôle : à la borne, GTA ARRÊTE la rotation, il ne la

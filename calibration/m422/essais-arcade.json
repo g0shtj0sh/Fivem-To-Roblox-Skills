@@ -1,5 +1,5 @@
 {
- "quoi": "Campagne des essais ajoutes le 2026-11-12 : burnout, frein a main en virage, puissance en glisse, reduction d'adherence, retournement, vol. Vehicule m422, 3 passes par essai sauf la reduction d'adherence et le retournement (1 par cas). Reprise du 2026-11-12 : le controle en l'air separe en couple, plafond et borne d'assiette, et la puissance en glisse tranchee a regime apparie.",
+ "quoi": "Campagne des essais ajoutes le 2026-11-12 : burnout, frein a main en virage, puissance en glisse, reduction d'adherence, retournement, vol. Vehicule m422, 3 passes par essai sauf la reduction d'adherence et le retournement (1 par cas). Reprise du 2026-11-12 : le controle en l'air separe en couple, plafond et borne d'assiette, et la puissance en glisse tranchee a regime apparie. Bornes de roulis et de cabrage cherchees le 2026-11-12 avec un vol allonge : aucune des deux n'existe dans la plage atteignable.",
  "quand": "2026-11-12",
  "resultats": {
   "burnout_1": {
@@ -2226,7 +2226,48 @@
     -37.2,
     -38.0
    ],
-   "borneAutresSens": "non atteinte : le roulis plafonne a +-35 deg d'assiette et le cabrage a +27 deg avant de se poser",
+   "borneAutresSens": {
+    "mesure": "2026-11-12, tremplin repose a 450 m du depart sur le tablier (671 m), approche tenue a 90 km/h : 1,24 s de vol au lieu de 0,96. A 110 km/h le vehicule culbute (omega 225 deg/s), a 70 il ne decolle pas de cette distance.",
+    "roulis": {
+     "borne": null,
+     "roulisAtteint_deg": {
+      "plus1": [
+       51.1,
+       51.5,
+       51.6
+      ],
+      "moins1": [
+       -51.6,
+       -51.3,
+       -52.0
+      ]
+     },
+     "tauxAuMomentDeSePoser": {
+      "plus1": [
+       63.3,
+       63.8,
+       63.9
+      ],
+      "moins1": [
+       -62.8,
+       -63.2,
+       -66.5
+      ]
+     },
+     "lecture": "le vehicule tournait encore a plein regime quand il a touche le sol : aucune borne sous 52 deg",
+     "rotationLibre_deg": 89.6,
+     "rotationLibreNote": "un vol lance par le tremplin seul atteint 89,6 deg de roulis, le taux ne decroissant que de 52,8 a 46,7 deg/s sur 1,2 s : deuxieme confirmation de l'absence de redressement, jusqu'a la verticale"
+    },
+    "cabrage": {
+     "borne": null,
+     "tangageAtteint_deg": 40.6,
+     "lecture": "monte regulierement jusqu'a 40,6 deg, AU-DELA des 37,7 du piquer, le taux a +58,9 deg/s sans flechir, puis -145 deg/s en UNE image : un impact sur la queue, pas une borne. La borne en piquer n'est donc pas symetrique.",
+     "pourquoiNonResolu": "a +40 deg de cabrage la queue touche : il faudrait de la hauteur, pas du temps. Si une borne existe, elle est au-dessus de 40 deg."
+    },
+    "filtre": "un vol n'est retenu que si aucun axe ne depasse 95 deg/s ; au-dela c'est le tremplin qui a imprime une culbute, pas la commande. 7 vols sur 19 ecartes.",
+    "consequencePourLeMoteur": "aucune : AirPitchFloor ne borne que le piquer, et il n'y a ni borne de roulis ni borne de cabrage a ajouter. La mesure confirme le modele au lieu de le corriger.",
+    "confirmationDuPlafond": "le taux de roulis se fige a -59 a -60 deg/s pendant 11 a 18 images avant l'impact : deuxieme mesure du plafond, a une autre vitesse de lancement"
+   },
    "methode": "pente ajustee sur la montee seule, jusqu'a l'extreme ; plafond lu comme l'extreme quand au moins 3 images y restent ; vol libre = les quatre compressions de suspension nulles",
    "fiabilite": "couple sur (3 passes par cas, symetrie 96 a 98 %, ecart-type ~1) ; plafond sur (9 vols sur 15) ; borne en piquer sure dans ce sens seulement",
    "plafondNonAtteintPar": "tangage +1 : part a -30 deg/s au decollage et le vol s'arrete avant qu'il ait franchi les 91 deg/s necessaires (atteint +50,7 a +55,1)",

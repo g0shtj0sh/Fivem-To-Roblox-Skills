@@ -1365,9 +1365,49 @@ Soit **−37,7 ° (σ 0,4)**. Les trois traces sont dans le dépôt —
 [`fivem/airr_tangage_m_1.json`](fivem/airr_tangage_m_1.json),
 [`_m_2`](fivem/airr_tangage_m_2.json), [`_m_3`](fivem/airr_tangage_m_3.json) — parce que ce sont
 elles, et elles seules, qui portent cette borne. Ce n'est pas l'atterrissage : au moment où le taux est déjà repassé à +20 °/s, le
-véhicule est à 1,50 m du sol avec ses quatre suspensions nulles. Les autres directions n'atteignent pas
-leur borne dans ce vol — le roulis plafonne à ±35 ° d'assiette et le cabrage à +27 ° avant de se poser —
-donc **seule la borne en piqué est mesurée**, et on ne sait pas si elle est symétrique.
+véhicule est à 1,50 m du sol avec ses quatre suspensions nulles. ### La borne est propre au piqué : ni le roulis ni le cabrage n'en ont (2026-11-12)
+
+Le vol du tremplin ne durait que 0,96 s, le tremplin n'étant qu'à 90 m du départ : le roulis
+n'atteignait que 35 ° et le cabrage 27 °, donc on ne savait pas si leurs bornes existaient. Le
+tablier faisant 671 m, le tremplin a été reposé à **450 m** du départ. Trois paliers d'approche :
+
+| Approche | Décollage | Vol | Verdict |
+|---|---|---|---|
+| 70 km/h | — | — | ne décolle pas de cette distance |
+| **90 km/h** | **84 km/h** | **1,24 s** | lancement propre, ω max 28 °/s |
+| 110 km/h | 96 km/h | 1,07 s | le véhicule **culbute** (ω 225 °/s) |
+
+Un vol n'est retenu que si aucun axe ne dépasse 95 °/s : au-delà, c'est le tremplin qui a imprimé
+une culbute, pas la commande. Sept vols sur dix-neuf ont été écartés à ce titre.
+
+**Le roulis n'a pas de borne.** Six passes propres, trois par sens :
+
+| Sens | Roulis atteint | Taux au moment de se poser |
+|---|---|---|
+| roulis +1 | +51,1 / +51,5 / +51,6 ° | +63,3 / +63,8 / +63,9 °/s |
+| roulis −1 | −51,6 / −51,3 / −52,0 ° | −62,8 / −63,2 / −66,5 °/s |
+
+Le véhicule **tournait encore à plein régime quand il a touché le sol** : rien n'a ralenti, à aucun
+moment. Il n'y a donc pas de borne de roulis sous 52 °. Un vol où le tremplin l'avait lancé seul l'a
+d'ailleurs emmené à **+89,6 °**, le taux ne décroissant que de 52,8 à 46,7 °/s sur 1,2 s — ce qui
+confirme une deuxième fois l'absence de redressement, cette fois jusqu'à la verticale.
+
+**Le cabrage non plus, et la borne en piqué n'est donc pas symétrique.** La passe propre monte
+régulièrement jusqu'à **+40,6 °**, au-delà des 37,7 ° du piqué, le taux atteignant +58,9 °/s sans
+jamais fléchir. Puis il passe à −145 °/s **en une image** : c'est un impact, le véhicule se posant
+sur la queue. La signature est l'opposé de celle du piqué, où le taux s'annulait en 0,10 s puis
+l'assiette tenait jusqu'à l'atterrissage. Le tremplin ne peut pas aller plus loin — à +40 ° de
+cabrage la queue touche — donc la borne de cabrage, s'il en existe une, est **au-dessus de 40 °** et
+demanderait de la hauteur, pas du temps.
+
+Ce que ça change pour le moteur : **rien**, et c'est le résultat. `AirPitchFloor` ne borne que le
+piqué, et il n'y a ni borne de roulis ni borne de cabrage à ajouter. La mesure confirme le modèle
+au lieu de le corriger. Elle confirme aussi le plafond une deuxième fois, à une autre vitesse de
+lancement : le taux de roulis se fige à **−59 à −60 °/s pendant 11 à 18 images** avant l'impact.
+
+Traces : [`fivem/b2_roulis_p_1.json`](fivem/b2_roulis_p_1.json),
+[`b2_roulis_m_1`](fivem/b2_roulis_m_1.json), [`b2_tangage_p_1`](fivem/b2_tangage_p_1.json),
+[`b2_rien_p_1`](fivem/b2_rien_p_1.json).
 
 **Il n'y a pas de couple d'auto-redressement en vol.** Sans entrée, l'accélération angulaire vaut
 +1,1 °/s² : le véhicule **conserve** sa rotation, à −28 à −32 °/s pendant toute la seconde de vol. Un essai
@@ -1521,7 +1561,9 @@ mal cernée, mais son **signe est ferme**.
 | Étagement | 3,333 / 1,949 / 1,392 / 1,095 / 0,946 / 0,900 | **sûre** — lue directement, une fois |
 | Couple de contrôle en l'air | 1,585 rad/s² par unité, **identique en tangage et en roulis** | **sûre** — 3 passes par cas, symétrie 96 à 98 %, σ ≈ 1 °/s² |
 | Plafond de vitesse angulaire en vol | ≈ 61 °/s (1,07 rad/s) | **sûre** — 9 vols sur 15 l'atteignent, σ 0,9 |
-| Borne d'assiette en piqué | −37,7 ° | **sûre dans ce sens** — 3 passes à σ 0,4 ; les autres sens non atteints |
+| Borne d'assiette en piqué | −37,7 ° | **sûre** — 3 passes à σ 0,4 |
+| Borne de roulis | **aucune sous 52 °** | **sûre** — 6 passes, le taux encore à ±63 °/s à l'atterrissage ; libre jusqu'à 89,6 ° |
+| Borne de cabrage | **aucune sous 40 °** | **sens sûr** — 1 passe propre ; au-delà la queue touche, le tremplin ne peut pas répondre |
 | Auto-redressement en vol | nul | **sûre** — deux essais indépendants |
 | Redressement depuis le toit | 2,25 s sans entrée | **sûre** sur le principe, 1 passe par cas |
 | Paliers de réduction d'adhérence | 11 / 11 / 35 / 42 / 73 % | **ordre sûr, valeurs à ±10 %** — 1 passe, régime pas franc |
