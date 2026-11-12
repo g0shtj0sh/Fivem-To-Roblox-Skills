@@ -77,3 +77,20 @@ Chaque essai a donc une fenêtre `clean` (`A.Windows`) appliquée aux deux trace
 - **Marche** : assiette et altitude de référence prises 0,5 à 1,5 s après la mise en vitesse ; cabrage et
   plongée relatifs à cette assiette ; montée de caisse = altitude moyenne une fois posé sur le dessus
   (assiette revenue à ±0,3 °) ; vitesse perdue = vitesse au contact − vitesse minimale dans les 6 s.
+
+## Vols au tremplin : `air.luau`
+
+Le contrôle en l'air a son propre analyseur, [`air.luau`](air.luau), sur le même principe : un seul code
+pour les vols GTA (`airtime`, `tools/fivem-telemetry`) et Roblox (`Bench.air` de `DriveBench.lua`). Il lit
+le **couple** sur la montée seule (rupture montée / plateau cherchée par deux droites), le **plafond**
+(extrême retenu si au moins 3 images restent sur le plateau, plus la moyenne du plateau), la **borne** en
+piqué, la dérive sans entrée, les **chocs** (saut de taux de plus de 1 500 °/s² en une image : queue qui
+touche, nez au sol) et les **culbutes** (un axe au-delà de 95 °/s : vol à écarter).
+
+```bash
+lune run tools/drive-compare/vol.luau calibration/m422/fivem/airr_*.json calibration/m422/fivem/b2_*.json
+```
+
+Côté Roblox, `loadstring` et l'écriture de `Source` sont refusés en Play : le module peut être déposé en
+ModuleScript **avant** le Play, ou passé tel quel dans le code d'un `execute_luau` client et gardé dans `_G`.
+Résultats du m422 : `calibration/m422/README.md`, « Le contrôle en l'air vérifié dans Roblox ».

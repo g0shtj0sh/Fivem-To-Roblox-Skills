@@ -1464,6 +1464,119 @@ Les bornes en roulis et en cabrage ne sont pas posées non plus : aucun vol ne l
 Les deux bancs au sol sont inchangés — 5,3 % en longitudinal, côte identique — le bloc ne s'armant
 que lorsque les quatre roues sont hors contact.
 
+### Le contrôle en l'air vérifié dans Roblox (Studio, 2026-11-12)
+
+`rig.luau vol` intègre lui-même la rotation et divise par la même inertie nominale que le moteur
+multiplie : il ne peut pas voir une erreur d'inertie. Le bloc a donc été rejoué dans le moteur physique
+de Roblox, sur le tremplin de la campagne.
+
+**Protocole.** PC Studio, un joueur, `m422` converti, runtime `b43934b2dbff` (ce dépôt, bloc du vol
+inclus). Piste [`TestTrack.lua`](../../skills/fivem-vehicle-to-roblox/roblox/TestTrack.lua) :
+`Track.buildRamp(450)` pose le tremplin GTA (`prop_mp_ramp_02` : 4,02 × 5,86 × 1,53 m, pente 14,6 °,
+`WedgePart`) sur la voie `straight`, centré à 450 m du départ ; `Track.clearRamp()` le retire.
+Essai [`Bench.air(kmh, axe, amp)`](../../skills/fivem-vehicle-to-roblox/roblox/DriveBench.lua) :
+approche à vitesse tenue en tenant la ligne, entrée appliquée **seulement** pendant le vol libre (quatre
+roues hors contact), relâchée au premier contact, échantillons au **pas de simulation** (60 Hz,
+`BindToSimulation`). Les taux sont dérivés des colonnes `pitch` et `roll` par différence centrée.
+Analyse par [`tools/drive-compare/air.luau`](../../tools/drive-compare/air.luau), **le même code** sur
+les traces GTA (`lune run tools/drive-compare/vol.luau calibration/m422/fivem/airr_*.json …`) et dans
+le Play (copie sans commentaires passée par `execute_luau`, `loadstring` et `Source` y étant refusés) :
+couple = pente du taux sur la montée seule (rupture cherchée par deux droites), plafond = extrême retenu si
+au moins 3 images restent sur le plateau, borne = assiette la plus basse en piqué. Une culbute (> 95 °/s
+sur un axe) aurait écarté le vol : **aucune** sur 34 vols. Contrôle de l'analyseur sur une trajectoire
+synthétique exacte (90,8 °/s² puis 61,1 °/s) : couple rendu à 0,5 % près à 60 et à 52 Hz ; l'extrême du
+plafond est surévalué de ≈ 1 % par l'arrondi des temps à la milliseconde, d'où la moyenne du plateau
+donnée à côté.
+
+**Conditions de lancement.** Consigne 90 km/h → décollage **77,3 à 78,8 km/h** (GTA 84), vol **1,22 à
+1,37 s** (GTA 1,24), assiette au décollage **+11,5 à +13,4 °** (GTA +10,5). Le tremplin Roblox
+n'imprime que **−2 à −9 °/s** de piqué (GTA −28) et ajoute parfois du roulis (jusqu'à ±23 °/s). Trois
+piqués supplémentaires à la consigne 97 km/h redonnent le décollage GTA : 83,1 à 83,9 km/h, vol 1,35 à
+1,45 s.
+
+**Moteur tel quel : le couple est faux, et pas du même facteur sur les deux axes.**
+
+| Cas (3 passes) | Couple | Plafond (extrême / moyenne du plateau) | Angle atteint |
+|---|---|---|---|
+| tangage +1 | +130,6 / +130,0 / +127,8 °/s² | 61,8 / 62,2 / 59,5 — 60,7 / 61,5 / 57,4 °/s | +57,4 / +57,4 / +55,7 ° |
+| tangage −1 | −130,2 / −129,2 / −129,9 | −60,6 / −63,2 / −61,5 — −59,1 / −62,3 / −60,3 | −37,8 / −38,2 / −37,9 ° |
+| roulis +1 | +443,9 / +434,4 / +423,5 | 61,9 / 61,1 / 61,6 — 59,8 / 60,3 / 60,8 | +61,0 / +66,4 / +69,7 ° |
+| roulis −1 | −434,8 / −434,8 / −438,6 | −63,0 / −62,3 / −64,2 — −61,5 / −60,9 / −62,7 | −69,7 / −67,7 / −68,9 ° |
+| rien | tangage +0,33 / +0,53 / −0,01, roulis −0,14 / −0,29 / +0,34 °/s² | — | — |
+
+Ni la mesure ni la logique du bloc : l'**inertie**. `VehicleDrive` multiplie l'accélération voulue par
+`GyrationSq` = 1,6 m², un **scalaire nominal**, alors que l'assemblage a un tenseur très anisotrope. Lu
+dans le Play (pièces en boîtes, axes de `VehicleRoot`, rapporté à la masse de l'assemblage) : presque
+toute la masse est le lest `Ballast` du Setup (220 sur 222,3), une boîte de 1,93 × **0,35** × 3,63 m,
+d'où
+
+| Axe | I / m réel | rapport 1,6 / (I/m) | couple attendu | mesuré |
+|---|---|---|---|---|
+| tangage (X) | **1,098 m²** | × 1,457 | 132,3 °/s² | 129,5 (× 1,43) |
+| lacet (Y) | 1,394 m² | × 1,148 | — | — |
+| roulis (Z) | **0,319 m²** | × 5,02 | 455 °/s² | 434,9 (× 4,79) |
+
+Produits d'inertie < 0,002 m² : les axes de `VehicleRoot` sont principaux. Le facteur diffère par axe,
+donc la règle « un seul axe faux = convention de repère » ne s'applique pas ici : le repère est juste
+(signes corrects sur les quatre sens, et l'assiette du moteur `asin(−up.Z)` et celle du banc
+`asin(LookVector.Y)` concordent à 0 ° près sur 2 000 orientations tirées au hasard). L'excès d'inertie
+explique aussi le léger dépassement du plafond (jusqu'à 64,2 °/s) : l'écrêtage vise pile la limite **en
+supposant** l'accélération obtenue égale à la commandée.
+
+**Proposition (non appliquée par défaut) : `GyrationSq` par axe, égal à l'inertie réelle.** Le calcul
+`(ax, 0, az) * T.GyrationSq` accepte un `Vector3` (produit terme à terme). Valeur pour ce véhicule :
+`Vector3.new(1.098, 1.394, 0.319)`. Aucune constante mesurée n'a été touchée. Rejouée en direct
+(`sim.T.GyrationSq` posé côté client avant chaque vol), même protocole :
+
+| Cas (3 passes) | Couple | Plafond (extrême / moyenne) | Angle atteint, taux au contact |
+|---|---|---|---|
+| tangage +1 | +88,3 / +88,9 / +89,2 °/s² | 62,6 / 62,2 / 61,4 — 61,9 / 61,4 / 60,7 °/s | +51,6 / +52,0 / +51,7 °, à plein régime jusqu'au choc |
+| tangage −1 | −88,6 / −87,5 / −88,6 | −62,6 / −60,2 / −61,4 — −61,7 / −58,8 / −60,6 | voir la borne ci-dessous |
+| tangage −1, décollage 84 km/h | −88,8 / −87,8 / −89,4 | −61,8 / −63,7 / −61,3 — −61,0 / −62,7 / −60,5 | voir la borne ci-dessous |
+| roulis +1 | +88,0 / +88,2 / +87,6 | 61,0 / 59,3 / 60,9 — 60,2 / 58,7 / 60,1 | +58,5 / +38,3 / +63,1 °, 61,0 / 57,5 / 59,0 °/s |
+| roulis −1 | −88,5 / −87,8 / −88,8 | −62,3 / −61,5 / −62,0 — −61,6 / −60,8 / −61,4 | −56,9 / −52,5 / −45,1 °, −60,4 / −61,2 / −62,0 °/s |
+| rien | tangage −0,12 / −0,30 / −0,10, roulis +0,47 / +0,30 / +0,39 °/s² | — | — |
+
+Le couple sort à **−2,2 à −3,2 %** de 90,8 sur les quatre sens. Le même analyseur rend, sur les traces
+GTA du dépôt, +91,2 / +91,6 (cabrage), −84,9 / −86,2 / −86,9 (piqué), +90,0 / +91,0 et −89,7 / −90,0
+(roulis). Le résidu de ≈ 3 % n'est pas expliqué ; hypothèse non vérifiée : l'inertie réelle un peu
+au-dessus de l'estimation en boîtes (les pièces du personnage assis y sont des boîtes).
+
+**La borne en piqué.** Moteur tel quel : −37,8 / −38,2 / −37,9 °, le taux revenant à zéro 0,15 à 0,65 s
+après l'extrême, avant le contact. Inertie corrigée, consigne 90 : le piqué, parti de −2 à −9 °/s au
+lieu de −28, n'arrive à la borne qu'à la fin du vol — deux vols touchent le sol du nez **en piquant encore**
+(−37,5 ° à −51 °/s, −37,1 ° à −54 °/s : ce ne sont pas des lectures), un troisième freine déjà (−38,4 °,
+encore −29 °/s au contact). Au décollage GTA (consigne 97) : **−38,65 °** (taux −0,8 °/s au contact,
+lecture propre), **−39,2 °** (−6,6 °/s, avec 17 ° de roulis), −38,4 ° (−21,5 °/s au contact, partielle).
+Avec du roulis, le freinage ne porte que sur ωx alors que l'assiette dépend aussi du lacet : c'est
+l'hypothèse la plus simple pour les 0,5 ° de plus qu'au banc (non vérifiée).
+
+**Pas de borne de roulis ni de cabrage, et rien ne ralentit.** Roulis : 10 vols sur 12 dépassent 52 °
+(jusqu'à 69,7 °) en tournant encore à 56 à 62 °/s au contact ; les deux autres (+38,3, −45,1 °) partaient
+avec un roulis contraire imprimé par le tremplin et étaient encore sur le plafond en se posant. Cabrage :
+les six vols franchissent 40 ° sur le plateau et montent à +51,6 à +57,4 °, puis le taux passe de +54 à
++62 °/s à **−56 à +31 °/s en une image**, la racine du véhicule encore à 2,1–2,3 m (au décollage 2,5–2,6) :
+c'est la **queue qui touche**, la même signature que GTA (+58,9 → −145 °/s en une image), à opposer à la
+borne du piqué qui annule le taux progressivement.
+
+**Bilan contre les cibles.**
+
+| Grandeur | Cible | Moteur tel quel | Avec `GyrationSq` par axe |
+|---|---|---|---|
+| couple, quatre sens | ±90,8 °/s², ±5 % | **non** : +42,6 / +42,9 % (tangage), +378 / +380 % (roulis) | **oui** : −2,2 / −2,9 / −3,2 / −2,7 % |
+| plafond | 61,1 °/s, ±5 % | oui en moyenne (61,9 ; 11 vols sur 12, un à 64,2) | **oui** (61,6 en moyenne ; 15 vols sur 15, 59,3 à 63,7) |
+| borne en piqué | −36 à −40 ° | **oui** : −37,8 / −38,2 / −37,9 | **oui** sur les 2 lectures propres : −38,65 / −39,2 |
+| sans entrée | < 3 °/s² | **oui** : ≤ 0,53 | **oui** : ≤ 0,47 |
+| roulis sans borne | passe 52 ° sans ralentir | **oui** : 6/6, jusqu'à 69,7 ° | **oui** : 4/6 au-delà de 52 °, aucun ralentissement sur les 6 |
+| cabrage sans borne | passe 40 ° sans ralentir | **oui** : 3/3, jusqu'à 57,4 ° | **oui** : 3/3, jusqu'à 52,0 ° |
+
+**Ce qui n'est pas vérifié.** La conservation n'a été vue qu'à −2 à −9 °/s (le tremplin Roblox n'imprime
+pas les −30 °/s de GTA). `AirBoundTorque` réalisé n'est pas isolé. La correction n'est éprouvée que sur ce
+véhicule, dont le lest fixe l'inertie : la valeur générique devrait sortir du Setup (inertie de la boîte
+`Ballast` et des pièces massives) plutôt que d'un chiffre. Le redressement au sol (`RightingK`) passe par
+le même `GyrationSq` et n'a pas été rejoué. Téléphone, plusieurs joueurs : non vérifiés.
+Grandeurs par vol : [`studio-vol-analyse.json`](studio-vol-analyse.json).
+
 ### Retournement
 
 Véhicule posé sur le toit ou sur le côté, puis gauche, droite, ou rien.
