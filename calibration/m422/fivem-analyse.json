@@ -1,0 +1,385 @@
+{
+  "corner40": {
+    "cutByStep": false,
+    "endSpeedKmh": {
+      "mean": 38.231,
+      "n": 3,
+      "sd": 0.118
+    },
+    "fullMaxSlip": {
+      "mean": 6.652,
+      "n": 3,
+      "sd": 0.032
+    },
+    "maxRoll": {
+      "mean": 1.891,
+      "n": 3,
+      "sd": 0.011
+    },
+    "maxSlip": {
+      "mean": 6.652,
+      "n": 3,
+      "sd": 0.032
+    },
+    "maxYaw": {
+      "mean": 97.334,
+      "n": 3,
+      "sd": 1.093
+    },
+    "minWheels": {
+      "mean": 2.667,
+      "n": 3,
+      "sd": 0.471
+    },
+    "peakLatG": {
+      "mean": 1.829,
+      "n": 3,
+      "sd": 0.026
+    },
+    "radius": {
+      "mean": 6.288,
+      "n": 3,
+      "sd": 0.036
+    },
+    "rollPerG": {
+      "mean": 1.012,
+      "n": 3,
+      "sd": 0.003
+    },
+    "steadyLatG": {
+      "mean": 1.694,
+      "n": 3,
+      "sd": 0.005
+    },
+    "steadyRoll": {
+      "mean": 1.714,
+      "n": 3,
+      "sd": 0.001
+    },
+    "steadySlip": {
+      "mean": 4.443,
+      "n": 3,
+      "sd": 0.015
+    },
+    "window": {
+      "mean": 3.988,
+      "n": 3,
+      "sd": 0.003
+    }
+  },
+  "corner80": {
+    "cutByStep": false,
+    "endSpeedKmh": {
+      "mean": 13.824,
+      "n": 3,
+      "sd": 0.464
+    },
+    "fullMaxSlip": {
+      "mean": 53.928,
+      "n": 3,
+      "sd": 2.724
+    },
+    "maxRoll": {
+      "mean": 1.887,
+      "n": 3,
+      "sd": 0.005
+    },
+    "maxSlip": {
+      "mean": 8.249,
+      "n": 3,
+      "sd": 0.255
+    },
+    "maxYaw": {
+      "mean": 60.707,
+      "n": 3,
+      "sd": 0.056
+    },
+    "minWheels": {
+      "mean": 4,
+      "n": 3,
+      "sd": 0
+    },
+    "peakLatG": {
+      "mean": 2.244,
+      "n": 3,
+      "sd": 0.001
+    },
+    "radius": {
+      "mean": 18.819,
+      "n": 3,
+      "sd": 0.162
+    },
+    "rollPerG": {
+      "mean": 0.912,
+      "n": 3,
+      "sd": 0.007
+    },
+    "steadyLatG": {
+      "mean": 2.026,
+      "n": 3,
+      "sd": 0.011
+    },
+    "steadyRoll": {
+      "mean": 1.848,
+      "n": 3,
+      "sd": 0.005
+    },
+    "steadySlip": {
+      "mean": 7.446,
+      "n": 3,
+      "sd": 0.177
+    },
+    "window": {
+      "mean": 1.268,
+      "n": 3,
+      "sd": 0.003
+    }
+  },
+  "curb20": {
+    "airborneFrames": {
+      "mean": 0,
+      "n": 3,
+      "sd": 0
+    },
+    "basePitch": {
+      "mean": -0.156,
+      "n": 3,
+      "sd": 0.01
+    },
+    "baseZ": {
+      "mean": 13.435,
+      "n": 3,
+      "sd": 0
+    },
+    "bodyRise": {
+      "mean": 0.145,
+      "n": 3,
+      "sd": 0
+    },
+    "entryKmh": {
+      "mean": 19.935,
+      "n": 3,
+      "sd": 0
+    },
+    "maxDropKmh": {
+      "mean": 0.132,
+      "n": 3,
+      "sd": 0.002
+    },
+    "maxPitchAbs": {
+      "mean": 4.407,
+      "n": 3,
+      "sd": 0.004
+    },
+    "maxPitchRate": {
+      "mean": 60.917,
+      "n": 3,
+      "sd": 9.319
+    },
+    "minWheels": {
+      "mean": 4,
+      "n": 3,
+      "sd": 0
+    },
+    "pitchDown": {
+      "mean": -4.251,
+      "n": 3,
+      "sd": 0.009
+    },
+    "pitchUp": {
+      "mean": 3.452,
+      "n": 3,
+      "sd": 0.022
+    },
+    "speedLossKmh": {
+      "mean": 0.062,
+      "n": 3,
+      "sd": 0.004
+    }
+  },
+  "curb60": {
+    "airborneFrames": {
+      "mean": 0,
+      "n": 3,
+      "sd": 0
+    },
+    "basePitch": {
+      "mean": -0.041,
+      "n": 3,
+      "sd": 0.003
+    },
+    "baseZ": {
+      "mean": 13.419,
+      "n": 3,
+      "sd": 0
+    },
+    "bodyRise": {
+      "mean": 0.149,
+      "n": 3,
+      "sd": 0.001
+    },
+    "entryKmh": {
+      "mean": 59.451,
+      "n": 3,
+      "sd": 0.002
+    },
+    "maxDropKmh": {
+      "mean": 0.018,
+      "n": 3,
+      "sd": 0.003
+    },
+    "maxPitchAbs": {
+      "mean": 2.643,
+      "n": 3,
+      "sd": 0.037
+    },
+    "maxPitchRate": {
+      "mean": 104.077,
+      "n": 3,
+      "sd": 5.54
+    },
+    "minWheels": {
+      "mean": 4,
+      "n": 3,
+      "sd": 0
+    },
+    "pitchDown": {
+      "mean": -2.602,
+      "n": 3,
+      "sd": 0.038
+    },
+    "pitchUp": {
+      "mean": 2.223,
+      "n": 3,
+      "sd": 0.097
+    },
+    "speedLossKmh": {
+      "mean": 0.032,
+      "n": 3,
+      "sd": 0.005
+    }
+  },
+  "handbrake": {
+    "maxSlip": {
+      "mean": 0.038,
+      "n": 3,
+      "sd": 0.026
+    },
+    "maxYaw": {
+      "mean": 0.132,
+      "n": 3,
+      "sd": 0.063
+    }
+  },
+  "slalom": {
+    "cutByStep": false,
+    "endSpeedKmh": {
+      "mean": 58.923,
+      "n": 3,
+      "sd": 0.005
+    },
+    "fullMaxSlip": {
+      "mean": 1.216,
+      "n": 3,
+      "sd": 0.031
+    },
+    "maxRoll": {
+      "mean": 0.675,
+      "n": 3,
+      "sd": 0.002
+    },
+    "maxSlip": {
+      "mean": 1.19,
+      "n": 3,
+      "sd": 0.005
+    },
+    "maxYaw": {
+      "mean": 25.159,
+      "n": 3,
+      "sd": 0.009
+    },
+    "minWheels": {
+      "mean": 4,
+      "n": 3,
+      "sd": 0
+    },
+    "peakLatG": {
+      "mean": 0.737,
+      "n": 3,
+      "sd": 0
+    },
+    "window": {
+      "mean": 8.289,
+      "n": 3,
+      "sd": 0.004
+    }
+  },
+  "stepsteer": {
+    "cutByStep": false,
+    "endSpeedKmh": {
+      "mean": 58.087,
+      "n": 3,
+      "sd": 0.021
+    },
+    "fullMaxSlip": {
+      "mean": 2.183,
+      "n": 3,
+      "sd": 0.039
+    },
+    "maxRoll": {
+      "mean": 0.906,
+      "n": 3,
+      "sd": 0.054
+    },
+    "maxSlip": {
+      "mean": 0.788,
+      "n": 3,
+      "sd": 0.002
+    },
+    "maxYaw": {
+      "mean": 29.303,
+      "n": 3,
+      "sd": 0.007
+    },
+    "minWheels": {
+      "mean": 4,
+      "n": 3,
+      "sd": 0
+    },
+    "peakLatG": {
+      "mean": 0.856,
+      "n": 3,
+      "sd": 0
+    },
+    "radius": {
+      "mean": 32.759,
+      "n": 3,
+      "sd": 0.002
+    },
+    "rollPerG": {
+      "mean": 1.032,
+      "n": 3,
+      "sd": 0.002
+    },
+    "steadyLatG": {
+      "mean": 0.832,
+      "n": 3,
+      "sd": 0
+    },
+    "steadyRoll": {
+      "mean": 0.859,
+      "n": 3,
+      "sd": 0.002
+    },
+    "steadySlip": {
+      "mean": 0.59,
+      "n": 3,
+      "sd": 0.001
+    },
+    "window": {
+      "mean": 1.892,
+      "n": 3,
+      "sd": 0.001
+    }
+  }
+}
