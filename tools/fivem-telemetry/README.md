@@ -61,6 +61,7 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 | `hill` | montée, arrêt, frein à main, tout relâché, plein gaz | `creepHandbrake`, `rollbackReleased`, `launchSpeed` |
 | `coast` | lancé puis tout relâché | `marks` (temps et distance à chaque palier de vitesse) |
 | `stepsteer` | créneau de braquage à vitesse tenue | `maxYawRate`, `tTo90`, `maxRoll` |
+| `steerfade` | **consigne constante en créneaux alternés** : loi de braquage roue / consigne / vitesse | `plateaus` (`wheelDeg`, `yawRate`, `kmh`, `slip`, `roll`) |
 | `slalom` | braquage sinusoïdal | `maxRoll`, `maxYawRate`, `maxSlip` |
 | `raw` | entrées constantes (diagnostic) | cap parcouru, angle de roue |
 | `surfscan` | relevé du sol le long d'une ligne | profil `d, z, matériau, pitch, roll` |
@@ -73,6 +74,23 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 
 Paramètres communs : `start` (`{x, y, z, h}` : le véhicule est réparé, remis à plat et
 arrêté là avant l'essai), `seconds`, `kmh`, `steer`.
+
+### Mesurer la direction sur une piste étroite
+
+`steerfade` existe parce qu'un créneau classique sort de la piste : à pleine butée le
+véhicule s'écarte de plus de 10 m en 1,5 s. Il alterne donc la consigne (une première
+phase de demi-durée, puis des phases pleines de signe opposé) : le cap décrit un triangle
+centré sur zéro, l'écart latéral reste de **±1,5 m**, et chaque phase laisse un plateau
+exploitable — le braquage de roue se stabilise en ≈ 0,9 s, le lacet aussi.
+
+Seules les phases pleines sont relevées, sur leur dernière `tail` seconde (0,25 s par
+défaut). La première, de demi-durée, ne sert qu'à centrer le cap.
+
+```json
+{ "test": "steerfade", "label": "steerfade_60_050_1",
+  "params": { "kmh": 60, "steer": 0.5, "phase": 1.0, "cycles": 5,
+              "start": { "x": -1201.0, "y": -3044.0, "z": 13.5, "h": 90.0 } } }
+```
 
 ## Ce qui est enregistré, à chaque image
 

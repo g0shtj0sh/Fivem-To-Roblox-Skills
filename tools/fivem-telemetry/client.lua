@@ -633,6 +633,83 @@ function Tests.stepsteer(v, p)
     return res
 end
 
+--- Direction a consigne constante, en creneaux alternes.
+---
+--- Mesure la loi de braquage : combien de degres de roue pour une consigne
+--- donnee, a une vitesse donnee. C'est la grandeur a caler (fade en vitesse),
+--- et elle separe deux defauts qu'un virage confond : une roue qui braque trop,
+--- et un pneu qui repond trop fort au braquage.
+---
+--- Le braquage de roue se stabilise en ~0,9 s (mesure sur les traces du
+--- creneau). On alterne donc des phases de `phase` secondes, la premiere de
+--- moitie : le cap decrit un triangle centre sur zero, donc la derive laterale
+--- reste de quelques metres. Indispensable ici, le tablier plat ne faisant que
+--- 14 m de large.
+function Tests.steerfade(v, p)
+    local kmh = p.kmh or 60
+    local steer = p.steer or 0.5
+    local phase = p.phase or 1.0
+    local cycles = p.cycles or 5
+    local tail = p.tail or 0.25            -- duree du plateau lu en fin de phase
+    settle(v)
+    setLine(v)
+    hold(v, { throttle = 1.0 }, 60, function() return speedKmh(v) >= kmh end, true)
+    -- 1 s de ligne droite stabilisee avant le premier creneau
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br }
+    end, 1.0, nil, true)
+
+    local res = { kmh = kmh, steer = steer, phase = phase, cycles = cycles,
+                  entrySpeed = r(speedKmh(v), 2), plateaus = {} }
+    local sign = 1.0
+    for k = 1, cycles do
+        local dur = (k == 1) and (phase * 0.5) or phase
+        local n, sw, syaw, skmh, sslip, sroll, slat = 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        local minWheels = 4
+        hold(v, function()
+            local th, br = cruise(v, kmh)
+            return { throttle = th, brake = br, steer = steer * sign }
+        end, dur, function(t)
+            if t < dur - tail then return false end
+            local sv = GetEntitySpeedVector(v, true)
+            n = n + 1
+            sw = sw + math.abs(0.5 * (GetVehicleWheelSteeringAngle(v, 0)
+                                    + GetVehicleWheelSteeringAngle(v, 1)))
+            syaw = syaw + math.abs(GetEntityRotationVelocity(v).z)
+            skmh = skmh + speedKmh(v)
+            sroll = sroll + math.abs(GetEntityRotation(v, 2).y)
+            slat = slat + math.abs(sv.x)
+            if math.abs(sv.y) > 1.0 then
+                sslip = sslip + math.abs(math.deg(math.atan(sv.x, math.abs(sv.y))))
+            end
+            minWheels = math.min(minWheels, wheelsOnGround(v))
+            return false
+        end, false)
+        -- la premiere phase, de moitie, n'est qu'une mise en place : non lue
+        if k > 1 and n > 0 then
+            res.plateaus[#res.plateaus + 1] = {
+                dir = sign, n = n,
+                wheelDeg = r(math.deg(sw / n), 3),
+                yawRate = r(math.deg(syaw / n), 2),
+                kmh = r(skmh / n, 2),
+                slip = r(sslip / n, 2),
+                roll = r(sroll / n, 3),
+                vLat = r(slat / n, 3),
+                minWheels = minWheels,
+            }
+        end
+        sign = -sign
+    end
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br }
+    end, 0.8, nil, true)
+    res.endSpeed = r(speedKmh(v), 2)
+    settle(v)
+    return res
+end
+
 --- Slalom sinusoidal : braquage sinus d'amplitude et de periode donnees.
 function Tests.slalom(v, p)
     local kmh = p.kmh or 60

@@ -78,9 +78,21 @@ Dyn.Tuning = {
 	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
 	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
 	LowSpeedFade = 8, -- m/s : vitesse où la perte d'adhérence au démarrage (burnout) disparaît
-	SteerFade = 28, -- m/s : vitesse où le braquage atteint son minimum
-	SteerMinPct = 0.3, -- braquage minimal (fraction de SteeringLock) à haute vitesse
-	SteerPeakGain = 1.6, -- le braquage à haute vitesse ne descend pas sous PeakGain × angle de dérive du pic
+	SteerFade = 25.3, -- m/s : vitesse où le braquage atteint son minimum. MESURÉ : essai `steerfade`,
+	-- consigne constante en créneaux alternés, 20 plateaux de 15 à 102 km/h. L'angle de roue réellement
+	-- obtenu à pleine demande vaut 30,62 ° jusqu'à 30 km/h (butée mécanique), puis 21,20 / 14,69 / 10,81 /
+	-- 8,27 / 6,61 ° à 45 / 60 / 75 / 90 / 105 km/h. L'ancien réglage (28 ; 0,3 ; 1,6) donnait 1,05 × la
+	-- mesure à 15 km/h mais 2,30 × à 105 km/h : c'est là toute la direction « deux fois trop forte ».
+	SteerMinPct = 0.189, -- braquage minimal (fraction de SteeringLock) à haute vitesse. MESURÉ avec
+	-- SteerFade ci-dessus : ajustement conjoint sur les 7 vitesses, RMS 2,07 ° (écart relatif max 16 %,
+	-- à 30 km/h). Une forme en 35/(1+(v/15,1)^2,6) plafonnée à 30,62 ° tomberait à 0,89 ° de RMS (14 %
+	-- d'écart relatif max) : la forme linéaire du moteur ne peut pas être à la fois plate sous 30 km/h et
+	-- lente au-delà. Raffinement possible, non adopté — le gain en relatif est marginal.
+	SteerPeakGain = 0, -- CONTREDIT PAR LA MESURE, désactivé. Ce garde-fou imposait au braquage de rester
+	-- au-dessus de 1,6 × l'angle de dérive du pic, soit 15,2 ° : il était donc actif dès 100 km/h et
+	-- expliquait l'essentiel de l'écart haute vitesse. GTA ne le respecte pas : à 105 km/h il ne braque que
+	-- 6,61 °, bien SOUS l'angle du pic latéral (9,5 ° pour PeakFactor 0,5). Le véhicule n'est pas censé
+	-- pouvoir atteindre son pic latéral à haute vitesse.
 	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée
 	AbsSlip = 0.18, -- ABS : glissement au-delà duquel le frein est relâché
 	AbsRelease = 0.35, -- ABS : fraction du freinage gardée quand il relâche

@@ -121,18 +121,33 @@ cadence d'images donnée.
 > roulis 2,52 °) suit ce choc. Les valeurs propres, calculées par le même code que le côté Roblox, sont dans
 > « Vérification en 3D » plus bas et dans [`fivem-analyse.json`](fivem-analyse.json).
 >
-> **Où est cette arête, exactement** (localisée dans les traces le 2026-11-12, après coup). Ce n'est pas une
-> marche en travers près du départ : c'est **le bord nord du tablier**, une arête **longitudinale** de
-> ≈ +0,35 m à **y ≈ −3031**, soit **12,4 à 13,1 m au nord de l'axe de départ**. La bande plate fait donc
-> ≈ 12 m de large au nord de l'axe. Conséquences :
+> **Où est cette arête, exactement** (localisée dans les traces, puis **relevée au rayon** le 2026-11-12).
+> Ce n'est pas une marche en travers près du départ : c'est le **bord du tablier**, une arête
+> **longitudinale** de ≈ +0,30 à +0,35 m. Le sol plat est à **z = 12,944** sur toute la longueur utile.
+> Quatre profils en travers (`heightprobe`, cap 0, pas 0,25 m, ±30 m) donnent la largeur réelle, bord à
+> ±5 cm près, en mètres par rapport à l'axe de départ (+ = nord) :
+>
+> | Avance | Bord sud | Bord nord | Largeur |
+> |---|---|---|---|
+> | 0 m | −14,50 | > +30 (plat au-delà du relevé) | ≥ 44,5 m |
+> | 60 m | **−4,75** | +11,75 | 16,5 m |
+> | 120 m | < −30 (plat au-delà du relevé) | **+9,00** | ≥ 39,0 m |
+> | 180 m | −13,75 | +10,00 | 23,75 m |
+>
+> Le couloir garanti sur les quatre stations est donc **−4,75 m au sud à +9,00 m au nord** : les bords ne
+> sont pas parallèles à l'axe, le nord se resserre vers l'avant et le sud a un pincement vers 60 m.
+> Conséquences :
 >
 > - **Tous les essais en ligne droite sont intacts** — accel, frein, roue libre, frein à main, marche
->   arrière, bordure, côte ne s'écartent jamais de l'axe. Le virage 40 non plus (écart de hauteur maximal
->   1,9 cm sur toute la trace) : son roulis de 1,89 ° est propre.
-> - Les essais qui dérivent latéralement la franchissent chacun à leur distance : créneau à 80,3 m
->   d'avance (t = 6,50 s absolu), virage 80 à 94,5 m (6,70 s), slalom à 178,5 m (12,23 s).
+>   arrière, bordure, côte ne s'écartent jamais de l'axe (l'accélération sur 380 m dérive de 2,2 m).
+>   Le virage 40 non plus (écart de hauteur maximal 1,9 cm sur toute la trace) : son roulis de 1,89 ° est
+>   propre.
+> - Les essais qui dérivent latéralement franchissent l'arête nord chacun à leur distance : créneau à
+>   80,3 m d'avance (t = 6,50 s absolu), virage 80 à 94,5 m (6,70 s), slalom à 178,5 m (12,23 s).
 > - Le virage 80 à pleine butée quitte la bande **1,4 s après le braquage** : c'est tout ce que ce tablier
->   permet d'en mesurer. Pour aller plus loin il faudrait une surface plate de plus de 12 m de large.
+>   permet d'en mesurer. Pour aller plus loin il faudrait une surface plate de plus de 14 m de large.
+> - D'où l'essai `steerfade` (ci-dessous), qui mesure la direction **en créneaux alternés** : le cap décrit
+>   un triangle centré sur zéro, donc l'écart latéral reste de ±1,5 m et la mesure tient sur ce tablier.
 
 ## Ce qu'on apprend du moteur GTA
 
@@ -445,15 +460,9 @@ l'avant et 0,05 m à l'arrière**.
 
 ### Ce que la 3D révèle en plus (hors des quatre réglages)
 
-1. **La direction braque deux fois trop à vitesse.** Au créneau (0,5 de braquage à 60 km/h), Roblox tient
-   1,88 g et 69 °/s, GTA 0,83 g et 29 °/s ; au slalom 66 °/s contre 25. Angle de roue moyen relevé dans les
-   traces GTA (`w0str`, `w1str`) : ≈ 24–28 ° à 10,5 m/s plein braquage, **5,0 ° pour un demi-braquage à
-   16,4 m/s**, 12 ° en entrée du virage 80 (21 m/s). Roblox (`SteerFade` 28, `SteerMinPct` 0,3,
-   `SteerPeakGain` 1,6) braque à 23 ° plein braquage à 16,4 m/s, soit 11,5 ° à 0,5. La direction GTA a en plus
-   un retard (l'angle suit la consigne sinus avec du retard) et **réduit l'angle quand l'arrière glisse**
-   (virage 80 : 12 ° → 7,5 ° quand la dérive passe de 0 à −8,6 °). Ces données ne suffisent pas à caler la
-   loi proprement : il faut des essais FiveM à consigne **constante** (0,25 / 0,5 / 1) à 30, 60 et 90 km/h.
-   `PeakFactor` 0,5 relève aussi la cible haute vitesse (`SteerPeakGain` × pic = 15,2 ° au lieu de 10,5 °).
+1. **La direction braquait deux fois trop à vitesse — MESURÉE ET CORRIGÉE**, voir « La direction, à
+   consigne constante » ci-dessous. Le constat de départ : au créneau (0,5 de braquage à 60 km/h), Roblox
+   tenait 1,88 g et 69 °/s, GTA 0,83 g et 29 °/s ; au slalom 66 °/s contre 25.
 2. **La côte recule encore** : 5,7 cm en 2 s relâché (GTA 0,0). Cause probable : le pneu ne produit une
    force que s'il glisse (glissement rapporté à `VMin` = 1 m/s), il n'a pas de frottement statique ; le
    maintien à l'arrêt (`hold` à 0,5 de frein) bloque les roues, mais la caisse glisse lentement sur ses
@@ -463,6 +472,99 @@ l'avant et 0,05 m à l'arrière**.
 4. **Le frein à main s'arrête trop court** : 15,6–15,7 m à 0,82 g (GTA 20,0 m, 0,71 g). Dans GTA les roues
    arrière glissent sans se bloquer (5,3 contre 9,2 m/s). Réglage probable : `HandBrakeForce` ou
    l'adhérence d'une roue bloquée. Non corrigé.
+
+## La direction, à consigne constante
+
+Les essais en virage ne suffisaient pas à caler la loi de braquage : ils mélangent le braquage, la
+réponse du pneu et le terrain. L'essai [`steerfade`](../../tools/fivem-telemetry/README.md) impose une
+consigne **constante**, en créneaux alternés pour rester sur la bande plate, et relève le plateau établi.
+72 essais, de 15 à 105 km/h, consignes 0,25 à 1,00 — [`steerfade-analyse.json`](steerfade-analyse.json).
+
+### Trois surprises
+
+**Une consigne de 0,25 ne braque pas du tout.** 0,001 ° de roue et 0,00 °/s de lacet, à toutes les
+vitesses. L'axe analogique de GTA a une **zone morte**, mesurée à **0,2501** sur trois vitesses
+indépendantes (dispersion 4 × 10⁻³) : le braquage demandé est `(consigne − 0,25) / 0,75`. C'est une
+propriété de l'entrée, pas du véhicule — un joueur au clavier demande toujours 1,00 — mais sans elle
+toute la campagne aurait été fausse d'un facteur 3.
+
+**Au-dessus de la zone morte, la réponse est strictement linéaire.** À 60 km/h, sept consignes de 0,26 à
+0,80 donnent une droite de pente 20,1 °/unité passant par 0,2543. Mieux : la loi déduite de chaque
+consigne concorde — six consignes différentes à 60 km/h donnent le même braquage à pleine demande à
+**0,39 ° près**.
+
+**Il y a une butée mécanique à 30,625 °** (moyenne des deux roues avant ; l'intérieure va à 35 °,
+l'extérieure à 26,25 °, soit un rapport d'Ackermann de 0,75). À 15 et 30 km/h, les consignes 0,80 et 1,00
+donnent toutes deux exactement cette valeur.
+
+### La loi mesurée
+
+Braquage de roue (moyenne avant) réellement obtenu à pleine demande :
+
+| Vitesse | Loi brute | Obtenu | Consignes concordantes |
+|---|---|---|---|
+| 15 km/h | 49,78 ° | **30,62 °** (butée) | 3, écart max 0,10 ° |
+| 30 km/h | 32,34 ° | **30,62 °** (butée) | 4, écart max 0,16 ° |
+| 45 km/h | 21,20 ° | **21,20 °** | 1 |
+| 60 km/h | 14,69 ° | **14,69 °** | 6, écart max 0,39 ° |
+| 75 km/h | 10,81 ° | **10,81 °** | 1 |
+| 90 km/h | 8,27 ° | **8,27 °** | 4, écart max 0,14 ° |
+| 105 km/h | 6,61 ° | **6,61 °** | 1 |
+
+### Le lacet de GTA est purement cinématique
+
+C'est le résultat le plus utile pour la vérification en 3D. Sur **20 plateaux**, de 15 à 102 km/h et de
+0,56 ° à 16,6 ° de braquage, le lacet vaut exactement `v × braquage / L` avec un **empattement effectif de
+2,811 m** (écart-type 0,038, écart maximal 3,9 %). Le m422 ne quitte donc jamais le régime cinématique
+dans cette plage : ni sous-virage, ni survirage, à 4 % près. Critère de vérification côté Roblox :
+
+```
+lacet (rad/s) = vitesse (m/s) × braquage (rad) / 2,811
+```
+
+Et la dérive de caisse reste faible (0,5 ° à 45 km/h et 0,5 de consigne ; 13,8 ° seulement à 15 km/h en
+butée, où le rayon est minuscule). Autrement dit : **si le braquage est juste, le lacet suit.** C'est bien
+ce que montrait la 3D en négatif — 69 °/s au lieu de 29 parce que la roue braquait 2,4 fois trop.
+
+### Ce qui est appliqué
+
+| Réglage | Avant | Après | Pourquoi |
+|---|---|---|---|
+| `SteerFade` | 28 m/s | **25,3 m/s** | ajustement conjoint sur les 7 vitesses |
+| `SteerMinPct` | 0,3 | **0,189** | idem ; cible 6,61 ° à haute vitesse |
+| `SteerPeakGain` | 1,6 | **0** | contredit par la mesure |
+
+`SteerPeakGain` imposait au braquage de rester au-dessus de 1,6 × l'angle de dérive du pic, soit 15,2 ° :
+il était donc **actif dès 100 km/h** et causait l'essentiel de l'écart. GTA ne braque que 6,61 ° à
+105 km/h, **sous** l'angle du pic latéral (9,5 ° pour `PeakFactor` 0,5) : le véhicule n'est pas censé
+pouvoir atteindre son pic latéral à haute vitesse.
+
+Écart au braquage mesuré, avant et après (lu dans le module, pas recalculé à la main) :
+
+| Vitesse | GTA | Avant | Après |
+|---|---|---|---|
+| 15 km/h | 30,62 ° | 32,06 ° (+5 %) | 30,33 ° (−1 %) |
+| 30 km/h | 30,62 ° | 29,14 ° (−5 %) | 25,65 ° (−16 %) |
+| 45 km/h | 21,20 ° | 26,31 ° (+24 %) | 20,98 ° (−1 %) |
+| 60 km/h | 14,69 ° | 23,39 ° (+59 %) | 16,30 ° (+11 %) |
+| 75 km/h | 10,81 ° | 20,61 ° (+91 %) | 11,63 ° (+8 %) |
+| 90 km/h | 8,27 ° | 17,70 ° (+114 %) | 6,95 ° (−16 %) |
+| 105 km/h | 6,61 ° | 15,20 ° (+130 %) | 6,61 ° (0 %) |
+
+**Ce qui reste.** La forme linéaire du moteur (35 ° à l'arrêt, descente droite jusqu'à `SteerFade`) ne peut
+pas être à la fois plate sous 30 km/h et lente au-delà : il reste ±16 % d'écart, RMS 2,07 °. Une forme en
+`35 / (1 + (v/15,1)^2,6)` plafonnée à 30,62 ° tombe à **0,89 ° de RMS** (14 % d'écart relatif maximal, et
+seulement −5,5 % à 30 km/h). Non adoptée : le gain en relatif est marginal, et changer la forme de la loi
+en même temps que ses coefficients rendrait la vérification en 3D illisible. À reprendre si la 3D montre
+que les 16 % à 30 km/h se voient.
+
+### Ce que la pleine butée ne permet pas de mesurer
+
+À partir de 45 km/h, la pleine butée fait **tomber la vitesse** : plateau à 41 km/h pour 45 visés, 54 pour
+60, 57 pour 75 et 58 pour 90. Le véhicule ne tient pas un régime établi, la mesure n'en est donc pas une
+(ces points sont marqués `retenu: false` dans le JSON, avec le motif). Pire, à 90 km/h et 0,80 de consigne
+le braquage **redescend** à 3,57 ° alors que le lacet bondit à 72,8 °/s : GTA réduit l'angle de roue quand
+le véhicule glisse. Cette réduction-là reste à caler, et demanderait une piste large.
 5. **Vitesse perdue sur la marche à 20 km/h** : 1,9–2,0 km/h (GTA 0,06). Une part vient sans doute du
    régulateur de vitesse du banc (entrée à 21 km/h pour 20 demandés) : à confirmer avec une chute
    image par image (Roblox 0,7 km/h par image, GTA 0,13).

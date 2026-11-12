@@ -186,7 +186,7 @@ celles marquées **mesuré** ci-dessous en viennent. Pour un véhicule : table `
 | `UpshiftRpm`, `UpshiftRpmFirst`, `DownshiftRpm`, `DownshiftMargin` | **0,95** / **0,82** / 0,45 / 0,85 | boîte automatique — **mesuré** : la 1ʳᵉ passe nettement plus tôt que les autres |
 | `EngineBrakeG` | **0,9** | frein moteur au rupteur, gaz relâchés — **calé** sur les 115 m de roue libre 110 → 30 km/h |
 | `LowSpeedFade` | 8 m/s | fin de la perte d'adhérence au démarrage |
-| `SteerFade`, `SteerMinPct`, `SteerPeakGain` | 28 m/s / 0,3 / 1,6 | braquage réduit avec la vitesse |
+| `SteerFade`, `SteerMinPct`, `SteerPeakGain` | **25,3 m/s** / **0,189** / **0** | braquage réduit avec la vitesse — **mesuré** : 20 plateaux à consigne constante de 15 à 105 km/h. L'ancien réglage braquait 2,3 fois trop à 105 km/h, `SteerPeakGain` étant actif dès 100 km/h alors que GTA descend sous l'angle du pic latéral. Le lacet de GTA est purement cinématique (`v × braquage / 2,811 m`, à 3,9 % près) : si le braquage est juste, le lacet suit |
 | `CounterSteer` | 0 | aide au contre-braquage |
 | `AbsSlip`, `AbsRelease` | 0,18 / 0,35 | ABS |
 | `HandbrakeGripRear` | **1,0** | adhérence latérale arrière au frein à main — **mesuré** : GTA bloque l'arrière sans lui faire perdre son adhérence latérale (0,1 °/s de lacet volant droit). Studio : reste droit (1,4–2 °/s) depuis un départ propre, mais 0,75 aussi ; entré en correction de cap, 36,5 °/s |
