@@ -80,3 +80,18 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
   `VehicleRuntime` à partir de leur roue (braquage autour de l'axe de la roue pour `hub_*`, course de
   suspension pour les deux, jamais la rotation de la roue). Reconvertir et réinstaller le véhicule.
 - **Contrôle** : Verify Play client, groupe `joints` : « hub_lf braque avec wheel_lf sans tourner ».
+
+## Pièce de suspension qui « vole » sous la caisse quand la roue se détend
+
+- **Symptôme** (m422, 2026-11-12) : roue dans le vide (saut, bord de rampe), le bras ou la jambe de force
+  `suspension_*` descend avec la roue et se détache de la caisse : un morceau suspendu dans le passage de roue.
+- **Cause** : le runtime translatait `suspension_*` de toute la course, comme l'étrier. Or la pièce va de la
+  caisse à la roue : seule son extrémité côté roue doit suivre.
+- **Correction** : `VehicleRuntime:_prepareSuspensionHinges` lit au repos l'extrémité intérieure de la pièce
+  (coins des boîtes des pièces portées, à moins de 5 cm du point le plus intérieur) et y pose un axe
+  longitudinal ; `_updateJoints` fait pivoter la pièce de `asin(course / bras de levier)` (borné à ±0,95).
+  L'étrier (`hub_*`) garde la translation.
+- **Mesure** (Play, détente −0,18 m) : ancrage côté caisse ±1 à 3 cm en hauteur (au lieu de −18 cm), extrémité
+  côté roue −0,13 à −0,16 m ; vu de côté l'amortisseur reste accroché à la caisse. Limite : une pièce rigide ne
+  peut pas à la fois rester accrochée et suivre exactement le moyeu : vu de dessous, l'étrier s'écarte de
+  quelques cm du porte-moyeu à pleine détente (bras courts de l'avant : ~29° de rotation).

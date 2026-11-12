@@ -91,6 +91,7 @@ function Runtime.Attach(model)
 			end
 		end
 	end
+	self:_prepareSuspensionHinges()
 	self.Sounds = model:FindFirstChild("Sounds", true)
 	self:_prepareAudio()
 	renderers[model] = self
@@ -179,6 +180,82 @@ function Runtime:_state()
 end
 
 -- ------------------------------------------------------------------ roues / charnières
+-- Bras de suspension (suspension_*) : une pièce GTA d'un seul tenant qui va de la caisse à la roue. La
+-- translater avec la roue la détachait de la caisse quand la roue se détendait dans le vide (pièce qui
+-- « vole », m422 2026-11-12). On la fait PIVOTER autour d'un axe longitudinal posé à son extrémité côté
+-- caisse, de l'angle qui amène le point à l'aplomb de la roue sur le débattement de la roue. L'axe se lit
+-- dans la géométrie au repos (boîte des pièces portées par l'os), donc sans rien demander à la conversion.
+local function carriedParts(model, pivot)
+	local out, seen, queue = {}, { [pivot] = true }, { pivot }
+	while #queue > 0 do
+		local p = table.remove(queue)
+		table.insert(out, p)
+		for _, d in ipairs(p:GetJoints()) do
+			if d:IsA("WeldConstraint") or (d:IsA("JointInstance") and not d:IsA("Motor6D")) then
+				local other = (d.Part0 == p) and d.Part1 or d.Part0
+				if other and not seen[other] and other:IsDescendantOf(model) then
+					seen[other] = true
+					table.insert(queue, other)
+				end
+			end
+		end
+	end
+	return out
+end
+
+function Runtime:_prepareSuspensionHinges()
+	self.SuspHinge = {}
+	local cfg = self.Config
+	local root = self.Root
+	for bone, f in pairs(cfg.WheelFollowers or {}) do
+		local j = self.Joints[bone]
+		local w = cfg.Wheels and cfg.Wheels[f.Wheel]
+		if f.Kind == "suspension" and j and j.Part0 and j.Part1 and w then
+			local wx = w.Position[1] * self.Spm
+			local side = wx < 0 and -1 or 1
+			local corners = {}
+			local inner = math.huge
+			for _, p in ipairs(carriedParts(self.Model, j.Part1)) do
+				if p ~= j.Part1 or p.Transparency < 1 then
+					local h = p.Size / 2
+					for _, sx in ipairs({ -1, 1 }) do
+						for _, sy in ipairs({ -1, 1 }) do
+							for _, sz in ipairs({ -1, 1 }) do
+								local q = root.CFrame:PointToObjectSpace(p.CFrame:PointToWorldSpace(Vector3.new(sx * h.X, sy * h.Y, sz * h.Z)))
+								table.insert(corners, q)
+								inner = math.min(inner, side * q.X)
+							end
+						end
+					end
+				end
+			end
+			-- hauteur du pivot : celle de l'extrémité intérieure (moyenne des coins à moins de 5 cm d'elle).
+			-- À la hauteur du centre de roue, l'ancrage tournait autour d'un axe décalé et glissait de
+			-- 6 à 8 cm vers l'intérieur à pleine détente (mesuré en Play, m422).
+			local ySum, yN = 0, 0
+			for _, q in ipairs(corners) do
+				if side * q.X <= inner + 0.05 * self.Spm then
+					ySum += q.Y
+					yN += 1
+				end
+			end
+			local lever = wx - side * inner -- studs, du pivot à l'aplomb de la roue (signé)
+			if yN > 0 and math.abs(lever) > 0.05 * self.Spm then
+				-- pivot (repère du véhicule) à l'extrémité intérieure, à sa hauteur, à la longueur du centre de roue
+				local hingeRoot = Vector3.new(side * inner, ySum / yN, w.Position[3] * self.Spm)
+				local frame = j.Part0.CFrame * j.C0 -- repère de Transform au repos
+				local hingeWorld = root.CFrame:PointToWorldSpace(hingeRoot)
+				self.SuspHinge[bone] = {
+					h = frame:PointToObjectSpace(hingeWorld),
+					axis = frame:VectorToObjectSpace(root.CFrame:VectorToWorldSpace(Vector3.zAxis)),
+					up = frame:VectorToObjectSpace(root.CFrame.UpVector),
+					lever = lever,
+				}
+			end
+		end
+	end
+end
+
 function Runtime:_updateJoints(dt, s)
 	local cfg = self.Config
 	local lock = math.rad((cfg.Handling and cfg.Handling.SteeringLockDeg) or 35)
@@ -205,9 +282,17 @@ function Runtime:_updateJoints(dt, s)
 		if j and w then
 			local susp = (s.Suspension and s.Suspension[f.Wheel] or 0) * self.Spm
 			local steer = (f.Steer and w.Steer) and (-(s.Steer or 0) * (s.WheelSteer or lock)) or 0
-			local o = f.Offset or { 0, 0, 0 }
-			local d = Vector3.new(o[1], o[2], o[3]) * self.Spm
-			j.Transform = CFrame.new(0, susp, 0) * CFrame.new(d) * CFrame.Angles(0, steer, 0) * CFrame.new(-d)
+			local hinge = self.SuspHinge and self.SuspHinge[bone]
+			if hinge then
+				-- rotation autour de l'axe longitudinal passant par l'ancrage côté caisse : le point à
+				-- l'aplomb de la roue monte ou descend de `susp` (rotation de +θ autour de Z : Δy = x·sin θ)
+				local th = math.asin(math.clamp(susp / hinge.lever, -0.95, 0.95))
+				j.Transform = CFrame.new(hinge.h) * CFrame.fromAxisAngle(hinge.axis, th) * CFrame.new(-hinge.h)
+			else
+				local o = f.Offset or { 0, 0, 0 }
+				local d = Vector3.new(o[1], o[2], o[3]) * self.Spm
+				j.Transform = CFrame.new(0, susp, 0) * CFrame.new(d) * CFrame.Angles(0, steer, 0) * CFrame.new(-d)
+			end
 		end
 	end
 	for bone, hinge in pairs(cfg.Hinges or {}) do
