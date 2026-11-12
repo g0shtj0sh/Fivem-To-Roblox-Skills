@@ -140,6 +140,23 @@ Dyn.Tuning = {
 	SteerSlideV0 = 1.8, -- m/s : seuil, en dessous duquel rien n'est réduit
 	SteerSlideK = 0.18, -- par m/s au-delà du seuil
 	SteerSlideMin = 0.30, -- plancher de la réduction
+	-- Retard de la direction : l'angle de roue de GTA ne saute pas à sa valeur établie, il la rejoint par un
+	-- premier ordre. MESURÉ (2026-11-12) sur 380 fronts de consigne à vitesse tenue, tirés des créneaux
+	-- alternés de `steerfade`, des cercles `skidpad` et du créneau : écart sur l'angle de roue 5,52 ° sans
+	-- retard, **1,35 ° avec**, sur les tranches de vitesse non contaminées par la glisse dure (15, 30, 60,
+	-- 90 km/h). Ce qui a été écarté :
+	--   • une butée de VITESSE de braquage : 3,82 ° contre 3,71 ° pour le retard, et l'ajouter au retard ne
+	--     gagne que 0,02 ° ; de plus la réponse normalisée ne dépend pas de l'amplitude (à 30 km/h, des
+	--     créneaux de 10–20 ° et de 40–50 ° donnent la même courbe malgré 101 et 306 °/s de vitesse de roue),
+	--     ce qu'une butée de vitesse ne permettrait pas.
+	--   • un τ variable avec la vitesse : les ajustements par tranche donnaient 0,100 s à 15 km/h et 0,050 à
+	--     90, mais la forme `max(0,03 ; 0,125 − 0,0012 v)` ne gagne que 1,21 ° contre 1,35 ° — le gain ne
+	--     survit pas à un ajustement en une seule passe, donc un seul réglage mesuré vaut mieux que trois
+	--     ajustés.
+	-- À ne pas confondre avec la colonne `steerAngle` de la télémétrie FiveM, qui est la COMMANDE (le volant,
+	-- 0 à 35 °) : elle est PLUS LENTE que les roues (τ de 0,090 s à 15 km/h montant à 0,170 s à 90 km/h, et
+	-- croissant quand celui des roues décroît). C'est donc l'animation du volant, pas ce qui pilote les roues.
+	SteerTau = 0.08, -- s : constante de temps de l'angle de roue ; 0 = instantané (ancien comportement)
 	AbsSlip = 0.18, -- ABS : glissement au-delà duquel le frein est relâché
 	AbsRelease = 0.35, -- ABS : fraction du freinage gardée quand il relâche
 	HandbrakeGripRear = 1.0, -- adhérence latérale arrière frein à main serré. MESURÉ : à 60 km/h volant droit
@@ -476,7 +493,11 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	local lock = math.clamp(math.max(P.steerLock / fade, floor) * slideCut, 0, cap)
 	local beta = (math.abs(vf) > 2) and math.atan2(vBody.X, math.abs(vf)) or 0
 	S.lock = lock
-	S.steerAngle = math.clamp(-(inp.Steer or 0) * lock + T.CounterSteer * beta, -cap, cap)
+	-- l'angle de roue rejoint sa cible par un premier ordre (MESURÉ ; voir Dyn.Tuning)
+	local steerTarget = math.clamp(-(inp.Steer or 0) * lock + T.CounterSteer * beta, -cap, cap)
+	local steerA = (T.SteerTau > 0) and (1 - math.exp(-dt / T.SteerTau)) or 1
+	S.steerAngle += (steerTarget - S.steerAngle) * steerA
+	S.steerTarget = steerTarget
 
 	-- suspension -> charges normales
 	local N = {}

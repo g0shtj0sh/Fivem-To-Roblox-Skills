@@ -959,9 +959,52 @@ banc longitudinal reste à 5,3 %.
 Mesures complètes : [`skidpad-analyse.json`](skidpad-analyse.json), six traces brutes dans
 [`fivem/`](fivem/).
 
+### Le retard de la direction, mesuré et appliqué
+
+L'angle de roue ne saute pas à sa valeur établie : il la rejoint par un **premier ordre**.
+
+```
+roue(t+dt) = roue(t) + (cible(t) − roue(t)) × (1 − exp(−dt / SteerTau)),  SteerTau = 0,08 s
+```
+
+**Comment c'est mesuré.** Les créneaux alternés de `steerfade` sont des échelons propres à vitesse tenue
+sur une ligne droite, et chaque essai en contient quatre : avec les cercles et le créneau, cela fait
+**380 fronts** exploitables. Chaque modèle candidat tourne en **simulation libre** — son état est reporté
+d'un pas au suivant, jamais recalé sur la mesure — nourri de la vitesse et du lacet mesurés.
+
+| Modèle | Écart sur l'angle de roue |
+|---|---|
+| sans retard (ancien moteur) | 5,312 ° |
+| butée de **vitesse** de braquage seule (240 °/s) | 3,822 ° |
+| **retard du premier ordre, τ = 0,08 s** | **3,806 ° (global), 1,305 ° sur les tranches propres** |
+| retard + butée de vitesse | 3,692 ° |
+| retard à τ variable, `max(0,03 ; 0,125 − 0,0012 v)` | 3,705 ° |
+
+Les tranches 45 et 75 km/h gardent ~5 ° d'écart avec ou sans retard : elles sont contaminées par le régime
+de glisse dure, où la réduction sature à son plancher. Sur les tranches propres (15, 30, 60, 90 km/h),
+l'écart passe de **5,312 ° à 1,305 °**, soit un facteur 4.
+
+**Ce qui a été écarté, et pourquoi.**
+
+- **Une butée de vitesse de braquage.** Elle fait presque aussi bien (3,82 contre 3,81 °) mais l'ajouter au
+  retard ne gagne que 0,02 °, et surtout la réponse normalisée **ne dépend pas de l'amplitude** : à 30 km/h,
+  des créneaux de 10–20 ° et de 40–50 ° donnent la même courbe malgré des vitesses de roue de 101 et
+  306 °/s. Une butée de vitesse l'interdirait. (Elle avait d'abord semblé bien meilleure — 0,88 ° — mais
+  parce que je la recalais sur l'angle mesuré à chaque pas : un prédicteur à un pas, pas une simulation.)
+- **Un τ variable avec la vitesse.** Les ajustements par tranche donnent 0,100 s à 15 km/h et 0,050 à 90,
+  mais une fois mis sous la forme `max(0,03 ; 0,125 − 0,0012 v)` et ajusté en une seule passe, le gain
+  tombe à 1,21 ° contre 1,35 ° — il ne survit pas. Un seul réglage mesuré vaut mieux que trois ajustés.
+
+**Et la commande n'est pas ce qui pilote les roues.** Le τ de `steerAngle` **monte** avec la vitesse
+(0,090 s à 15 km/h, 0,170 s à 90), celui des roues **descend**. Les roues arrivent donc avant la commande :
+`steerAngle` est l'animation du volant, pas l'ordre qui commande le braquage. C'est ce qui m'avait fait
+décrire un « étage 1 commande → roues » ; la relation établie entre les deux reste vraie, mais elle n'est
+pas causale.
+
 ### Ce qui reste ouvert
 
-- La **dynamique** de l'étage 2 (90 % en 0,2 s, dépassement de 4 à 13 %) n'est pas modélisée.
+- Le **dépassement** résiduel de l'angle de roue (4 à 13 % selon la vitesse) n'est pas modélisé : un premier
+  ordre ne dépasse jamais. Il faudrait un second ordre, pour un gain qui reste à démontrer.
 - Les trois cercles qui partent en toupie (18 à 21 km/h, dérive 10 à 19 °) gardent un écart de 7 ° : la
   réduction y sature à son plancher de 0,30 alors que GTA braque encore. Régime non calé, et sans intérêt
   pour le calage.

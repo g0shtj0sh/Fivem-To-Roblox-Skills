@@ -1,0 +1,90 @@
+{
+ "quoi": "Retard de la direction de GTA, tire de 380 fronts de consigne a vitesse tenue (creneaux alternes steerfade, cercles skidpad, creneau). Chaque modele tourne en SIMULATION LIBRE, jamais recale sur la mesure.",
+ "quand": "2026-11-12",
+ "retenu": {
+  "forme": "premier ordre sur l angle de roue",
+  "SteerTau": 0.08,
+  "ecartGlobal": 3.8058,
+  "ecartTranchesPropres": 1.305,
+  "ecartSansRetard": {
+   "global": 5.3123,
+   "tranchesPropres": 5.3117
+  }
+ },
+ "parVitesse": {
+  "0": {
+   "sans": 6.5805,
+   "avec": 4.0042
+  },
+  "15": {
+   "sans": 6.4716,
+   "avec": 1.6129
+  },
+  "30": {
+   "sans": 5.3481,
+   "avec": 0.8537
+  },
+  "45": {
+   "sans": 5.3485,
+   "avec": 5.3777
+  },
+  "60": {
+   "sans": 1.7717,
+   "avec": 1.0917
+  },
+  "75": {
+   "sans": 4.7396,
+   "avec": 4.8567
+  },
+  "90": {
+   "sans": 0.6106,
+   "avec": 0.4349
+  }
+ },
+ "ecartes": {
+  "butee de vitesse de braquage": {
+   "ecart": 3.822,
+   "valeur": "240 deg/s",
+   "pourquoi": "la reponse normalisee ne depend pas de l amplitude : a 30 km/h des creneaux de 10-20 et de 40-50 deg donnent la meme courbe malgre 101 et 306 deg/s"
+  },
+  "retard + butee": {
+   "ecart": 3.6916,
+   "pourquoi": "gagne 0,02 deg sur le retard seul"
+  },
+  "tau variable avec la vitesse": {
+   "forme": "max(0,03 ; 0,125 - 0,0012 v)",
+   "ecart": 3.7051,
+   "tauParTranche": {
+    "15": 0.1,
+    "30": 0.09,
+    "45": 0.05,
+    "60": 0.055,
+    "75": 0.035,
+    "90": 0.05
+   },
+   "pourquoi": "1,21 deg contre 1,35 sur les tranches propres : le gain ne survit pas a un ajustement en une passe"
+  }
+ },
+ "commande": {
+  "quoi": "La colonne steerAngle est le VOLANT, pas l ordre qui commande les roues : son tau MONTE avec la vitesse alors que celui des roues DESCEND, donc les roues arrivent avant elle.",
+  "tauParVitesse": {
+   "15": 0.095,
+   "30": 0.105,
+   "45": 0.115,
+   "60": 0.13,
+   "75": 0.145,
+   "90": 0.17
+  },
+  "ecartDuPremierOrdre": "0,26 a 0,84 deg sur une grandeur de 0 a 35 deg"
+ },
+ "depassementNonModelise": {
+  "15": 1.011,
+  "30": 1.044,
+  "45": 1.183,
+  "60": 1.265,
+  "75": 1.53,
+  "90": 1.237,
+  "note": "pic / palier de l angle de roue ; un premier ordre ne depasse jamais"
+ },
+ "piege": "Les creneaux steerfade durent 1,0 s : lire le palier a 0,925-1,10 s apres un front enjambe le front suivant et donne des pics normalises jusqu a 2,4."
+}
