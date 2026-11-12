@@ -15,7 +15,6 @@ Fichiers déposés dans <dossier synchronisé>/F2R_Transfer/ :
                                            où loadstring est interdit)
     DriveBench.lua        -> ModuleScript (mesures de conduite, client du conducteur en Play)
     TestTrack.lua         -> ModuleScript (piste d'essai temporaire, serveur en Play)
-    TestGrounds.lua       -> ModuleScript (map d'essai permanente, à construire en Edit)
 Affiche un JSON : chemin Studio du dossier, fichiers, octets.
 Le dossier choisi doit être monté avec "$ignoreUnknownInstances": true (Rojo n'y efface rien d'autre)
 et ignoré par git (rien n'est commité).
@@ -105,15 +104,12 @@ def main() -> int:
         "Verify.lua": sdir / "Verify.lua",
         "DriveBench.lua": sdir / "DriveBench.lua",
         "TestTrack.lua": sdir / "TestTrack.lua",
-        "TestGrounds.lua": sdir / "TestGrounds.lua",
     }
     ids = vdir / "sounds" / "sound_ids.json"
     if ids.is_file():
         plan[f"{name}_sound_ids.txt"] = ids
     files = {}
     for target, src in plan.items():
-        if not src.is_file():  # bundle converti avant l'ajout de ce fichier
-            continue
         shutil.copyfile(src, dest / target)
         files[target] = src.stat().st_size
     print(json.dumps({"studio_path": f"{studio_path}.{FOLDER}", "dir": str(dest), "vehicle": name,

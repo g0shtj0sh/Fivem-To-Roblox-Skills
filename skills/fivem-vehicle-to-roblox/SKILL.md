@@ -154,9 +154,7 @@ temporaire dans le dossier de travail).
    `require(…Verify)({ model = …, checks = {"drive_play"} })` (accélère, régime cohérent, s'arrête, reste
    droit). Mesures complètes (0-100, freinage, virages, bordure, côte, marche arrière) : piste
    `TestTrack.lua` créée en Play loin de la carte, banc `DriveBench.lua`, voir
-   `references/roblox-integration.md` (« Essais de conduite ») ; essais longs en `task.spawn`. Pour conduire à
-   la main sur une map d'essai permanente (bosses, marches, sauts, pentes, surfaces, crash…) :
-   `roblox/TestGrounds.lua`, construite en Edit, voir `docs/test-grounds.md`.
+   `references/roblox-integration.md` (« Essais de conduite ») ; essais longs en `task.spawn`.
 5. `start_stop_play` (is_start = false). Toujours arrêter le Play avant de rendre la main ; un Play sans
    appel Studio pendant 3 min est arrêté par VibeStarter.
 

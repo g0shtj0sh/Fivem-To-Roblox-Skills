@@ -135,7 +135,7 @@ def write_studio_bundle(out: Path, name: str, config: dict, parts_cfg: dict, sou
             f.write_text(code, encoding="utf-8")
             files.append(f"chunks/{f.name}")
         manifest["steps"].append({"key": key, "bytes": len(src.encode("utf-8")), "calls": files})
-    for extra in ("Verify.lua", "ApplySoundIds.lua", "DriveBench.lua", "TestTrack.lua", "TestGrounds.lua"):
+    for extra in ("Verify.lua", "ApplySoundIds.lua", "DriveBench.lua", "TestTrack.lua"):
         shutil.copyfile(SKILL_ROOT / "roblox" / extra, sdir / extra)
     (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
