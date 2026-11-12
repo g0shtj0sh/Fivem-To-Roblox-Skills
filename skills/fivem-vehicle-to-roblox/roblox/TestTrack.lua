@@ -8,6 +8,8 @@
 		local Track = require(module)
 		local t = Track.build(folder)              -- origine auto : au-delà de tout ce que contient Workspace
 		Track.place(car, t.lanes.straight, player) -- pose le véhicule au départ d'une voie (cap vers -Z)
+		Track.buildRamp(450)                       -- tremplin À LA DEMANDE sur la voie straight (essai de vol)
+		Track.clearRamp()                          -- à retirer après : les essais en ligne droite y passent
 		Track.destroy()
 
 	Voies (CFrame de départ, le véhicule regarde vers l'avant de la voie) :
@@ -15,6 +17,8 @@
 		curb      x = -700   : marche de 0,149 m de haut et 12,2 m de long à 74 m devant le départ (les
 		                       conteneurs posés dans GTA : on monte la marche, on roule dessus, on redescend)
 		hill      x = +700   : côte à HillGrade (16,5 %, pente relevée dans GTA) de HillLength studs, plateau, descente
+	Pas de place pour une quatrième voie : le tremplin du vol (Track.buildRamp) se pose À LA DEMANDE sur la voie
+	straight et se retire ensuite (Track.clearRamp), comme placeRamp / clearStepObjects côté FiveM.
 	Le véhicule qui sort de la plaque tombe : VehicleAccess le remet à sa dernière position sûre
 	(attribut VoidRecoveries). Garder la piste loin des autres véhicules et décors.
 ]]
@@ -35,6 +39,14 @@ Track.HillLength = 200 -- studs
 Track.HillGrade = 0.165 -- pente au point d'arrêt dans GTA (16,5 %, 9,35 °) ; 0,15 avant le 2026-11-12
 Track.LaneOffset = 700
 Track.StudsPerMeter = 3.571
+-- Tremplin du vol libre : celui de la campagne GTA (prop_mp_ramp_02), mesuré en jeu à 4,02 m de large,
+-- 5,86 m de long et 1,53 m de haut, soit une pente moyenne de 14,6 °. Posé dans GTA à 450 m du départ
+-- (distance au CENTRE du tremplin : départ x = −1115, tremplin x = −1565), ce qui laisse de quoi atterrir.
+-- Le modèle GTA est un prop ; ici c'est un WedgePart à pente droite, de mêmes dimensions hors tout.
+Track.RampWidth = 4.02 -- m
+Track.RampLength = 5.86 -- m
+Track.RampHeight = 1.53 -- m
+Track.RampDistance = 450 -- m, du départ au centre du tremplin
 
 local current = nil
 
@@ -133,6 +145,38 @@ function Track.place(car, cf, player)
 	end
 	Access.PlaceOnGround(car, cf.Position, cf.LookVector)
 	return car:GetPivot()
+end
+
+-- Tremplin sur la voie straight, centré à `distanceMeters` du départ (Track.RampDistance par défaut),
+-- montant vers −Z (le sens de la voie) : lèvre basse côté départ, arête haute côté plaque. Un seul à la fois.
+-- Renvoie la pièce et sa description (studs et m) ; la piste doit être construite (Track.build).
+function Track.buildRamp(distanceMeters)
+	assert(current, "Track.build d'abord")
+	Track.clearRamp()
+	local spm = Track.StudsPerMeter
+	local d = (distanceMeters or Track.RampDistance) * spm
+	local w, l, h = Track.RampWidth * spm, Track.RampLength * spm, Track.RampHeight * spm
+	-- WedgePart non tourné : arête haute du côté +Z. Tourné d'un demi-tour, il monte vers −Z (comme HillUp).
+	local ramp = part(current.folder, "Ramp", Vector3.new(w, h, l),
+		current.lanes.straight * CFrame.new(0, h / 2, -d) * CFrame.Angles(0, math.pi, 0),
+		Color3.fromRGB(210, 170, 60), "WedgePart")
+	current.ramp = ramp
+	current.rampAt = current.lanes.straight * CFrame.new(0, 0, -d)
+	return ramp, {
+		distance = d / spm,
+		size = { w / spm, h / spm, l / spm },
+		slopeDeg = math.deg(math.atan2(h, l)),
+		lipZ = -d + l / 2, -- studs, voie straight : lèvre basse
+		topZ = -d - l / 2, -- arête haute
+	}
+end
+
+function Track.clearRamp()
+	if current and current.ramp then
+		current.ramp:Destroy()
+		current.ramp = nil
+		current.rampAt = nil
+	end
 end
 
 function Track.destroy()

@@ -13,6 +13,7 @@
 		Bench.hill(20)                           -- démarrage en côte : arrêt, maintien, recul, reprise
 		Bench.stepsteer(60, 0.5)                 -- créneau : consigne GTA 0,5 (demande effective 1/3, zone morte)
 		Bench.slalom(60, 0.5, 2, 12)             -- slalom : consigne sinus (amplitude, période s, durée s), écrêtée par la zone morte
+		Bench.air(90, "roulis", 1)               -- vol au tremplin (Track.buildRamp) : entrée en vol libre seulement
 		Bench.trace(seconds, inputs)             -- trace libre, échantillons à chaque image
 
 	Échantillons : chaque essai garde aussi `r.samples`, une ligne par image pendant la manœuvre, avec les
@@ -448,6 +449,191 @@ function Bench.hill(kmh, minPitchDeg)
 	end, true)
 	r.launchDistance = (state(a).pos - p2).Magnitude
 	r.launchGear = state(a).gear
+	settle(a)
+	return r
+end
+
+-- Contrôle en l'air au tremplin (TestTrack : Track.buildRamp sur la voie straight, Bench.setLine sur la voie).
+-- `axe` : "tangage", "roulis" ou "rien" ; `amp` : −1, 0 ou +1 (convention de la campagne GTA) :
+--   tangage amp > 0 lève le nez → Brake = amp ; amp < 0 pique → Throttle = −amp ; roulis → Steer = −amp.
+-- Approche à vitesse tenue (`kmh`, consigne GTA 90) en tenant la ligne, jusqu'au décollage. L'ENTRÉE N'EST
+-- APPLIQUÉE QUE PENDANT LE VOL LIBRE (quatre roues hors contact, `grounded` == 0) et relâchée dès qu'une roue
+-- retouche : la trace isole le vol. Aucun gaz en vol hors du tangage : dans le moteur, W pique du nez.
+--
+-- Échantillonnage au PAS DE SIMULATION (même liaison que VehicleDrive : BindToSimulation ou PreSimulation),
+-- pas à Heartbeat : une fenêtre Studio sans focus rend à ~15 i/s, ce qui laisserait 18 images sur 1,2 s de vol
+-- et décalerait l'armement de l'entrée d'une image de rendu. `t` est le temps de simulation cumulé (ms).
+--
+-- Il n'y a PAS de canal de vitesse angulaire de tangage ni de roulis : les taux sont dérivés des colonnes
+-- `pitch` et `roll` par différence centrée, comme l'analyse côté FiveM. Statistiques sur les images de vol
+-- seulement (images intérieures pour les taux). `r.samples` couvre 0,5 s avant le décollage jusqu'à 0,3 s après
+-- le premier contact ; l'analyse détaillée (couple sur la montée, plafond, borne) est faite par
+-- tools/drive-compare/air.luau, le même code que sur les traces GTA.
+-- opts : { untilMeters = distance max d'approche (m, 600), airMax = vol max enregistré (s, 4) }
+function Bench.air(kmh, axe, amp, opts)
+	opts = opts or {}
+	local a = active()
+	kmh, axe, amp = kmh or 90, axe or "rien", amp or 0
+	settle(a)
+	local s0 = state(a)
+	local r = { kmh = kmh, axis = axe, amp = amp, stepMode = Drive.StepMode }
+	local rows = {}
+	local simT = 0
+	local phase = "approach" -- approach → air → landed → done
+	local nAir, iOff, iLand, tLand = 0, nil, nil, nil
+	local function flightInputs()
+		local i = { Throttle = 0, Brake = 0, Steer = 0, Handbrake = false }
+		if axe == "tangage" then
+			if amp > 0 then
+				i.Brake = amp
+			elseif amp < 0 then
+				i.Throttle = -amp
+			end
+		elseif axe == "roulis" then
+			i.Steer = -amp
+		end
+		return i
+	end
+	local done = false
+	local function onStep(dt)
+		if done then
+			return
+		end
+		dt = typeof(dt) == "number" and dt or 1 / 60
+		simT += dt
+		local s = state(a)
+		local i
+		if phase == "approach" then
+			local th, br = cruise(s, kmh)
+			i = { Throttle = th, Brake = br, Steer = lineSteer(a), Handbrake = false }
+			-- décollage : deux pas consécutifs sans contact (même règle que tools/fivem-telemetry)
+			nAir = (s.grounded == 0) and (nAir + 1) or 0
+			if nAir >= 2 and s.speed * 3.6 > kmh * 0.5 then
+				phase = "air"
+				iOff = #rows -- la ligne précédente est la première image sans contact
+				r.takeoffSpeed = s.speed * 3.6
+				i = flightInputs()
+			elseif (s.pos - s0.pos).Magnitude > (opts.untilMeters or 600) then
+				r.error = "pas de décollage avant " .. tostring(opts.untilMeters or 600) .. " m"
+				done = true
+			end
+		elseif phase == "air" then
+			if s.grounded > 0 then
+				phase = "landed"
+				iLand = #rows + 1
+				tLand = simT
+				i = { Throttle = 0, Brake = 0, Steer = 0, Handbrake = false }
+			else
+				i = flightInputs()
+				if simT - (rows[iOff] and rows[iOff][1] / 1000 or simT) > (opts.airMax or 4) then
+					phase = "landed"
+					iLand = #rows + 1
+					tLand = simT
+				end
+			end
+		else
+			i = { Throttle = 0, Brake = 0, Steer = 0, Handbrake = false }
+			if simT - tLand >= 0.3 then
+				done = true
+			end
+		end
+		Drive.SetOverride(i)
+		local row = sampleRow(a, 0, i)
+		row[1] = math.floor(simT * 1000 + 0.5)
+		table.insert(rows, row)
+	end
+	local conn, unbind
+	if Drive.StepMode == "BindToSimulation" then
+		local ok, c = pcall(function()
+			return RunService:BindToSimulation(onStep, Enum.StepFrequency.Hz60)
+		end)
+		if ok and c then
+			unbind = function()
+				pcall(function()
+					c:Disconnect()
+				end)
+			end
+		end
+	end
+	if not unbind then
+		conn = RunService.PreSimulation:Connect(onStep)
+		unbind = function()
+			conn:Disconnect()
+		end
+		r.stepMode = (r.stepMode or "?") .. "/bench:PreSimulation"
+	end
+	local t0 = os.clock()
+	while not done and os.clock() - t0 < 90 do
+		RunService.Heartbeat:Wait()
+	end
+	done = true
+	unbind()
+	Drive.SetOverride({ Throttle = 0, Brake = 0, Steer = 0, Handbrake = false })
+	if not iOff then
+		r.error = r.error or "pas de décollage"
+		settle(a)
+		return r
+	end
+	-- colonnes utiles (Bench.Columns)
+	local C = {}
+	for k, name in ipairs(Bench.Columns) do
+		C[name] = k
+	end
+	iLand = iLand or #rows + 1
+	-- images de vol : de iOff à iLand − 1 (aucune roue en contact)
+	local f0, f1 = iOff, iLand - 1
+	r.flightFrames = f1 - f0 + 1
+	r.airSeconds = (rows[iLand] and rows[iLand][1] or rows[f1][1]) / 1000 - rows[f0][1] / 1000
+	r.takeoffPitch = rows[f0][C.pitch]
+	r.takeoffRoll = rows[f0][C.roll]
+	r.landSpeed = rows[math.min(iLand, #rows)][C.vFwd] * 3.6
+	r.minPitch, r.maxPitch, r.minRoll, r.maxRoll = math.huge, -math.huge, math.huge, -math.huge
+	for k = f0, f1 do
+		local row = rows[k]
+		r.minPitch = math.min(r.minPitch, row[C.pitch])
+		r.maxPitch = math.max(r.maxPitch, row[C.pitch])
+		r.minRoll = math.min(r.minRoll, row[C.roll])
+		r.maxRoll = math.max(r.maxRoll, row[C.roll])
+	end
+	-- taux par différence centrée, images de vol intérieures seulement (°/s)
+	local rate = { pitch = { -math.huge, math.huge }, roll = { -math.huge, math.huge }, yaw = { -math.huge, math.huge } }
+	for k = f0 + 1, f1 - 1 do
+		local dtk = (rows[k + 1][1] - rows[k - 1][1]) / 1000
+		if dtk > 0 then
+			for _, ax in ipairs({ "pitch", "roll" }) do
+				local q = (rows[k + 1][C[ax]] - rows[k - 1][C[ax]]) / dtk
+				rate[ax][1] = math.max(rate[ax][1], q)
+				rate[ax][2] = math.min(rate[ax][2], q)
+			end
+		end
+		local wz = math.deg(rows[k][C.wz])
+		rate.yaw[1] = math.max(rate.yaw[1], wz)
+		rate.yaw[2] = math.min(rate.yaw[2], wz)
+	end
+	r.maxPitchRate, r.minPitchRate = rate.pitch[1], rate.pitch[2]
+	r.maxRollRate, r.minRollRate = rate.roll[1], rate.roll[2]
+	r.maxYawRate, r.minYawRate = rate.yaw[1], rate.yaw[2]
+	-- un vol commandé ne peut pas dépasser le plafond (61 °/s) de beaucoup : au-delà de 95 °/s sur un axe,
+	-- c'est le tremplin qui a imprimé une culbute, et le vol ne mesure plus rien
+	local worst = 0
+	for _, v in ipairs({ r.maxPitchRate, r.minPitchRate, r.maxRollRate, r.minRollRate, r.maxYawRate, r.minYawRate }) do
+		if v == v and math.abs(v) ~= math.huge then
+			worst = math.max(worst, math.abs(v))
+		end
+	end
+	r.worstRate = worst
+	r.tumble = worst > 95
+	-- échantillons : 0,5 s avant le décollage → 0,3 s après le premier contact
+	local tFrom = rows[f0][1] - 500
+	local samples = {}
+	for _, row in ipairs(rows) do
+		if row[1] >= tFrom then
+			table.insert(samples, row)
+		end
+	end
+	r.samples = samples
+	r.takeoffIndex = f0 - (#rows - #samples) -- indices dans r.samples
+	r.landIndex = iLand - (#rows - #samples)
 	settle(a)
 	return r
 end
