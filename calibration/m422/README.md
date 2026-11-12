@@ -1195,15 +1195,65 @@ n'ajoute rien et que mon bilan est faux. Mais 0,388 est aussi exactement ce qu'o
 **normalisée** à plein gaz à mi-régime, donc elle ne tranche pas. Le relevé au rayon, lui, tranche : la
 pente est bien celle que je croyais.
 
-**Pourquoi ce n'est pas activé.** `SlopeAssist` est dans le moteur avec la valeur mesurée en commentaire,
-mais à **0**. L'activer fait **patiner** le démarrage en côte : au banc, en 1ʳᵉ sur 17 % de pente, le régime
-passe de 0,26 à 0,79 à 13 km/h, la boîte monte en 2ᵉ puis redescend et pompe, et la distance de lancement
-tombe de 34,6 à 26,1 m. Un apport de 9 % de la poussée ne devrait pas suffire à déclencher ça :
-l'interaction avec la dynamique de rotation de roue (`IwRel` = 0,03, inertie très faible) n'est pas comprise.
-Livrer le réglage sans la comprendre remplacerait une erreur de 10 % par un défaut de comportement.
+**Pourquoi ce n'est pas activé** — et la réponse a révélé un défaut plus profond, voir la section suivante.
+`SlopeAssist` est dans le moteur avec la valeur mesurée en commentaire, mais à **0** : l'activer donne un
+lancement de **51,9 km/h sur 38,8 m** contre 45,1 sur 32,5 pour GTA, soit +15 % et +19 %. Sans l'apport, le
+lancement est à −10,6 % et +7,0 %, donc plus proche.
 
-C'est donc le point à reprendre : **comprendre pourquoi un apport de 9 % de poussée fait patiner la 1ʳᵉ**,
-puis réactiver `SlopeAssist` à 0,537.
+Ce n'est pas que la mesure soit fausse, c'est que le moteur **sur-performe déjà le début du lancement** :
+GTA patine son embrayage pendant 1,14 s au départ (voir plus bas), le moteur embraye instantanément. Il
+part donc plus fort, et ajouter la poussée de pente par-dessus amplifie l'avance au lieu de combler le
+retard. **Les deux doivent être corrigés ensemble** : l'embrayage au départ, puis `SlopeAssist` à 0,537.
+
+### La vraie trouvaille : l'intégration de la roue était instable
+
+En cherchant pourquoi un apport de 9 % de poussée faisait **patiner** la 1ʳᵉ (le régime passait de 0,26 à
+0,79 à 13 km/h, la boîte pompait, la distance de lancement tombait de 34,6 à 26,1 m), la cause n'était pas
+dans la poussée : l'intégration de la vitesse de rotation de roue tournait **au-delà de sa limite de
+stabilité**.
+
+La force du pneu réagit à ω avec la raideur `fmax · r / (KappaPeak · vRef)`. En Euler explicite, la
+stabilité demande :
+
+```
+h < 2 · KappaPeak · vRef · Iw / (r² · fmax)
+```
+
+Au démarrage (`vRef` = `VMin` = 1 m/s, `Iw` = `IwRel`·r²/4 avec `IwRel` = 0,03, soit 1,45 × 10⁻³), cela
+donne **h < 3,9 × 10⁻⁴ s**, donc ≈ **43 sous-pas à 60 Hz**. Il y en avait **8**, soit un pas **cinq fois**
+au-delà de la limite. La roue s'emballait donc au démarrage, et seul l'écrêtage anti-dépassement le
+masquait — or celui-ci est désactivé précisément quand le couple pousse dans le sens du glissement, c'est-à-dire
+au démarrage. Le réglage de poussée n'a fait que révéler le défaut.
+
+**Le remède retenu : 16 sous-pas.** Mesuré :
+
+| `SubSteps` | Banc longitudinal | Recul | Lancement | Avec l'apport de pente |
+|---|---|---|---|---|
+| 8 | 5,32 % | 8,4 mm | 40,2 km/h / 34,6 m | **40,9 / 26,1 — patine** |
+| **16** | **5,30 %** | 8,4 mm | 40,2 / 34,5 | 51,9 / 38,8 |
+| 32 | 5,35 % | 8,4 mm | 40,3 / 34,7 | 51,9 / 38,8 |
+| 64 | 5,36 % | 8,4 mm | 40,2 / 34,7 | 51,9 / 38,9 |
+
+À 16 sous-pas le résultat ne bouge plus (32 et 64 donnent la même chose à 0,1 % près), ce qui est la
+signature d'une intégration devenue stable, et le banc longitudinal est inchangé. C'est donc gratuit.
+
+**Ce qui a été essayé et écarté : un pas semi-implicite sur ω** (le même traitement que l'amortisseur de
+suspension, `/(1 + h·k/m)`). Il règle l'instabilité plus fondamentalement et rend le résultat indépendant
+des sous-pas, mais il fait tomber le banc longitudinal de 5,3 % à **11,6 %** : le calage longitudinal
+compensait donc en partie l'instabilité. Un rebalayage des quatre réglages longitudinaux ne récupère que
+**6,55 %**, et au prix de valeurs **mesurées** (`EngineBrakeG` de 0,9 à 0,6, calé sur les 115 m de roue
+libre). Écarté pour ça : le schéma est plus juste, mais le livrer demanderait de reprendre tout le calage
+longitudinal, et c'est un travail à part.
+
+### Et un bug à moi, dans le frottement statique
+
+Le ressort accumulait le glissement avec `dt` au lieu du **pas interne** `h` : sa raideur dépendait donc du
+nombre de sous-pas. Le recul de 1 mm annoncé plus haut était un artefact — le ressort était huit fois trop
+raide à 8 sous-pas. Corrigé, puis `KStick` recalé au banc (balayage de 200 à 6400) : le recul se divise
+exactement par deux quand la raideur double — 8,4 / 4,2 / 2,1 / **1,0** / 0,5 mm — ce qui est la signature
+d'un ressort correct, et le banc longitudinal ne bouge pas (5,26 à 5,32 %). À 6400 le comportement devient
+erratique. Retenu : `KStick` = 1600, `CStick` = 60, soit **1,0 mm de recul** et 1,2 mm de déformation au
+décrochage.
 
 ### Et une différence d'embrayage, mesurée mais non corrigée
 

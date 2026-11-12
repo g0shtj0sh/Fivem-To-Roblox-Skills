@@ -264,12 +264,60 @@ local mode = (process.args[1] or "report")
 -- Cibles GTA (3 passes, essai `hill` de tools/fivem-telemetry) : pente 17,1 % a l'arret et
 -- 25,0 % en moyenne pendant le lancement ; recul tout relache 0,000 m ; lancement 45,1 km/h
 -- sur 32,5 m en 4 s, rapports 1 puis 2.
+if mode == "kstick" then
+	print(("%-10s %-10s %13s %12s %12s"):format("KStick", "CStick", "banc long.", "recul m", "fluage km/h"))
+	for _, k in ipairs({ 200, 400, 800, 1600, 3200, 6400 }) do
+		for _, cc in ipairs({ 28, 60, 120 }) do
+			local ov = { KStick = k, CStick = cc }
+			local r = run(ov)
+			local q = hill(ov, 17.1, nil)
+			print(("%-10d %-10d %12.2f %% %12.4f %12.2f"):format(k, cc, 100 * score(r), q.recul, q.reculVmin))
+		end
+	end
+	print(("%-21s %12s   %12.4f"):format("CIBLE", "GTA", 0.0))
+	return
+end
+
+if mode == "souspas" then
+	-- Effet du nombre de sous-pas sur les DEUX bancs. La stabilite de l'integration de omega
+	-- demande h < 2.KappaPeak.vRef.Iw/(r^2.fmax), soit environ 43 sous-pas a 60 Hz avec
+	-- IwRel = 0,03 : avec 8, le pas est cinq fois au-dela de la limite.
+	print(("%-10s %13s %12s %12s %12s"):format("SubSteps", "banc long.", "recul", "km/h", "dist"))
+	for _, n in ipairs({ 8, 16, 32, 64 }) do
+		local r = run({ SubSteps = n })
+		local q = hill({ SubSteps = n }, 17.1, nil)
+		local qa = hill({ SubSteps = n, SlopeAssist = 0.537 }, 17.1, nil)
+		print(("%-10d %12.2f %% %12.4f %12.2f %12.2f   avec apport : %6.2f km/h %6.2f m")
+			:format(n, 100 * score(r), q.recul, q.lancementKmh, q.lancementDist,
+				qa.lancementKmh, qa.lancementDist))
+	end
+	print(("%-10s %14s %12.4f %12.2f %12.2f"):format("CIBLE", "GTA", 0.0, 45.10, 32.50))
+	return
+end
+
 if mode == "cote" then
 	local pente = tonumber(process.args[2] or "") or 17.1
 	local penteL = tonumber(process.args[3] or "") -- nil = profil mesure
 	TRACE = (process.args[4] == "trace")
 	if TRACE then
 		print("       t, km/h, distance, regime, rapport, embrayage, pente, acceleration")
+	end
+	local variantes = {
+		{ nom = "sans apport (livre)", ov = nil },
+		{ nom = "apport 0,537", ov = { SlopeAssist = 0.537 } },
+		{ nom = "apport + 4x sous-pas", ov = { SlopeAssist = 0.537, SubSteps = 16 } },
+		{ nom = "apport + IwRel 0,10", ov = { SlopeAssist = 0.537, IwRel = 0.10 } },
+		{ nom = "apport + IwRel 0,25", ov = { SlopeAssist = 0.537, IwRel = 0.25 } },
+		{ nom = "sans apport + IwRel 0,10", ov = { IwRel = 0.10 } },
+	}
+	if process.args[5] == "variantes" then
+		print(("%-26s %10s %10s %10s"):format("variante", "recul m", "km/h", "distance m"))
+		for _, v in ipairs(variantes) do
+			local q = hill(v.ov, pente, penteL)
+			print(("%-26s %10.4f %10.2f %10.2f"):format(v.nom, q.recul, q.lancementKmh, q.lancementDist))
+		end
+		print(("%-26s %10.4f %10.2f %10.2f"):format("CIBLE GTA", 0.0, 45.10, 32.50))
+		return
 	end
 	local r = hill(nil, pente, penteL)
 	print(("=== COTE   pente %.1f %% a l'arret, %s au lancement")

@@ -73,9 +73,14 @@ Dyn.Tuning = {
 	-- (mesurée au banc : 0,10 km/h, soit 5,5 cm en 2 s — pire que sans rien). Le ressort, lui, garde sa
 	-- force à vitesse nulle. Il décroche à l'adhérence, ce qui redonne le frottement cinétique.
 	VStick = 0.30, -- m/s : en dessous, la roue et le sol sont considérés immobiles
-	KStick = 200, -- par mètre de glissement accumulé : à 17 % de pente la tenue demande 0,8 mm, et le
-	-- décrochage vient à 9,5 mm (μ = 1,9). Un flanc de pneu se déforme bien de cet ordre.
-	CStick = 28, -- amortissement du ressort (≈ 2√K) : sans lui le ressort oscillerait
+	-- CALÉ au banc (balayage de 200 à 6400) : le recul se divise exactement par deux quand la raideur
+	-- double — 8,4 / 4,2 / 2,1 / 1,0 / 0,5 mm — ce qui est la signature d'un ressort correct, et le banc
+	-- longitudinal ne bouge pas (5,26 à 5,32 %). À 6400 le comportement devient erratique (le recul remonte
+	-- à 4,3 mm avec `CStick` 28) : 1600 garde donc une marge. Déformation au décrochage : 1,2 mm, l'ordre
+	-- de grandeur d'un flanc de pneu.
+	KStick = 1600, -- par mètre de glissement accumulé ; recul 1,0 mm sur 17 % de pente (GTA : 0,0)
+	CStick = 60, -- amortissement du ressort : sans lui il oscillerait. 60 reste propre jusqu'à KStick 6400,
+	-- là où 28 décroche — d'où ce choix plutôt que le ≈ 2√K théorique.
 	KSpring = 1.0, -- k = SuspensionForce × biais × g / course × KSpring (hypothèse)
 	BumpK = 0, -- m/s² par m au-delà de la butée de compression. VÉRIFIÉ EN STUDIO (2026-11-12) : la marche de
 	-- 0,149 m prise à 60 km/h monte la roue en une image et dépasse les 0,10 m de course restante au repos ;
@@ -231,7 +236,16 @@ Dyn.Tuning = {
 	RightingK = 6, -- couple de redressement doux (rad/s² à 90°), véhicule couché et lent
 	RightingSpeed = 3, -- m/s : au-dessus, pas de redressement
 	GyrationSq = 1.6, -- m² : rayon de giration² nominal pour convertir accélérations angulaires en couples spécifiques
-	SubSteps = 8, -- sous-pas internes (roues, embrayage, régime) ; stabilité : raideur du glissement × pas < 2
+	-- MESURÉ (2026-11-12) : 8 sous-pas ne suffisaient pas. La stabilité de l'intégration de ω demande
+	-- h < 2·KappaPeak·vRef·Iw/(r²·fmax), soit 3,9 × 10⁻⁴ s au démarrage, donc ≈ 43 sous-pas à 60 Hz avec
+	-- `IwRel` = 0,03 ; avec 8, le pas était CINQ fois au-delà de la limite et la roue s'emballait au
+	-- démarrage. Seul l'écrêtage anti-dépassement le masquait, et il est justement désactivé quand le
+	-- couple pousse dans le sens du glissement, c'est-à-dire au démarrage. Symptôme mesuré : un apport de
+	-- 9 % de poussée (`SlopeAssist`) faisait patiner la 1ʳᵉ en côte et la boîte pompait.
+	-- 16 sous-pas suffisent en pratique : le banc longitudinal reste à 5,30 % (contre 5,29 à 8) et le
+	-- résultat ne bouge plus (32 et 64 donnent la même chose à 0,1 % près), ce qui est la signature d'une
+	-- intégration devenue stable. Au-delà, on ne paie que du temps de calcul.
+	SubSteps = 16, -- sous-pas internes (roues, embrayage, régime)
 	CurbBoost = 0, -- gain de régime par compression (effet « curb boost » du jeu) ; 0 = désactivé
 }
 
@@ -733,7 +747,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				-- nulle (voir Dyn.Tuning). Il décroche à l'adhérence et rend alors la main au glissement.
 				if still then
 					local vSlip = vLong - omega * w.radius
-					S.stick[i] += vSlip * dt
+					S.stick[i] += vSlip * h -- le PAS INTERNE, pas dt : sinon la raideur dépend de SubSteps
 					local Fs = -(T.KStick * S.stick[i] + T.CStick * vSlip) * N[i] / P.g
 					if math.abs(Fs) > fmax then
 						-- décrochage : on rend la force à l'adhérence, et on garde le glissement accumulé

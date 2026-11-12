@@ -48,8 +48,8 @@
   "GetVehicleWheelPower": "somme = 0,388 a plat comme en pente, identique a trois decimales, mais la colonne peut etre une puissance normalisee : elle ne tranche pas"
  },
  "nonActive": {
-  "pourquoi": "l activer fait patiner la 1re en cote : regime de 0,26 a 0,79 a 13 km/h, la boite pompe, la distance de lancement tombe de 34,6 a 26,1 m. Un apport de 9 % de la poussee ne devrait pas suffire ; l interaction avec IwRel (0,03) n est pas comprise.",
-  "aReprendre": "comprendre le patinage, puis remettre SlopeAssist a 0,537"
+  "pourquoi": "avec une integration stable, l apport mesure donne 51,9 km/h sur 38,8 m contre 45,1 sur 32,5 : +15 % et +19 %. Le moteur sur-performe deja le debut du lancement, parce que GTA patine son embrayage 1,14 s au depart et que le moteur embraye instantanement. Les deux sont a corriger ensemble.",
+  "aReprendre": "l embrayage au depart, puis SlopeAssist a 0,537"
  },
  "frottementStatique": {
   "mesure": "tout relache 2,0 s sur 17,1 % de pente : GTA se deplace de 0,000 m, point mort, frein nul",
@@ -58,12 +58,68 @@
    "amortisseur": 0.0551,
    "ressort": 0.001
   },
-  "pourquoi le ressort": "une force proportionnelle a la vitesse de glissement s annule avec elle, donc il reste une vitesse de fluage d equilibre : le vehicule flue moins vite mais plus longtemps"
+  "pourquoi le ressort": "une force proportionnelle a la vitesse de glissement s annule avec elle, donc il reste une vitesse de fluage d equilibre : le vehicule flue moins vite mais plus longtemps",
+  "bug": "le ressort accumulait le glissement avec dt au lieu du pas interne h : sa raideur dependait du nombre de sous-pas, et le recul de 1 mm annonce d abord etait un artefact (ressort 8 fois trop raide a 8 sous-pas)",
+  "calage": {
+   "KStick": 1600,
+   "CStick": 60,
+   "recul_mm": 1.0,
+   "balayage": {
+    "200": 8.4,
+    "400": 4.2,
+    "800": 2.1,
+    "1600": 1.0,
+    "3200": 0.5,
+    "6400": "erratique"
+   },
+   "note": "le recul se divise exactement par deux quand la raideur double : signature d un ressort correct"
+  }
  },
  "tracesVersees": [
   "thr_30_00",
   "thr_40_14",
   "thr_50_06",
   "thr_50_14"
- ]
+ ],
+ "stabiliteDeLaRoue": {
+  "quoi": "L integration explicite de omega tournait au-dela de sa limite de stabilite.",
+  "critere": "h < 2 . KappaPeak . vRef . Iw / (r^2 . fmax)",
+  "auDemarrage": {
+   "h_limite_s": 0.00039,
+   "sousPasNecessaires60Hz": 43,
+   "sousPasAvant": 8,
+   "facteurDeDepassement": 5
+  },
+  "symptome": "un apport de 9 % de poussee faisait patiner la 1re en cote ; le regime passait de 0,26 a 0,79 a 13 km/h, la boite pompait, la distance de lancement tombait de 34,6 a 26,1 m",
+  "pourquoiMasque": "l ecretage anti-depassement est desactive quand le couple pousse dans le sens du glissement, c est-a-dire justement au demarrage",
+  "remede": {
+   "SubSteps": 16,
+   "mesure": {
+    "8": {
+     "banc": 5.32,
+     "avecApport": "40,9 km/h / 26,1 m (patine)"
+    },
+    "16": {
+     "banc": 5.3,
+     "avecApport": "51,9 / 38,8"
+    },
+    "32": {
+     "banc": 5.35,
+     "avecApport": "51,9 / 38,8"
+    },
+    "64": {
+     "banc": 5.36,
+     "avecApport": "51,9 / 38,9"
+    }
+   },
+   "note": "a 16 le resultat ne bouge plus : signature d une integration stable"
+  },
+  "ecarte": {
+   "pas semi-implicite sur omega": {
+    "banc": 11.6,
+    "apresRebalayage": 6.55,
+    "pourquoi": "le calage longitudinal compensait en partie l instabilite ; le rebalayage deplace des valeurs MESUREES (EngineBrakeG de 0,9 a 0,6, cale sur la roue libre)"
+   }
+  }
+ }
 }
