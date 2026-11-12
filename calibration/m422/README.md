@@ -123,10 +123,14 @@ l'embrayage descend jusqu'à ≈ 0,29 : le couple est vraiment coupé, et on voi
 décélération passer de +1,12 g à −0,14 g le temps du passage. Seuls **4 rapports sur 6**
 servent : la vitesse est plafonnée par `DriveMaxFlatVel`, pas par l'étagement.
 
-**La vitesse de pointe.** 118,9 km/h pour `fInitialDriveMaxFlatVel = 135`, soit un facteur
-de **0,88**. La conversion actuelle du skill retient 45 m/s (= 162 km/h) pour ce même champ,
-d'où les 151,5 km/h mesurés dans Roblox. C'est l'écart le plus simple à corriger : le
-rapport mesuré est 135 → 33,0 m/s, pas 135 → 45 m/s.
+**La vitesse de pointe — et une erreur de lecture de ma part, corrigée depuis.** 118,9 km/h
+pour `fInitialDriveMaxFlatVel = 135`. J'en avais d'abord conclu que la conversion du skill
+(135 → 45 m/s) était fausse. Elle est **juste** : les trois passages de rapports le prouvent,
+le régime mesuré au passage vaut `v / (DriveMaxFlatVel / rapport)` à **±0,003 près** avec
+`DriveMaxFlatVel = 1,2 × 135 / 3,6 = 45 m/s`. Les 118,9 km/h ne sont pas un plafond de boîte
+mais un **plafond de traînée** : le véhicule plafonne en 4ᵉ à un régime de 0,806, bien avant
+son rupteur, parce que la poussée (2,12 m/s²) y égale la traînée. C'est donc le coefficient de
+traînée qu'il fallait corriger, pas la vitesse plate — voir « Calage appliqué » plus bas.
 
 **Le freinage.** GTA s'arrête de 100 km/h en **20,6 m à 1,81 g**, là où Roblox met 33,3 m à
 1,19 g. Pour `fBrakeForce = 0,6` cela donne ≈ **3,0 g par unité** de `BrakeForce`. Le cap
@@ -193,10 +197,15 @@ Roblox : confirme le point 5 de la liste « ce qui ne fait pas encore GTA ».
 
 ## Priorités de calage qui ressortent
 
-1. `DriveMaxFlatVel` : facteur 0,88 sur `fInitialDriveMaxFlatVel`, pas 1/3 de la valeur.
+*(toutes appliquées sauf mention contraire — voir « Calage appliqué » plus bas)*
+
+1. **La traînée**, pas la vitesse plate : `fInitialDriveMaxFlatVel` était bien converti, c'est
+   le coefficient de traînée qui était 2,1 fois trop faible. Le plateau à 118,9 km/h est un
+   équilibre poussée/traînée en 4ᵉ, pas un rupteur.
 2. `HandbrakeGripRear` : le frein à main GTA ne fait **pas** pivoter en ligne droite.
 3. `BrakeForce` → ≈ 3,0 g par unité (1,81 g pour 0,6).
-4. `KArb` / `KSpring` : viser ≈ 1,0 °/g de roulis, saturant au-delà de 1 g.
+4. `KArb` / `KSpring` : viser ≈ 1,0 °/g de roulis, saturant au-delà de 1 g. **Non appliqué** :
+   la raideur de roulis effective ne vient pas de ces réglages (voir plus bas).
 5. `KMu` : viser 1,83 g de tenue latérale à 40 km/h plein braquage.
 6. `UpshiftRpm` : variable selon le rapport (0,805 en 1ʳᵉ, ≈ 0,95 ensuite), + 0,496 s de coupure.
 7. `EngineBrakeG` : ≈ 0,38 g en roue libre, rapport engagé.
@@ -204,6 +213,80 @@ Roblox : confirme le point 5 de la liste « ce qui ne fait pas encore GTA ».
 9. `BumpK` / `DampVMax` : sur une marche de 15 cm, le cabrage doit **baisser** avec la vitesse
    (3,3 ° à 20 km/h, 2,2 ° à 60), sans décollage et sans perte de vitesse.
 10. Maintien à l'arrêt en côte : recul **nul** à 16,5 % de pente, contre 6,7 cm dans Roblox.
+
+## Calage appliqué au moteur Roblox
+
+Les mesures ci-dessus ont été reportées dans
+[`VehicleDynamics.lua`](../../skills/fivem-vehicle-to-roblox/roblox/runtime/VehicleDynamics.lua) :
+chaque valeur porte en commentaire la mesure dont elle sort.
+
+| Réglage | Avant | Après | D'où vient la valeur |
+|---|---|---|---|
+| `KMu` | 0,6 | **1,0** | 100-0 roues bloquées : 1,88 g de moyenne, 2,09–2,14 g de pic, pour `fTractionCurveMax` = 1,90. Le champ du jeu **est** une accélération en g. |
+| `PeakFactor` | 0,5 | **0,25** | virage 40 km/h tenu à la limite : la dérive se stabilise à 4,6 ° pour 1,69 g (`fTractionCurveLateral` = 19 °) ; en virage 80 km/h l'adhérence latérale quasi établie décroît déjà entre 3 ° et 10 °. |
+| `FalloffKappa` | *(n'existait pas)* | **0,1** | au freinage les roues se bloquent complètement (glissement −1,0) et l'adhérence reste à son pic : dans GTA la chute d'adhérence est pilotée par la **dérive**, pas par le blocage. |
+| `KDrag` | *(facteur 1e-4 figé)* | **2,1** | plateau de vitesse : 118,9 km/h en 4ᵉ à régime 0,806 pour `fInitialDragCoeff` = 8,0. Le 1e-4 de la conversion de chargement n'était qu'une hypothèse. |
+| `FirstGearForce` | *(n'existait pas)* | **1,5** | poussée mesurée en 1ʳᵉ : 10,5 à 12,4 m/s², là où `DriveForce × rapport × g` donne 6,53. Les 2ᵉ et 3ᵉ, elles, suivent la loi à 2 et 5 % près. Appliqué aussi à la marche arrière, qui emploie le même rapport. |
+| `IwRel` | 0,25 | **0,03** | les 25 % d'inertie équivalente interdisaient de tenir ensemble le 0-100 et la vitesse de pointe. Seul réglage **ajusté par balayage** et non lu directement. |
+| `UpshiftRpm` | 0,93 | **0,95** | passages 2→3 à 0,974 et 3→4 à 0,954. |
+| `UpshiftRpmFirst` | *(n'existait pas)* | **0,82** | passage 1→2 à 0,821–0,827, soit 40,0 km/h : la 1ʳᵉ passe nettement plus tôt. |
+| `EngineBrakeG` | 0,08 | **0,9** | roue libre 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à 3,0 m/s² (≈ 0,29 g) sur toute la plage. |
+| `HandbrakeGripRear` | 0,75 | **1,0** | frein à main à 60 km/h volant droit : 0,1–0,2 °/s de lacet, 0,07 ° de dérive, alors que les roues arrière glissent (5,3 contre 9,2 m/s). |
+| `DampVMax` | 1,0 | **0,5** | marche de 0,149 m : 3,29 ° de cabrage à 20 km/h, 2,18 ° à 60, quatre roues au sol, 0,06 km/h perdus. |
+| rupteur en marche arrière | absent | **appliqué** | la marche arrière plafonne à −48,8 km/h, soit exactement `DriveMaxFlatVel / 3,333` = 48,6 km/h. |
+
+### Vérification
+
+`VehicleDynamics` est un module pur : il a été exécuté **hors Roblox**, avec
+[lune](https://github.com/lune-org/lune), sur un banc **longitudinal** qui lui fournit des
+contacts de roue à plat et intègre la vitesse. Ce banc est dans le dépôt —
+[`tools/roblox-drive-rig/`](../../tools/roblox-drive-rig/) — et se relance d'une commande :
+
+```bash
+lune run tools/roblox-drive-rig/rig.luau report
+```
+
+Il reproduit d'abord fidèlement les
+chiffres du banc Roblox réel de `docs/drive-tests.md` (0-60 en 4,48 s contre 4,5 ; pointe
+153,1 contre 151,5 km/h ; passages à 43 / 76 / 106 km/h) : c'est ce qui le rend utilisable
+pour juger le calage.
+
+| Mesure | Avant | Après | GTA |
+|---|---|---|---|
+| 0-60 km/h | +30,3 % | **+0,8 %** | 3,44 s |
+| 0-100 km/h | +21,0 % | **+13,1 %** | 8,90 s |
+| Vitesse de pointe | +28,7 % | **+3,5 %** | 118,9 km/h |
+| Plein gaz 4 s (vitesse) | −17,8 % | **−1,4 %** | 67,3 km/h |
+| Plein gaz 4 s (distance) | −17,7 % | **+3,9 %** | 44,1 m |
+| Passage 1→2 | +8,1 % | **−4,6 %** | 40,0 km/h |
+| Passage 2→3 | −6,2 % | **−3,6 %** | 80,7 km/h |
+| Passage 3→4 | −3,7 % | **−1,2 %** | 110,6 km/h |
+| 100-0 distance | +76,8 % | **−0,5 %** | 20,6 m |
+| 100-0 temps | +69,9 % | **−3,4 %** | 1,57 s |
+| 100-0 décélération | −40,2 % | **+6,1 %** | 1,81 g |
+| Roue libre 110 → 30 | +588,6 % | **−1,7 %** | 115,2 m |
+| Marche arrière, vitesse | −26,1 % | **+4,5 %** | −48,8 km/h |
+| Marche arrière, distance | −6,0 % | **+4,4 %** | 41,4 m |
+| **Écart quadratique moyen** | **211 %** | **5,3 %** | |
+
+### Ce que ce calage ne couvre pas
+
+- **Le latéral, le roulis et la bordure ne sont pas vérifiés.** Un banc longitudinal ne peut
+  pas les simuler : ils dépendent du solveur 3D de Roblox. `KMu`, `PeakFactor`, `FalloffKappa`,
+  `HandbrakeGripRear` et `DampVMax` sont posés **d'après la mesure**, mais il faut relancer
+  `roblox/DriveBench.lua` en Studio pour les confirmer.
+- **Le roulis n'a pas été touché.** La mesure est claire (≈ 1,0 °/g dans GTA contre 0,26 °/g
+  dans Roblox, saturant au-delà de 1 g), mais la formule de `Dyn` prédit déjà ≈ 0,93 °/g avec
+  `KSpring` et `KArb` à 1 : la raideur de roulis effective ne vient donc pas de ces réglages,
+  elle vient des contraintes de suspension du châssis (`VehicleDrive`). Baisser `KArb` à
+  l'aveugle n'aurait rien prouvé. C'est le prochain chantier.
+- **Il reste 13 % d'écart sur le 0-100.** La forme de la courbe de couple de GTA dans la zone
+  médiane est plus pleine que celle du modèle (plat jusqu'à 0,8 puis 60 % au rupteur). La
+  mesure le montre : la poussée effective monte avec le rapport (×1,00 en 2ᵉ, ×1,05 en 3ᵉ),
+  ce que le modèle ne reproduit pas. Mesurer cette courbe demanderait un essai dédié, à
+  rapport bloqué.
+- **Un seul véhicule.** Tout vient du `m422`. `KMu = 1,0` et `KDrag = 2,1` deviennent les
+  défauts de **tous** les véhicules convertis : à recouper sur un deuxième mod.
 
 ## Limites de cette campagne
 

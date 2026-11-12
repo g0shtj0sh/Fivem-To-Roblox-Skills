@@ -166,28 +166,33 @@ Un Play est une copie de la place : relancer le Play après une mise à jour d'u
 
 ### Réglages (`VehicleDynamics.Tuning`)
 
-Les lois que le jeu ne publie pas sont des réglages, à caler sur des mesures FiveM. Pour un véhicule : table
-`DriveTuning` dans `VehicleConfig` (mêmes noms), ou `Dyn.new(cfg, com, { KMu = 0.7 })`.
+Les lois que le jeu ne publie pas sont des réglages. Les valeurs par défaut ont été **calées sur des mesures
+FiveM réelles** (campagne `m422` : [`calibration/m422/README.md`](../../../calibration/m422/README.md)) ;
+celles marquées **mesuré** ci-dessous en viennent. Pour un véhicule : table `DriveTuning` dans `VehicleConfig`
+(mêmes noms), ou `Dyn.new(cfg, com, { KMu = 0.7 })`.
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `KMu` | 0,6 | échelle de `TractionCurveMax/Min` en g (adhérence) |
-| `PeakFactor` | 0,5 | pic latéral = `TractionCurveLateral × PeakFactor` (litige 0,5 / 1) |
+| `KMu` | **1,0** | échelle de `TractionCurveMax/Min` en g — **mesuré** : le champ du jeu *est* l'accélération en g |
+| `PeakFactor` | **0,25** | pic latéral = `TractionCurveLateral × PeakFactor` — **mesuré** : pic vers 4,6 ° de dérive |
 | `KappaPeak` | 0,12 | glissement longitudinal du pic |
 | `Falloff` | 1,5 | largeur de la descente Max → Min |
-| `KSpring`, `KArb` | 1 | raideurs de suspension et d'anti-roulis (lois inconnues) |
-| `IwRel` | 0,25 | inertie de roue + transmission (`Iw = IwRel × r² / 4`) |
-| `UpshiftRpm`, `DownshiftRpm`, `DownshiftMargin` | 0,93 / 0,45 / 0,85 | boîte automatique |
-| `EngineBrakeG` | 0,08 | frein moteur au rupteur, gaz relâchés |
+| `FalloffKappa` | **0,1** | poids du glissement **longitudinal** dans cette descente — **mesuré** : une roue bloquée garde son pic ; dans GTA la chute est pilotée par la dérive. 1 = ancien comportement |
+| `KSpring`, `KArb` | 1 | raideurs de suspension et d'anti-roulis (lois inconnues ; le roulis mesuré est 4 × celui de Roblox, mais sa raideur se joue dans le châssis, pas ici) |
+| `IwRel` | **0,03** | inertie de roue + transmission (`Iw = IwRel × r² / 4`) — **calé** : 0,25 interdisait de tenir à la fois le 0-100 et la vitesse de pointe |
+| `KDrag` | **2,1** | multiplie le coefficient de traînée issu du chargement (`DragCoeff × 1e-4`), dont le facteur n'était qu'une hypothèse — **mesuré** sur le plateau de vitesse |
+| `FirstGearForce` | **1,5** | gain de poussée de la 1ʳᵉ **et de la marche arrière** (même rapport) — **mesuré** : 10,5 à 12,4 m/s² là où la loi donne 6,53 |
+| `UpshiftRpm`, `UpshiftRpmFirst`, `DownshiftRpm`, `DownshiftMargin` | **0,95** / **0,82** / 0,45 / 0,85 | boîte automatique — **mesuré** : la 1ʳᵉ passe nettement plus tôt que les autres |
+| `EngineBrakeG` | **0,9** | frein moteur au rupteur, gaz relâchés — **calé** sur les 115 m de roue libre 110 → 30 km/h |
 | `LowSpeedFade` | 8 m/s | fin de la perte d'adhérence au démarrage |
 | `SteerFade`, `SteerMinPct`, `SteerPeakGain` | 28 m/s / 0,3 / 1,6 | braquage réduit avec la vitesse |
 | `CounterSteer` | 0 | aide au contre-braquage |
 | `AbsSlip`, `AbsRelease` | 0,18 / 0,35 | ABS |
-| `HandbrakeGripRear` | 0,75 | adhérence latérale arrière au frein à main |
+| `HandbrakeGripRear` | **1,0** | adhérence latérale arrière au frein à main — **mesuré** : GTA bloque l'arrière sans lui faire perdre son adhérence latérale (0,1 °/s de lacet volant droit) |
 | `AirPitch`, `AirRoll`, `AirDamp` | 4 / 3 / 1,5 | contrôle en l'air |
 | `RightingK`, `RightingSpeed` | 6 / 3 m/s | redressement doux |
 | `SubSteps` | 8 | sous-pas internes |
-| `DampVMax` | 1 m/s | vitesse d'amortisseur plafonnée (clapets, souplesse du pneu) : sans elle une bordure de 15 cm à 20 km/h fait décoller l'avant |
+| `DampVMax` | **0,5 m/s** | vitesse d'amortisseur plafonnée (clapets, souplesse du pneu) : sans elle une bordure de 15 cm à 20 km/h fait décoller l'avant. **Mesuré** : 3,29 ° de cabrage à 20 km/h et 2,18 ° à 60 — le cabrage *baisse* avec la vitesse. À revérifier en Studio |
 | `CurbBoost` | 0 | effet « curb boost » (désactivé) |
 
 Dans le Setup : `COM_ABOVE_AXLE` (0,1 m, hauteur du centre de gravité au-dessus des moyeux), `MASS_SCALE` (0,1).

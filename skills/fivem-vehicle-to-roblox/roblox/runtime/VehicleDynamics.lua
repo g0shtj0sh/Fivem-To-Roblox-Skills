@@ -18,25 +18,46 @@ local Dyn = {}
 
 -- ------------------------------------------------------------------ réglages (constantes à caler)
 Dyn.Tuning = {
-	KMu = 0.6, -- échelle de TractionCurveMax/Min en « g » (le jeu annonce ≈ g, valeurs d'origine 2,0–2,6)
-	PeakFactor = 0.5, -- pic latéral = TractionCurveLateral × PeakFactor (litige 0,5 / 1,0)
+	-- Les valeurs marquées MESURÉ viennent de la campagne FiveM sur le m422 : voir
+	-- calibration/m422/README.md et les traces de calibration/m422/fivem/.
+	KMu = 1.0, -- échelle de TractionCurveMax/Min en « g ». MESURÉ : 100-0 km/h roues bloquées donne 1,88 g de
+	-- moyenne et 2,09–2,14 g de pic pour fTractionCurveMax = 1,90 → le champ EST une accélération en g.
+	PeakFactor = 0.25, -- pic latéral = TractionCurveLateral × PeakFactor. MESURÉ : en virage 40 km/h tenu à la
+	-- limite la dérive se stabilise à 4,6 ° pour 1,69 g (fTractionCurveLateral = 19 °), et en virage 80 km/h
+	-- l'adhérence latérale quasi établie décroît déjà entre 3 ° et 10 ° : le pic est bien avant 9,5 °.
 	KappaPeak = 0.12, -- glissement longitudinal du pic (champ absent de GTA V)
 	Falloff = 1.5, -- largeur (en multiples du pic) de la descente de Max vers Min
+	FalloffKappa = 0.1, -- poids du glissement LONGITUDINAL dans cette descente. MESURÉ : au freinage les roues
+	-- se bloquent complètement (glissement −1,0) et l'adhérence reste à son pic (1,88 g pour 1,90) : dans GTA
+	-- la chute d'adhérence est pilotée par la dérive, pas par le blocage. 1 = ancien comportement.
 	VMin = 1.0, -- m/s : plancher de vitesse pour les glissements (anti-tremblement)
 	KSpring = 1.0, -- k = SuspensionForce × biais × g / course × KSpring (hypothèse)
 	BumpK = 400, -- m/s² par m au-delà de la butée de compression
-	DampVMax = 1.0, -- m/s : vitesse d'amortisseur plafonnée (clapets haute vitesse, souplesse du pneu).
+	DampVMax = 0.5, -- m/s : vitesse d'amortisseur plafonnée (clapets haute vitesse, souplesse du pneu).
 	--                 Sans plafond, une bordure de 15 cm à 20 km/h (5,4 m/s en une image) fait décoller l'avant.
+	-- MESURÉ sur une marche de 0,149 m : 3,29 ° de cabrage à 20 km/h et 2,18 ° à 60 — le cabrage BAISSE avec la
+	-- vitesse — quatre roues au sol en permanence, 0,06 km/h perdus. Le banc Roblox donnait 7,6 ° puis 17,6 °
+	-- avec 0,15 s en l'air. À REVÉRIFIER en Studio : la bordure ne se simule pas hors solveur 3D.
 	KArb = 1.0, -- anti-roulis : kA = AntiRollBarForce × biais × g / course × KArb (loi inconnue)
-	IwRel = 0.25, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
-	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g)
-	UpshiftRpm = 0.93, -- montée de rapport (régime normalisé)
+	IwRel = 0.03, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
+	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g).
+	-- CALÉ sur les mesures m422 : 0,25 ajoutait 25 % d'inertie équivalente, ce qui rendait impossible de tenir
+	-- à la fois le 0-100 et la vitesse de pointe. À 0,03 les deux tombent ensemble (banc longitudinal).
+	KDrag = 2.1, -- multiplie le coefficient de traînée issu du chargement (DragCoeff × 1e-4), dont le facteur
+	-- n'était qu'une hypothèse. MESURÉ : plateau à 118,9 km/h en 4ᵉ (régime 0,806) pour fInitialDragCoeff = 8,0.
+	FirstGearForce = 1.5, -- la 1ʳᵉ de GTA pousse plus fort que DriveForce × rapport × g. MESURÉ : 10,5 à 12,4 m/s²
+	-- en 1ʳᵉ là où la loi donne 6,53 (les 2ᵉ et 3ᵉ, elles, suivent la loi à 2 et 5 % près). Le rapport de
+	-- VITESSE de la 1ʳᵉ reste 3,333 : le régime de passage mesuré (0,821) le confirme à 0,002 près.
+	UpshiftRpm = 0.95, -- montée de rapport (régime normalisé). MESURÉ : 2→3 à 0,974 et 3→4 à 0,954.
+	UpshiftRpmFirst = 0.82, -- la 1ʳᵉ passe PLUS TÔT. MESURÉ : 1→2 à 0,821–0,827, soit 40,0 km/h.
 	DownshiftRpm = 0.45, -- descente de rapport (régime sous lequel on rétrograde)
 	DownshiftMargin = 0.85, -- et seulement si le rapport inférieur resterait sous UpshiftRpm × marge (anti-pompage :
 	-- après une montée 1→2 le régime tombe à 0,93 × 1,949 / 3,333 ≈ 0,54, mesuré)
 	ReverseHold = 0.25, -- s à l'arrêt, frein maintenu, avant de passer la marche arrière
 	ShiftLockout = 0.35, -- s minimum entre deux passages automatiques
-	EngineBrakeG = 0.08, -- frein moteur (en g) au rupteur, gaz relâchés (proportionnel au régime)
+	EngineBrakeG = 0.9, -- frein moteur (en g) au rupteur, gaz relâchés (proportionnel au régime). MESURÉ :
+	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
+	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
 	LowSpeedFade = 8, -- m/s : vitesse où la perte d'adhérence au démarrage (burnout) disparaît
 	SteerFade = 28, -- m/s : vitesse où le braquage atteint son minimum
 	SteerMinPct = 0.3, -- braquage minimal (fraction de SteeringLock) à haute vitesse
@@ -44,7 +65,9 @@ Dyn.Tuning = {
 	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée
 	AbsSlip = 0.18, -- ABS : glissement au-delà duquel le frein est relâché
 	AbsRelease = 0.35, -- ABS : fraction du freinage gardée quand il relâche
-	HandbrakeGripRear = 0.75, -- adhérence latérale arrière frein à main serré (dérapage)
+	HandbrakeGripRear = 1.0, -- adhérence latérale arrière frein à main serré. MESURÉ : à 60 km/h volant droit
+	-- les roues arrière glissent (5,3 m/s contre 9,2 m/s) mais le lacet reste à 0,1–0,2 °/s et la dérive à
+	-- 0,07 ° : le frein à main de GTA bloque l'arrière SANS lui faire perdre son adhérence latérale.
 	AirPitch = 4, -- contrôle en l'air (rad/s² par unité d'entrée), tangage
 	AirRoll = 3, -- contrôle en l'air, roulis
 	AirDamp = 1.5, -- amortissement angulaire en l'air
@@ -163,7 +186,7 @@ function Dyn.new(cfg, comLocal, overrides)
 	P.arbR = (h.AntiRollBarForce or 0) * (h.AntiRollRear or 1) * P.g / P.travel * T.KArb
 	P.rcF, P.rcR = h.RollCentreHeightFront or 0, h.RollCentreHeightRear or 0
 	-- aéro, direction
-	P.dragK = h.DragAccelCoeff or ((h.DragCoeff or 10) * 1e-4)
+	P.dragK = (h.DragAccelCoeff or ((h.DragCoeff or 10) * 1e-4)) * T.KDrag
 	P.dfMod = h.DownforceModifier or 0
 	P.steerLock = h.SteeringLockRad or math.rad(h.SteeringLockDeg or 35)
 
@@ -442,21 +465,27 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		if S.rpm >= 1 then
 			if P.hardRev then
 				cut = 0
-			elseif S.gear == P.nGears and not P.cvt then
+			elseif (S.gear == P.nGears or S.gear < 0) and not P.cvt then
+				-- MESURÉ : la marche arrière plafonne à −48,8 km/h, soit exactement
+				-- DriveMaxFlatVel / 3,333 = 48,6 km/h. Le rupteur s'applique donc aussi en arrière.
 				S.clutch = math.min(S.clutch, 0.1) -- le jeu laisse retomber l'embrayage au rupteur
 			end
 		end
 		-- boîte automatique
 		if P.gearbox ~= "manual" and not P.cvt and S.clutch >= 1 and S.gear >= 1 and S.time - S.lastShift > T.ShiftLockout then
-			if S.rpm > T.UpshiftRpm and S.gear < P.nGears and driveIn > 0.05 then
+			local upRpm = (S.gear == 1) and (T.UpshiftRpmFirst or T.UpshiftRpm) or T.UpshiftRpm
+			if S.rpm > upRpm and S.gear < P.nGears and driveIn > 0.05 then
 				shift(S, S.gear + 1, 1)
 			elseif S.gear > 1 and S.rpm < T.DownshiftRpm
-				and S.rpm * P.ratios[S.gear - 1] / ratio < T.UpshiftRpm * T.DownshiftMargin then
+				and S.rpm * P.ratios[S.gear - 1] / ratio < upRpm * T.DownshiftMargin then
 				shift(S, S.gear - 1, -1)
 			end
 		end
 		local dir = (S.gear < 0) and -1 or 1
+		-- la marche arriere emploie le rapport de 1re (3,333) : elle recoit donc le meme gain
+		local gearForce = (S.gear == 1 or S.gear < 0) and (T.FirstGearForce or 1) or 1
 		local aDrive = P.driveForce * math.abs(ratio) * torqueCurve(S.rpm, S.gear) * thr * S.clutch * cut * P.g * dir
+			* gearForce
 		-- frein moteur, gaz relâchés, embrayé (sauf FREEWHEEL_NO_GAS)
 		local engBrake = (not P.freewheel and thr < 0.05 and S.clutch >= 1 and engineOn) and T.EngineBrakeG * P.g * (S.rpm - 0.2) / 0.8 or 0
 
@@ -482,9 +511,12 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				local alpha = math.atan2(vLat, vRef)
 				local sk, sa = kappa / T.KappaPeak, alpha / P.alphaPeak
 				local s = math.sqrt(sk * sk + sa * sa)
+				-- la descente Max → Min est pilotée par la dérive : une roue bloquée garde son pic (mesuré)
+				local skF = sk * T.FalloffKappa
+				local sFall = math.sqrt(skF * skF + sa * sa)
 				S.slip[i] = s
 				local grip = 1 - (1 - (c.grip or 1)) * P.lossMult
-				local fmax = (N[i] * muOf(P, s) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
+				local fmax = (N[i] * muOf(P, sFall) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
 				if s > 1e-6 then
 					local F = fmax * math.min(s, 1)
 					Fx = F * sk / s
@@ -593,6 +625,7 @@ function Dyn.PredictTopSpeed(sim)
 		local v = gearTop * 1.1 * i / 400
 		local rpm = v / gearTop
 		local a = P.driveForce * ratio * torqueCurve(rpm, P.nGears) * P.g
+			* ((P.nGears == 1) and (P.T.FirstGearForce or 1) or 1)
 		if P.hardRev and rpm >= 1 then
 			a = 0
 		end
