@@ -17,7 +17,10 @@
     Convention : steer +1 = DROITE, identique au banc Roblox.
 ]]
 
-local CTL <const> = { accel = 71, brake = 72, steer = 59, handbrake = 76 }
+local CTL <const> = { accel = 71, brake = 72, steer = 59, handbrake = 76,
+    -- 60 = INPUT_VEHICLE_MOVE_UP_DOWN : le tangage en l'air. Comme 59, il ne doit JAMAIS
+    -- etre desactive, sinon la valeur injectee par SetControlNormal est perdue (piege 1).
+    pitch = 60 }
 
 -- Controles neutralises pendant un essai : le joueur ne doit pas pouvoir
 -- perturber la mesure, ni sortir du vehicule.
@@ -36,7 +39,7 @@ local BLOCKED <const> = {
 
 local running = false
 local abortFlag = false
-local cur = { throttle = 0.0, brake = 0.0, steer = 0.0, handbrake = false }
+local cur = { throttle = 0.0, brake = 0.0, steer = 0.0, handbrake = false, pitch = 0.0 }
 
 local function r(x, n)
     if x == nil then return nil end
@@ -60,6 +63,7 @@ local function applyInputs()
     -- inverser ici.
     SetControlNormal(0, CTL.steer, cur.steer + 0.0)
     SetControlNormal(0, CTL.handbrake, cur.handbrake and 1.0 or 0.0)
+    SetControlNormal(0, CTL.pitch, cur.pitch + 0.0)
 end
 
 --- Boucle d'entrees : tourne pendant toute la duree d'un essai.
@@ -84,12 +88,15 @@ local COLUMNS <const> = {
     'wx', 'wy', 'wz',
     'rpm', 'gear', 'nextGear', 'highGear', 'clutch', 'thrOff', 'steerAngle',
     'wheelsOnGround', 'onAllWheels', 'heightAbove', 'dashSpeed', 'accel',
+    -- `hb` ci-dessus est la consigne INJECTEE ; `hbOn` est ce que le jeu en a fait
+    'hbOn', 'steerScale', 'turbo', 'grav', 'powInc', 'topMod', 'wheelie', 'engTemp',
     -- par roue 0..3 : vitesse, compression, braquage, traction, puissance, frein,
     -- vitesse de rotation, materiau du sol
-    'w0spd', 'w0sus', 'w0str', 'w0trc', 'w0pow', 'w0brk', 'w0rot', 'w0mat',
-    'w1spd', 'w1sus', 'w1str', 'w1trc', 'w1pow', 'w1brk', 'w1rot', 'w1mat',
-    'w2spd', 'w2sus', 'w2str', 'w2trc', 'w2pow', 'w2brk', 'w2rot', 'w2mat',
-    'w3spd', 'w3sus', 'w3str', 'w3trc', 'w3pow', 'w3brk', 'w3rot', 'w3mat',
+    -- puis sante de la roue et roue motrice (un bit des flags de roue)
+    'w0spd', 'w0sus', 'w0str', 'w0trc', 'w0pow', 'w0brk', 'w0rot', 'w0mat', 'w0hp', 'w0pwd',
+    'w1spd', 'w1sus', 'w1str', 'w1trc', 'w1pow', 'w1brk', 'w1rot', 'w1mat', 'w1hp', 'w1pwd',
+    'w2spd', 'w2sus', 'w2str', 'w2trc', 'w2pow', 'w2brk', 'w2rot', 'w2mat', 'w2hp', 'w2pwd',
+    'w3spd', 'w3sus', 'w3str', 'w3trc', 'w3pow', 'w3brk', 'w3rot', 'w3mat', 'w3hp', 'w3pwd',
 }
 
 local t0 = 0
@@ -97,13 +104,90 @@ local nWheels = 4
 
 --- Ce build n'expose pas GetVehicleNumberOfWheelsTouchingSurface : on compte les
 --- roues dont le materiau du sol est renseigne (0 = aucun contact).
+--- Nombre de roues qui PORTENT le vehicule.
+---
+--- MESURE (2026-11-12, essai `airtime`) : le materiau de surface ne vaut PAS 0 en l'air sur ce
+--- build. A 70 m du sol, GetVehicleWheelSurfaceMaterial rend encore 1 pour les quatre roues, et
+--- le comptage par materiau rendait donc 4 EN PLEINE CHUTE. La compression de suspension, elle,
+--- tombe exactement a 0,0 (et le vecteur de traction aussi), alors qu'elle vaut 0,205 au repos.
+--- C'est donc elle qui sert, et c'est aussi ce que dit la documentation : 0 = roue pendante.
 local function wheelsOnGround(veh)
     local n = 0
     for i = 0, nWheels - 1 do
-        local m = GetVehicleWheelSurfaceMaterial(veh, i)
-        if m and m ~= 0 and m ~= -1 then n = n + 1 end
+        local sus = GetVehicleWheelSuspensionCompression(veh, i)
+        -- sus == sus ecarte NaN
+        if sus and sus == sus and sus > 1e-4 then n = n + 1 end
     end
     return n
+end
+
+-- ------------------------------------------------------- garde-fous de lecture
+-- Deux protections demandees par reports/Mods et depots physique vehicules GTA.md :
+--   * NaN et inf : une seule valeur absurde suffit a ruiner une analyse. On les remplace par 0
+--     et on COMPTE les rejets par canal, dans meta.nanRejected : un compteur non nul invalide
+--     le canal, pas l'essai entier.
+--   * natives absentes du build : GetVehicleNumberOfWheelsTouchingSurface et GetVehicleWheelXrot
+--     manquent sur le build teste. On sonde une fois, au debut de chaque essai, avec le vrai
+--     vehicule (l'existence du symbole ne garantit pas qu'il reponde), et on note le resultat
+--     dans meta.natives. Les canaux absents sont ecrits a 0 et listes dans meta.unavailable.
+local nanCount = {}
+local missing = {}
+
+local function fin(x, canal)
+    if type(x) ~= 'number' or x ~= x or x == math.huge or x == -math.huge then
+        if canal then nanCount[canal] = (nanCount[canal] or 0) + 1 end
+        return 0.0
+    end
+    return x
+end
+
+--- Sonde une native avec le vrai vehicule. Rend la fonction si elle repond, nil sinon.
+local function probe(name, ...)
+    -- PAS rawget : dans FiveM les natives sont exposees par metatable sur _G, donc rawget les
+    -- manque toutes et on conclurait a tort qu'aucune n'existe sur ce build.
+    local fn = _G[name]
+    if type(fn) ~= 'function' then
+        missing[name] = 'symbole absent'
+        return nil
+    end
+    local ok, res = pcall(fn, ...)
+    if not ok then
+        missing[name] = tostring(res):sub(1, 120)
+        return nil
+    end
+    if type(res) == 'number' and res ~= res then
+        missing[name] = 'rend NaN'
+        return nil
+    end
+    return fn
+end
+
+-- natives sondees au debut de chaque essai (nil = absente sur ce build)
+local N = {}
+
+local function probeAll(veh)
+    nanCount, missing = {}, {}
+    N.handbrake = probe('GetVehicleHandbrake', veh)
+    N.steerScale = probe('GetVehicleSteeringScale', veh)
+    N.turbo = probe('GetVehicleTurboPressure', veh)
+    N.gravity = probe('GetVehicleGravityAmount', veh)
+    N.powerInc = probe('GetVehicleCheatPowerIncrease', veh)
+    N.topMod = probe('GetVehicleTopSpeedModifier', veh)
+    N.wheelie = probe('GetVehicleWheelieState', veh)
+    N.engTemp = probe('GetVehicleEngineTemperature', veh)
+    N.wheelHealth = probe('GetVehicleWheelHealth', veh, 0)
+    N.wheelPowered = probe('GetVehicleWheelIsPowered', veh, 0)
+    N.wheelFlags = probe('GetVehicleWheelFlags', veh, 0)
+    N.gearRatio = probe('GetVehicleGearRatio', veh, 1)
+    N.tyreCollider = probe('GetVehicleWheelTireColliderSize', veh, 0)
+    N.rimCollider = probe('GetVehicleWheelRimColliderSize', veh, 0)
+    N.wheelSize = probe('GetVehicleWheelSize', veh)
+end
+
+--- Lecture d'un canal optionnel : 0 si la native manque sur ce build.
+local function opt(fn, canal, ...)
+    if not fn then return 0.0 end
+    return fin(fn(...), canal)
 end
 
 local function sample(veh)
@@ -126,6 +210,19 @@ local function sample(veh)
         wheelsOnGround(veh), IsVehicleOnAllWheels(veh) and 1 or 0,
         r(GetEntityHeightAboveGround(veh), 3),
         r(GetVehicleDashboardSpeed(veh), 3), r(GetVehicleAcceleration(veh), 4),
+        -- `hb` plus haut est la consigne injectee ; celui-ci est l'etat vu par le jeu, donc la
+        -- preuve que SetControlNormal a bien ete pris (piege 1 du rapport)
+        (N.handbrake and N.handbrake(veh)) and 1 or 0,
+        r(opt(N.steerScale, 'steerScale', veh), 4),
+        r(opt(N.turbo, 'turbo', veh), 4),
+        r(opt(N.gravity, 'grav', veh), 4),
+        -- -1 quand aucun modificateur n'est pose : tout autre valeur signale une ressource du
+        -- serveur qui fausse la mesure (piege 5)
+        r(opt(N.powerInc, 'powInc', veh), 4),
+        r(opt(N.topMod, 'topMod', veh), 4),
+        -- 1 = rien, 65 = pret (burnout), 129 = cabrage
+        r(opt(N.wheelie, 'wheelie', veh), 0),
+        r(opt(N.engTemp, 'engTemp', veh), 2),
     }
 
     for i = 0, 3 do
@@ -137,6 +234,10 @@ local function sample(veh)
         row[#row + 1] = r(GetVehicleWheelBrakePressure(veh, i), 4)
         row[#row + 1] = r(GetVehicleWheelRotationSpeed(veh, i), 4)
         row[#row + 1] = GetVehicleWheelSurfaceMaterial(veh, i)
+        row[#row + 1] = r(opt(N.wheelHealth, 'wheelHealth', veh, i), 2)
+        -- roue motrice : tranche le cas ou fDriveBiasFront = 1,0 en memoire signifie traction
+        -- ou 50/50 (rapport, canal « roue motrice »)
+        row[#row + 1] = (N.wheelPowered and N.wheelPowered(veh, i)) and 1 or 0
     end
     return row
 end
@@ -256,7 +357,11 @@ local function record(v)
     samples[#samples + 1] = true
 end
 
-local CHUNK <const> = 250
+-- MESURE : a 250, un essai de quelques secondes envoie plusieurs lots pendant que la
+-- synchronisation d'entite est deja chargee, et le serveur ejecte le client pour depassement de
+-- limite de debit (journal cfx : « dropped for going over a rate limit »). A 5000, un essai court
+-- n'envoie qu'un seul lot, a la fin.
+local CHUNK <const> = 5000
 local curLabel = nil
 
 local function flush(force)
@@ -279,6 +384,7 @@ local function hold(v, inputs, seconds, each, keepLine)
         cur.brake = i.brake or 0.0
         cur.handbrake = i.handbrake or false
         cur.steer = keepLine and lineSteer(v) or (i.steer or 0.0)
+        cur.pitch = i.pitch or 0.0
         Wait(0)
         record(v)
         flush(false)
@@ -297,15 +403,31 @@ local function settle(v, seconds)
     while (GetGameTimer() - start) / 1000.0 < (seconds or 6) do
         if abortFlag then return end
         if fwdSpeed(v) < -0.5 then
-            cur.throttle, cur.brake, cur.handbrake, cur.steer = 1.0, 0.0, false, 0.0
+            cur.throttle, cur.brake, cur.handbrake, cur.steer, cur.pitch = 1.0, 0.0, false, 0.0, 0.0
         else
-            cur.throttle, cur.brake, cur.handbrake, cur.steer = 0.0, 1.0, false, 0.0
+            cur.throttle, cur.brake, cur.handbrake, cur.steer, cur.pitch = 0.0, 1.0, false, 0.0, 0.0
         end
         Wait(0)
         if math.abs(fwdSpeed(v)) < 0.2 then break end
     end
-    cur.throttle, cur.brake, cur.handbrake, cur.steer = 0.0, 0.0, false, 0.0
+    cur.throttle, cur.brake, cur.handbrake, cur.steer, cur.pitch = 0.0, 0.0, false, 0.0, 0.0
     Wait(300)
+end
+
+--- Repare le vehicule et remet la vie du joueur, sans le deplacer. Les essais de vol et de
+--- retournement abiment la voiture : sans cela, l'essai suivant part avec une roue cassee.
+local function repairNow(v)
+    SetVehicleFixed(v)
+    SetVehicleDeformationFixed(v)
+    SetVehicleEngineHealth(v, 1000.0)
+    SetVehicleBodyHealth(v, 1000.0)
+    SetVehiclePetrolTankHealth(v, 1000.0)
+    SetVehicleUndriveable(v, false)
+    SetVehicleEngineOn(v, true, true, false)
+    local ped = PlayerPedId()
+    if ped and ped ~= 0 then
+        SetEntityHealth(ped, 200)
+    end
 end
 
 --- Repare, remet a plat, moteur tournant, a l'arret, au point de depart.
@@ -914,6 +1036,448 @@ function Tests.skidpad(v, p)
     return res
 end
 
+--- Controle en l'air et auto-redressement.
+---
+--- Le vehicule saute NATURELLEMENT : on monte la cote a plein gaz et on passe la crete. Aucune
+--- teleportation, aucune vitesse imposee.
+---
+--- La premiere version posait le vehicule a 25 m avec une vitesse et une vitesse angulaire
+--- imposees : elle a fait CRASHER le jeu (« The game has crashed ») et, avant cela, fait ejecter
+--- le client pour depassement de la limite de debit du serveur, la culbute saturant la
+--- synchronisation. On ne force donc plus rien : on roule, on decolle, on enregistre.
+---
+--- `axis` vaut 'rien', 'tangage' ou 'roulis' ; `amp` est la consigne, signe compris. L'entree
+--- n'est appliquee qu'une fois les quatre roues en l'air (compression nulle), et relachee des que
+--- l'une retouche : la trace isole donc le vol libre. La pente de la vitesse angulaire par rapport
+--- a l'entree donne le couple de controle, et le cas 'rien' donne l'auto-redressement.
+function Tests.airtime(v, p)
+    local axis = p.axis or 'rien'
+    local amp = p.amp or 1.0
+    local runUp = p.runUp or 12.0      -- duree de l'elan, plein gaz
+    local airMax = p.airMax or 3.0     -- duree maximale enregistree en l'air
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    settle(v)
+    setLine(v)
+
+    local res = { axis = axis, amp = amp, runUp = runUp }
+    -- elan : plein gaz, tenue de ligne, jusqu'au decollage
+    local nAirRun = 0
+    local tOff = nil
+    hold(v, { throttle = 1.0 }, runUp, function(t)
+        if wheelsOnGround(v) == 0 then
+            nAirRun = nAirRun + 1
+            if nAirRun >= 2 and not tOff then
+                tOff = t
+                return true
+            end
+        else
+            nAirRun = 0
+        end
+        return false
+    end, true)
+
+    res.tookOff = (tOff ~= nil)
+    res.takeoffSpeed = r(speedKmh(v), 2)
+    local rot0 = GetEntityRotation(v, 2)
+    res.takeoffRot = { r(rot0.x, 2), r(rot0.y, 2), r(rot0.z, 2) }
+    if not tOff then
+        res.error = "pas de decollage : la crete n'a pas suffi a cette vitesse"
+        settle(v)
+        return res
+    end
+
+    -- vol libre : l'entree n'est appliquee QUE tant que les quatre roues sont en l'air
+    local maxW, nAir, tLand = { 0.0, 0.0, 0.0 }, 0, nil
+    hold(v, function()
+        local i = { throttle = 0.0, brake = 0.0 }
+        if axis == 'roulis' then
+            i.steer = amp
+        elseif axis == 'tangage' then
+            i.pitch = amp
+        end
+        return i
+    end, airMax, function(t)
+        local rv = GetEntityRotationVelocity(v)
+        maxW[1] = math.max(maxW[1], math.abs(rv.x))
+        maxW[2] = math.max(maxW[2], math.abs(rv.y))
+        maxW[3] = math.max(maxW[3], math.abs(rv.z))
+        if wheelsOnGround(v) == 0 then
+            nAir = nAir + 1
+        elseif not tLand then
+            tLand = t
+            return true
+        end
+        return false
+    end, false)
+
+    res.airFrames = nAir
+    res.airSeconds = r(tLand, 3)
+    res.maxOmegaDeg = { r(math.deg(maxW[1]), 2), r(math.deg(maxW[2]), 2), r(math.deg(maxW[3]), 2) }
+    local rot = GetEntityRotation(v, 2)
+    res.landRot = { r(rot.x, 2), r(rot.y, 2), r(rot.z, 2) }
+    res.landSpeed = r(speedKmh(v), 2)
+    res.engineHealthAfter = r(GetVehicleEngineHealth(v), 1)
+    repairNow(v)
+    settle(v)
+    return res
+end
+
+--- Couple de retournement : vehicule sur le toit (roulis 180) ou sur le cote (90), puis gauche,
+--- droite, ou rien. On mesure le temps et la vitesse angulaire du retournement, et s'il aboutit.
+function Tests.flip(v, p)
+    local roll = p.roll or 180.0
+    local amp = p.amp or 0.0
+    local seconds = p.seconds or 6.0
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    settle(v)
+    local pos = GetEntityCoords(v)
+    local hd = GetEntityHeading(v)
+    -- on pose le vehicule retourne, legerement au-dessus du sol, et on le laisse se poser
+    SetEntityCoordsNoOffset(v, pos.x, pos.y, pos.z + 2.0, false, false, false)
+    SetEntityRotation(v, 0.0, roll + 0.0, hd, 2, true)
+    SetEntityVelocity(v, 0.0, 0.0, 0.0)
+    Wait(1200)
+    local rot0 = GetEntityRotation(v, 2)
+
+    local res = { roll = roll, amp = amp, startRoll = r(rot0.y, 2),
+                  startWheels = wheelsOnGround(v) }
+    local tUp, maxRollRate = nil, 0.0
+    hold(v, function()
+        return { throttle = 0.0, brake = 0.0, steer = amp }
+    end, seconds, function(t)
+        local rv = GetEntityRotationVelocity(v)
+        maxRollRate = math.max(maxRollRate, math.abs(rv.y))
+        if not tUp and IsVehicleOnAllWheels(v) and t > 0.2 then
+            tUp = t
+            return true
+        end
+        return false
+    end, false)
+    res.rightedAt = r(tUp, 3)
+    res.maxRollRateDeg = r(math.deg(maxRollRate), 2)
+    local rot = GetEntityRotation(v, 2)
+    res.endRoll = r(rot.y, 2)
+    res.endWheels = wheelsOnGround(v)
+    repairNow(v)
+    settle(v)
+    return res
+end
+
+--- Perte d'adherence a basse vitesse. Deux phases : plein gaz + frein a l'arret avec braquage
+--- ALTERNE (le « magic movement » de burnout), puis depart arrete plein gaz. La seconde donne la
+--- forme de la perte d'adherence au demarrage, canal par canal (glissement de roue, traction,
+--- etat de cabrage).
+function Tests.burnout(v, p)
+    local hold1 = p.hold or 3.0
+    local launch = p.launch or 4.0
+    local steer = p.steer or 0.5
+    local phase = p.phase or 0.8
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    settle(v)
+    setLine(v)
+
+    local res = { hold = hold1, launch = launch, steer = steer }
+    -- phase 1 : gaz et frein ensemble, braquage alterne
+    local sign, maxYaw, maxWheelie, p0 = 1.0, 0.0, 0, GetEntityCoords(v)
+    local k = 0
+    hold(v, function(vv)
+        return { throttle = 1.0, brake = 1.0, steer = steer * sign }
+    end, hold1, function(t)
+        if t >= (k + 1) * phase then
+            k = k + 1
+            sign = -sign
+        end
+        maxYaw = math.max(maxYaw, math.abs(math.deg(GetEntityRotationVelocity(v).z)))
+        local w = GetVehicleWheelieState and GetVehicleWheelieState(v) or 0
+        maxWheelie = math.max(maxWheelie, w or 0)
+        return false
+    end, false)
+    res.burnoutYawMax = r(maxYaw, 2)
+    res.burnoutWheelieMax = maxWheelie
+    res.burnoutDrift = r(#(GetEntityCoords(v) - p0), 3)
+    res.burnoutSpeed = r(speedKmh(v), 2)
+
+    -- phase 2 : depart arrete plein gaz, volant droit
+    settle(v)
+    setLine(v)
+    local p1 = GetEntityCoords(v)
+    local maxSlip, maxW2 = 0.0, 0
+    hold(v, { throttle = 1.0 }, launch, function()
+        local vf = math.abs(fwdSpeed(v))
+        for i = 0, 3 do
+            local ws = math.abs(GetVehicleWheelSpeed(v, i))
+            maxSlip = math.max(maxSlip, (ws - vf) / math.max(vf, 1.0))
+        end
+        local w = GetVehicleWheelieState and GetVehicleWheelieState(v) or 0
+        maxW2 = math.max(maxW2, w or 0)
+        return false
+    end, true)
+    res.launchSpeed = r(speedKmh(v), 2)
+    res.launchDistance = r(#(GetEntityCoords(v) - p1), 3)
+    res.launchMaxSlip = r(maxSlip, 4)
+    res.launchWheelieMax = maxW2
+    settle(v)
+    return res
+end
+
+--- Effet chiffre de la reduction d'adherence du jeu.
+---
+--- Un cercle a consigne et vitesse tenues, repete pour `SetVehicleReduceGrip` faux puis vrai, et
+--- pour chaque palier de `SetVehicleReduceGripLevel` (0 a 3). Le rapport des accelerations
+--- laterales tenues donne directement le facteur de chaque palier : c'est une constante que
+--- personne n'a publiee.
+---
+--- `reduce` = booleen, `level` = 0 a 3 (ou nil pour ne pas y toucher). Les natives sont sondees :
+--- absentes du build, l'essai le dit au lieu de rendre un resultat trompeur.
+function Tests.reducegrip(v, p)
+    local kmh = p.kmh or 50
+    local steer = p.steer or 0.7
+    local spin = p.spin or 5.0
+    local tail = p.tail or 1.5
+    local reduce = p.reduce and true or false
+    local level = p.level
+
+    local fnReduce = _G['SetVehicleReduceGrip']
+    local fnLevel = _G['SetVehicleReduceGripLevel']
+    local res = { kmh = kmh, steer = steer, reduce = reduce, level = level,
+                  hasReduce = (type(fnReduce) == 'function'),
+                  hasLevel = (type(fnLevel) == 'function') }
+
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    -- on pose l'etat AVANT de rouler, et on le repose a chaque image : certaines ressources ou le
+    -- jeu lui-meme peuvent le remettre a zero
+    local function apply()
+        if fnReduce then pcall(fnReduce, v, reduce) end
+        if fnLevel and level then pcall(fnLevel, v, level) end
+    end
+    apply()
+    settle(v)
+    setLine(v)
+    hold(v, { throttle = 1.0 }, 40, function()
+        apply()
+        return speedKmh(v) >= kmh
+    end, true)
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        apply()
+        return { throttle = th, brake = br }
+    end, 1.0, nil, true)
+
+    res.entrySpeed = r(speedKmh(v), 2)
+    local n, slat, skmh, syaw, sbeta = 0, 0.0, 0.0, 0.0, 0.0
+    local prevLat, prevT = nil, nil
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        apply()
+        return { throttle = th, brake = br, steer = steer }
+    end, spin, function(t)
+        if t < spin - tail then return false end
+        local sv = GetEntitySpeedVector(v, true)
+        local wz = GetEntityRotationVelocity(v).z
+        local now = GetGameTimer()
+        local lat
+        if prevLat and prevT and now > prevT then
+            lat = math.abs((sv.x - prevLat) / ((now - prevT) / 1000.0) - wz * sv.y) / 9.81
+        else
+            lat = math.abs(wz * sv.y) / 9.81
+        end
+        prevLat, prevT = sv.x, now
+        n = n + 1
+        slat = slat + lat
+        skmh = skmh + speedKmh(v)
+        syaw = syaw + math.abs(math.deg(wz))
+        if math.abs(sv.y) > 2 then
+            sbeta = sbeta + math.abs(math.deg(math.atan(sv.x, math.abs(sv.y))))
+        end
+        return false
+    end, false)
+    if n > 0 then
+        res.plateau = { n = n, latG = r(slat / n, 4), kmh = r(skmh / n, 2),
+                        yawRate = r(syaw / n, 2), beta = r(sbeta / n, 3) }
+        local vms = (skmh / n) / 3.6
+        local yr = math.rad(syaw / n)
+        if yr > 1e-4 then res.plateau.radius = r(vms / yr, 3) end
+    end
+    -- on remet l'etat neutre, sinon l'essai suivant herite de la reduction
+    if fnReduce then pcall(fnReduce, v, false) end
+    if fnLevel then pcall(fnLevel, v, 0) end
+    settle(v)
+    return res
+end
+
+--- Frein a main en entree de virage.
+---
+--- Braquage pose, puis frein a main une seconde. On regarde si le fondu de braquage est relache
+--- (angle de roue par roue), le lacet, et le glissement longitudinal des roues ARRIERE.
+function Tests.handbrake_corner(v, p)
+    local kmh = p.kmh or 40
+    local steer = p.steer or 0.5
+    local before = p.before or 1.0
+    local pull = p.pull or 1.0
+    local after = p.after or 1.5
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    settle(v)
+    setLine(v)
+    hold(v, { throttle = 1.0 }, 40, function() return speedKmh(v) >= kmh end, true)
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br }
+    end, 0.8, nil, true)
+
+    local res = { kmh = kmh, steer = steer, entrySpeed = r(speedKmh(v), 2) }
+
+    local function mesure(nom, duree, hb)
+        local n, sw, syaw, sbeta, skr = 0, 0.0, 0.0, 0.0, 0.0
+        local maxYaw = 0.0
+        hold(v, function()
+            local th, br = cruise(v, kmh)
+            return { throttle = hb and 0.0 or th, brake = 0.0, steer = steer, handbrake = hb }
+        end, duree, function()
+            local sv = GetEntitySpeedVector(v, true)
+            local wz = GetEntityRotationVelocity(v).z
+            n = n + 1
+            sw = sw + math.abs(0.5 * (GetVehicleWheelSteeringAngle(v, 0)
+                                    + GetVehicleWheelSteeringAngle(v, 1)))
+            syaw = syaw + math.abs(math.deg(wz))
+            maxYaw = math.max(maxYaw, math.abs(math.deg(wz)))
+            if math.abs(sv.y) > 2 then
+                sbeta = sbeta + math.abs(math.deg(math.atan(sv.x, math.abs(sv.y))))
+            end
+            -- glissement longitudinal des roues ARRIERE (2 et 3)
+            local vf = math.abs(sv.y)
+            for i = 2, 3 do
+                skr = skr + (math.abs(GetVehicleWheelSpeed(v, i)) - vf) / math.max(vf, 1.0)
+            end
+            return false
+        end, false)
+        if n > 0 then
+            res[nom] = { n = n, wheelDeg = r(math.deg(sw / n), 3), yawRate = r(syaw / n, 2),
+                         yawMax = r(maxYaw, 2), beta = r(sbeta / n, 3),
+                         kappaRear = r(skr / (2 * n), 4), kmh = r(speedKmh(v), 2),
+                         hbOn = (_G['GetVehicleHandbrake'] and GetVehicleHandbrake(v)) and 1 or 0 }
+        end
+    end
+
+    mesure('avant', before, false)
+    mesure('pendant', pull, true)
+    mesure('apres', after, false)
+    settle(v)
+    return res
+end
+
+--- Surfaces : acceleration et plateau sur un sol donne, a comparer au bitume.
+---
+--- Le materiau est lu PAR ROUE a chaque image (`w*mat`), donc l'analyse hors jeu peut rejeter les
+--- images ou le vehicule n'etait pas entierement sur la surface visee. Le plateau et la
+--- deceleration en roue libre separent un eventuel plafond de vitesse d'une simple trainee.
+function Tests.offroad(v, p)
+    local full = p.full or 20.0
+    local coast = p.coast or 8.0
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    settle(v)
+    setLine(v)
+
+    local res = { full = full, coast = coast }
+    local mats, nm = {}, 0
+    local vmax, marks = 0.0, {}
+    local p0 = GetEntityCoords(v)
+    hold(v, { throttle = 1.0 }, full, function(t)
+        local k = speedKmh(v)
+        vmax = math.max(vmax, k)
+        for i = 0, nWheels - 1 do
+            local m = GetVehicleWheelSurfaceMaterial(v, i)
+            mats[m] = (mats[m] or 0) + 1
+            nm = nm + 1
+        end
+        for _, seuil in ipairs({ 30, 50, 70, 90, 110 }) do
+            if not marks[seuil] and k >= seuil then
+                marks[seuil] = r(t, 3)
+            end
+        end
+        return false
+    end, true)
+    res.vmax = r(vmax, 2)
+    res.marks = marks
+    res.distance = r(#(GetEntityCoords(v) - p0), 2)
+    local part = {}
+    for m, c in pairs(mats) do part[tostring(m)] = r(c / math.max(nm, 1), 4) end
+    res.materials = part
+
+    -- roue libre : la deceleration separe la trainee de surface d'un plafond
+    local p1 = GetEntityCoords(v)
+    local v0 = speedKmh(v)
+    hold(v, {}, coast, nil, true)
+    res.coastFrom = r(v0, 2)
+    res.coastTo = r(speedKmh(v), 2)
+    res.coastDistance = r(#(GetEntityCoords(v) - p1), 2)
+    res.coastDecelG = r((v0 - speedKmh(v)) / 3.6 / coast / 9.81, 4)
+    settle(v)
+    return res
+end
+
+--- La puissance est-elle coupee quand le vehicule glisse ?
+---
+--- Deux phases a plein gaz et au MEME rapport : une en ligne droite, une en glisse stabilisee
+--- (braquage tenu, frein a main bref pour amorcer). On compare la puissance de roue et le regime.
+--- Une puissance de roue qui chute SANS chute de regime prouverait la coupure.
+function Tests.slidepower(v, p)
+    local kmh = p.kmh or 60
+    local steer = p.steer or 0.8
+    local straight = p.straight or 2.0
+    local slide = p.slide or 3.0
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h or 0.0)
+    end
+    settle(v)
+    setLine(v)
+    hold(v, { throttle = 1.0 }, 40, function() return speedKmh(v) >= kmh end, true)
+
+    local res = { kmh = kmh, steer = steer }
+    local function mesure(nom, duree, inputs, each)
+        local n, spow, srpm, sgear, skmh, sbeta = 0, 0.0, 0.0, 0, 0.0, 0.0
+        hold(v, inputs, duree, function(t)
+            if each and each(t) then return true end
+            local sv = GetEntitySpeedVector(v, true)
+            n = n + 1
+            local pw = 0.0
+            for i = 0, nWheels - 1 do pw = pw + math.abs(GetVehicleWheelPower(v, i)) end
+            spow = spow + pw
+            srpm = srpm + GetVehicleCurrentRpm(v)
+            sgear = math.max(sgear, GetVehicleCurrentGear(v))
+            skmh = skmh + speedKmh(v)
+            if math.abs(sv.y) > 2 then
+                sbeta = sbeta + math.abs(math.deg(math.atan(sv.x, math.abs(sv.y))))
+            end
+            return false
+        end, false)
+        if n > 0 then
+            res[nom] = { n = n, power = r(spow / n, 4), rpm = r(srpm / n, 4), gear = sgear,
+                         kmh = r(skmh / n, 2), beta = r(sbeta / n, 3) }
+        end
+    end
+
+    -- 1) ligne droite, plein gaz
+    mesure('droite', straight, { throttle = 1.0 })
+    -- 2) amorcage de la glisse : braquage + frein a main bref
+    hold(v, { throttle = 0.0, steer = steer, handbrake = true }, 0.6, nil, false)
+    -- 3) glisse tenue, plein gaz, meme rapport
+    mesure('glisse', slide, { throttle = 1.0, steer = steer })
+    settle(v)
+    return res
+end
+
 function Tests.slalom(v, p)
     local kmh = p.kmh or 60
     local amp = p.amplitude or 0.5
@@ -1405,6 +1969,34 @@ local function runTest(label, testName, params)
     abortFlag = false
     running = true
 
+    -- sondage des natives optionnelles AVANT toute lecture : l'existence du symbole ne garantit
+    -- pas qu'elles repondent sur ce build (piege 4 du rapport)
+    probeAll(v)
+
+    -- etagement : une fois, au debut. Marche arriere negative. Debloque les boites de 7 rapports
+    -- et plus, que `GetVehicleHighGear` seul ne decrit pas.
+    local ratios = nil
+    if N.gearRatio then
+        ratios = {}
+        for g = 0, math.min(10, GetVehicleHighGear(v)) do
+            ratios[#ratios + 1] = r(fin(N.gearRatio(v, g), 'gearRatio'), 5)
+        end
+    end
+
+    -- geometrie et flags de roue : une fois. Taille nulle pour les roues d'origine.
+    local wheelInfo = nil
+    if N.tyreCollider or N.rimCollider or N.wheelSize or N.wheelFlags then
+        wheelInfo = { columns = { 'tyreCollider', 'rimCollider', 'flags' }, rows = {} }
+        for i = 0, nWheels - 1 do
+            wheelInfo.rows[#wheelInfo.rows + 1] = {
+                r(opt(N.tyreCollider, 'tyreCollider', v, i), 5),
+                r(opt(N.rimCollider, 'rimCollider', v, i), 5),
+                N.wheelFlags and N.wheelFlags(v, i) or 0,
+            }
+        end
+        wheelInfo.size = r(opt(N.wheelSize, 'wheelSize', v), 5)
+    end
+
     local meta = {
         test = testName,
         params = params,
@@ -1413,7 +2005,11 @@ local function runTest(label, testName, params)
         plate = GetVehicleNumberPlateText(v),
         wheels = GetVehicleNumberOfWheels(v),
         handling = readHandling(v),
+        gearRatios = ratios,
+        wheelInfo = wheelInfo,
+        -- Legacy et Enhanced peuvent differer : le build fait partie de la mesure (piege 6)
         gameBuild = GetGameBuildNumber and GetGameBuildNumber() or 0,
+        gameName = GetConvar and GetConvar('gamename', '?') or '?',
         columns = COLUMNS,
         startedAt = GetGameTimer(),
     }
@@ -1435,11 +2031,39 @@ local function runTest(label, testName, params)
 
     local ok, res = pcall(fn, v, params or {})
     running = false
-    cur.throttle, cur.brake, cur.handbrake, cur.steer = 0.0, 0.0, false, 0.0
+    cur.throttle, cur.brake, cur.handbrake, cur.steer, cur.pitch = 0.0, 0.0, false, 0.0, 0.0
     flush(true)
 
     if not ok then return nil, tostring(res) end
     if abortFlag then return nil, 'essai interrompu' end
+
+    -- compte rendu d'instrument : ce qui manquait sur ce build, et les valeurs absurdes rejetees.
+    -- Un compteur non nul invalide le CANAL, pas l'essai.
+    if type(res) == 'table' then
+        local absentes, nNat = {}, 0
+        for name, why in pairs(missing) do
+            absentes[name] = why
+            nNat = nNat + 1
+        end
+        local nan, nNan = {}, 0
+        for canal, n in pairs(nanCount) do
+            nan[canal] = n
+            nNan = nNan + 1
+        end
+        res.instrument = {
+            nativesAbsentes = (nNat > 0) and absentes or nil,
+            nanRejetes = (nNan > 0) and nan or nil,
+            -- Detecte une ressource du serveur qui fausse la mesure (piege 5). ATTENTION, les deux
+            -- natives n'ont PAS le meme neutre, mesure sur ce build : `CheatPowerIncrease` est un
+            -- multiplicateur, donc 1,0 au neutre ; `TopSpeedModifier` rend -1,0 quand rien n'est pose.
+            powerIncrease = r(opt(N.powerInc, nil, v), 4),
+            topSpeedModifier = r(opt(N.topMod, nil, v), 4),
+            engineHealth = r(GetVehicleEngineHealth(v), 1),
+            neutre = (math.abs(opt(N.powerInc, nil, v) - 1.0) < 1e-3)
+                and (opt(N.topMod, nil, v) <= -0.999)
+                and (GetVehicleEngineHealth(v) > 995.0),
+        }
+    end
     return res
 end
 
@@ -1457,7 +2081,7 @@ end)
 RegisterNetEvent('vt:stop', function()
     abortFlag = true
     running = false
-    cur.throttle, cur.brake, cur.handbrake, cur.steer = 0.0, 0.0, false, 0.0
+    cur.throttle, cur.brake, cur.handbrake, cur.steer, cur.pitch = 0.0, 0.0, false, 0.0, 0.0
 end)
 
 -- ------------------------------------------------------- sondage de terrain

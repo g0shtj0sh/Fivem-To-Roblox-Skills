@@ -212,6 +212,8 @@ SetHttpHandler(function(req, res)
             'accel', 'brake', 'handbrake', 'corner', 'reverse', 'curb', 'hill',
             'coast', 'stepsteer', 'steerfade', 'slalom', 'handling', 'raw', 'surfscan', 'roadscan', 'heightprobe',
             'modelprobe', 'buildstep', 'clearstep', 'hillprobe', 'skidpad', 'gridprobe', 'thrust',
+            'airtime', 'flip', 'burnout', 'reducegrip', 'handbrake_corner',
+            'offroad', 'slidepower',
         })
     end
 
