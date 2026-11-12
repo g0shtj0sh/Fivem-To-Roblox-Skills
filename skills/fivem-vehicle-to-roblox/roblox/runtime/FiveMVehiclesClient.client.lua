@@ -15,6 +15,8 @@ local Input = require(folder:WaitForChild("VehicleInput"))
 local Drive = require(folder:WaitForChild("VehicleDrive"))
 local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
 local Dashboard = require(folder:WaitForChild("VehicleDashboard"))
+local Pose = require(folder:WaitForChild("VehiclePose"))
+Pose.Start() -- posture des occupants de tous les véhicules (sur chaque client), caméra de l'occupant local
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -89,18 +91,21 @@ Input.Action.Event:Connect(function(name, value)
 	-- "GearUp", "GearDown", "LookBack"... : à écouter par ton moteur physique via Input.Action
 end)
 
--- Invites « Conduire / Monter » : le serveur tient la vérité dans l'attribut Available ; on masque
--- localement celles du véhicule où l'on est assis (sinon F déclencherait aussi une invite).
-local function enterPrompts(model)
+-- Invites du véhicule où l'on est assis : toutes masquées localement (« Conduire / Monter », et aussi
+-- portières, capot, coffre : à bord, GTA n'en montre aucune, et l'invite du capot flottait devant le pare-brise
+-- à la première personne). Le serveur tient la vérité : Available pour monter, Flipped pour la remise sur roues ;
+-- les autres invites reprennent l'état qu'elles avaient.
+local promptConns = {}
+local promptWas = setmetatable({}, { __mode = "k" })
+local function vehiclePrompts(model)
 	local out = {}
 	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("ProximityPrompt") and d:GetAttribute("SeatName") then
+		if d:IsA("ProximityPrompt") then
 			table.insert(out, d)
 		end
 	end
 	return out
 end
-local promptConns = {}
 local function setPromptsHidden(model, hidden)
 	for _, c in ipairs(promptConns) do
 		c:Disconnect()
@@ -109,9 +114,23 @@ local function setPromptsHidden(model, hidden)
 	if not model then
 		return
 	end
-	for _, prompt in ipairs(enterPrompts(model)) do
+	for _, prompt in ipairs(vehiclePrompts(model)) do
+		if hidden and promptWas[prompt] == nil then
+			promptWas[prompt] = prompt.Enabled
+		end
 		local function apply()
-			prompt.Enabled = (not hidden) and prompt:GetAttribute("Available") ~= false
+			if hidden then
+				prompt.Enabled = false
+			elseif prompt:GetAttribute("SeatName") then
+				prompt.Enabled = prompt:GetAttribute("Available") ~= false
+			elseif prompt:GetAttribute("Recover") then
+				prompt.Enabled = model:GetAttribute("Flipped") == true
+			elseif promptWas[prompt] ~= nil then
+				prompt.Enabled = promptWas[prompt]
+			end
+			if not hidden then
+				promptWas[prompt] = nil
+			end
 		end
 		apply()
 		if hidden then

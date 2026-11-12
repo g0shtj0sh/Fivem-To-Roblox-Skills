@@ -117,10 +117,12 @@ local function isAccessoryPart(p)
 end
 
 -- Points du corps (mètres, repère du véhicule) : 27 par pièce visible, sans les accessoires
-function Fit.Sample(char, root, spm)
+-- `skip` : noms de pièces à ignorer (mains posées sur le volant par VehiclePose)
+function Fit.Sample(char, root, spm, skip)
 	local pts = {}
 	for _, p in ipairs(char:GetDescendants()) do
-		if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" and p.Transparency < 0.99 and not isAccessoryPart(p) then
+		if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" and p.Transparency < 0.99 and not isAccessoryPart(p)
+			and not (skip and skip[p.Name]) then
 			partPoints(p, root.CFrame, spm, pts)
 		end
 	end
@@ -174,16 +176,20 @@ end
 
 -- Réglage (relatif à l'état actuel) qui ramène tous les points dans l'habitacle.
 -- Renvoie k, kw, lift (m, + = plus haut), shift (m, + = plus en arrière), ok.
-function Fit.Solve(g, pts, anchor, minK, minW)
+-- `fixed` : le bassin est tenu ailleurs (VehiclePose le pose sur l'os du siège) ; seules les échelles comptent,
+-- réduites autour de `anchor` (le point de hanche).
+function Fit.Solve(g, pts, anchor, minK, minW, fixed)
 	minK = minK or Fit.MinScale
 	minW = minW or Fit.MinWidth
+	local shifts = fixed and { 0 } or Fit.Shifts
+	local liftMin, liftMax = (fixed and 0 or Fit.LiftMin), (fixed and 0 or Fit.LiftMax)
 	local k = 1
 	while k >= minK - 1e-6 do
 		local kw = 1
 		while kw >= minW - 1e-6 do
-			for _, shift in ipairs(Fit.Shifts) do
-				local lift = Fit.LiftMin
-				while lift <= Fit.LiftMax + 1e-6 do
+			for _, shift in ipairs(shifts) do
+				local lift = liftMin
+				while lift <= liftMax + 1e-6 do
 					if allGood(g, pts, anchor, k * kw, k, k, lift, shift) then
 						return k, kw, lift, shift, true
 					end
@@ -360,9 +366,12 @@ function Fit.RunClient(model, seat, remote)
 			return
 		end
 		passes = pass
-		local pts = Fit.Sample(char, root, g.spm)
+		-- posture de conduite (VehiclePose) : bassin sur l'os du siège, on ne cherche que les échelles
+		local hip = Fit.PoseHip and Fit.PoseHip(model, seat)
+		local pts = Fit.Sample(char, root, g.spm, hip and Fit.PoseSkip or nil)
 		bad = Fit.CountBad(g, pts)
-		local rk, rkw, lift, shift, ok = Fit.Solve(g, pts, Fit.Anchor(seat, root, g.spm), Fit.MinScale / k, Fit.MinWidth / kw)
+		local rk, rkw, lift, shift, ok =
+			Fit.Solve(g, pts, hip or Fit.Anchor(seat, root, g.spm), Fit.MinScale / k, Fit.MinWidth / kw, hip ~= nil)
 		solved = ok
 		if bad == 0 and rk >= 0.999 and rkw >= 0.999 and math.abs(lift) < Fit.LiftStep * 0.5 and shift == 0 then
 			break -- dedans, et rien de plus grand ni de plus bas possible
@@ -375,7 +384,8 @@ function Fit.RunClient(model, seat, remote)
 	end
 	local hidden = 0
 	if hum.SeatPart == seat and root then
-		bad = Fit.CountBad(g, Fit.Sample(char, root, g.spm)) -- état final, après la dernière passe
+		local hipF = Fit.PoseHip and Fit.PoseHip(model, seat)
+		bad = Fit.CountBad(g, Fit.Sample(char, root, g.spm, hipF and Fit.PoseSkip or nil)) -- état final
 		local acc = Fit.OutsideAccessories(g, char, root)
 		hidden = #acc
 		if hidden > 0 then

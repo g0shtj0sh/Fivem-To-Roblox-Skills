@@ -152,9 +152,23 @@ local function refreshPrompts(model)
 	end
 end
 
+-- Sièges : pas d'assise au simple contact. Un Seat Roblox assoit qui le touche ; portière ouverte, le joueur
+-- qui frôle le siège se retrouvait assis sans avoir appuyé sur F (signalé sur le m422, 2026-11-12). Seul
+-- Access.Enter (invite F) assoit, par Seat:Sit, qui ne dépend pas du contact. Rattrape les véhicules
+-- installés avant ce correctif (le Setup pose déjà CanTouch = false).
+local function noTouchSeats(model)
+	local seats = model:FindFirstChild("Seats")
+	for _, s in ipairs(seats and seats:GetChildren() or {}) do
+		if s:IsA("Seat") or s:IsA("VehicleSeat") then
+			s.CanTouch = false
+		end
+	end
+end
+
 local function setupVehicle(model)
 	Access.TagCollision(model)
 	Access.Watch(model)
+	noTouchSeats(model)
 	local root = model.PrimaryPart
 	if root then
 		model:SetAttribute("Parked", root.Anchored)

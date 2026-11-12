@@ -230,6 +230,15 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   descente. `SeatFit = false` sur le modèle pour désactiver ; `--no-seat-fit` à la conversion. Habitacle
   ouvert (cabriolet) : pas d'adaptation. La posture assise reste celle de Roblox (tibias verticaux) : dans un
   coupé bas, le corps est fortement réduit (mesures : `docs/seat-fit-tests.md`).
+- **Posture de conduite et première personne** (`VehiclePose`, chaque client, automatique) : comme GTA, la
+  posture dépend du `layout` du véhicule (`CONFIG.Layout` ; `LAYOUT_LOW` : dossier incliné, jambes allongées) et
+  le bassin est posé sur l'os du siège ; jambes vers le plancher devant le siège (grille d'habitacle), mains sur
+  la jante du volant (elles suivent sa rotation jusqu'à ±100 °), mains sur les cuisses pour les passagers. La
+  caméra de l'occupant local est à `PovCameraOffset` de l'os du siège (`Seats[i].PovOffset`), et à la
+  première personne restent visibles avant-bras, mains et jambes. Articulations `Motor6D` et
+  `AnimationConstraint` (avatars aux articulations « mises à jour ») ; R6 : angles fixes, non vérifié.
+  `DrivingPose = false` sur le véhicule pour garder la posture de Roblox. On ne s'assoit jamais en touchant un
+  siège (`CanTouch = false`) : seulement par l'invite F ; à bord, les invites du véhicule sont masquées.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 

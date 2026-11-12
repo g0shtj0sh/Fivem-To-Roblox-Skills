@@ -618,6 +618,7 @@ for i, s in ipairs(CONFIG.Seats or {}) do
 	seat.Size = Vector3.new(1.6, 0.4, 1.6)
 	seat.Transparency = 1
 	seat.CanCollide = false
+	seat.CanTouch = false -- on monte par l'invite F (Seat:Sit), jamais en frôlant le siège portière ouverte
 	seat.Massless = true
 	seat.Anchored = false
 	seat.CFrame = VF.Rotation + L2W(s.Position) - Vector3.new(0, 0.3 * spm, 0)
@@ -873,6 +874,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleLights", SOURCES.VehicleLights)
 	upsert(folder, "ModuleScript", "VehicleCollision", SOURCES.VehicleCollision)
 	upsert(folder, "ModuleScript", "VehicleDashboard", SOURCES.VehicleDashboard)
+	upsert(folder, "ModuleScript", "VehiclePose", SOURCES.VehiclePose)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()

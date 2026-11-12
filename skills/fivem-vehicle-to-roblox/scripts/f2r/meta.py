@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .util import (Report, argb_hex_to_rgb, element_to_obj, parse_xml_lenient,
-                   xfloat, xval)
+                   xfloat, xval, xvec)
 
 # Types de mods GTA (eVehicleModType) -> nom lisible utilisé dans Roblox
 MOD_SLOT_NAMES = {
@@ -68,6 +68,10 @@ def parse_vehicles(paths, report: Report) -> dict[str, dict]:
                 "requiredExtras": (xval(item, "requiredExtras") or "").split(),
                 "extraIncludes": [e.text for e in item.findall("extraIncludes/Item") if e.text],
                 "dashboardType": xval(item, "dashboardType", ""),
+                # caméra à la première personne, relative à l'os du siège (GTA : x droite, y avant, z haut, m)
+                "povCameraOffset": xvec(item, "PovCameraOffset", (0.0, -0.225, 0.585))[:3],
+                "povPassengerCameraOffset": xvec(item, "PovPassengerCameraOffset", (0.0, 0.0, 0.0))[:3],
+                "povRearPassengerCameraOffset": xvec(item, "PovRearPassengerCameraOffset", (0.0, 0.0, 0.0))[:3],
                 "dependentTxds": [],
                 "source": p.name,
             }

@@ -95,3 +95,22 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
   côté roue −0,13 à −0,16 m ; vu de côté l'amortisseur reste accroché à la caisse. Limite : une pièce rigide ne
   peut pas à la fois rester accrochée et suivre exactement le moyeu : vu de dessous, l'étrier s'écarte de
   quelques cm du porte-moyeu à pleine détente (bras courts de l'avant : ~29° de rotation).
+
+## Assis tout seul en ouvrant la portière ; pieds sous le siège ; vue de loin à la première personne
+
+- **Symptômes** (m422, 2026-11-12, captures de l'utilisateur) : portière ouverte, le joueur qui frôle le siège
+  s'assoit sans appuyer sur F ; assis, les pieds passent sous le siège ; à la première personne, on voit le
+  volant de loin, au-dessus des sièges, et l'invite du capot flotte devant le pare-brise.
+- **Causes** : (1) un `Seat` Roblox assoit quiconque le touche ; (2) la posture assise de Roblox (buste droit,
+  tibias verticaux) ne tient pas dans un coupé bas, et l'adaptation au siège réduisait le corps à 64 % ; (3) la
+  caméra suit `HumanoidRootPart` + 1,5 stud, pas l'œil du conducteur ; (4) les invites du véhicule restaient
+  actives à bord.
+- **Corrections** : `CanTouch = false` sur les sièges (Setup, et au démarrage du serveur pour les véhicules
+  déjà installés) ; `VehiclePose` (posture GTA par layout, cinématique inverse, caméra à `PovCameraOffset`) ;
+  invites masquées pour les occupants. Le convertisseur exporte `Layout` et `Seats[i].PovOffset` ; un
+  véhicule converti avant peut les recevoir à la main dans son `VehicleConfig`.
+- **Piège** : avatar aux articulations `AnimationConstraint` (et non `Motor6D`) : une posture qui ne cherche
+  que des `Motor6D` ne fait rien, sans erreur.
+- **Contrôle** (Play, m422, avatar R15 large) : adaptation au siège ok à 81 % (largeur 49 %) au lieu de 64 % ;
+  tête à 2 cm du point d'œil GTA ; mains sur la jante, qui suivent un braquage de 75 ° ; caméra à
+  (−0,37 ; 0,64 ; 0,23) m pour un œil GTA à (−0,37 ; 0,614 ; 0,236) ; à la descente, caméra et invites rendues.

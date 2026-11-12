@@ -552,10 +552,21 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
                 "RotationSpeed": round(max(2.0, min(20.0, float(rot.get("speed", 2.0)) * 3)), 3),
             }
 
+    # Caméra à la première personne (GTA, vehicles.meta) : PovCameraOffset est relatif à l'os du siège du
+    # conducteur ; les passagers avant / arrière l'ajoutent à leur décalage propre (Pov*PassengerCameraOffset).
+    pov = vinfo.get("povCameraOffset") or [0.0, -0.225, 0.585]
+    pov_front = vinfo.get("povPassengerCameraOffset") or [0.0, 0.0, 0.0]
+    pov_rear = vinfo.get("povRearPassengerCameraOffset") or [0.0, 0.0, 0.0]
+
+    def _pov(sb: str) -> list[float]:
+        extra = [0.0, 0.0, 0.0] if sb == "seat_dside_f" else (pov_front if sb.endswith("_f") else pov_rear)
+        return meta._gta_vec_to_local([pov[i] + extra[i] for i in range(3)])
+
     seats = []
     for sb in SEAT_BONES:
         if sb in bones:
-            seats.append({"Bone": sb, "Position": bones[sb]["Position"], "Driver": sb == "seat_dside_f"})
+            seats.append({"Bone": sb, "Position": bones[sb]["Position"], "Driver": sb == "seat_dside_f",
+                          "PovOffset": _pov(sb)})
     if not seats:
         seats.append({"Bone": "guess", "Driver": True,
                       "Position": r4([lo[0] * 0.35, (lo[1] + hi[1]) / 2 - 0.1, (lo[2] + hi[2]) / 2])})
@@ -594,7 +605,8 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Make": vinfo.get("make", ""),
         "Class": vinfo.get("class", ""),
         "Type": vinfo.get("type", ""),
-        "DashboardType": vinfo.get("dashboardType", ""),  # VDT_* de vehicles.meta (référence, cf. VehicleDashboard)
+        "DashboardType": vinfo.get("dashboardType", ""),
+        "Layout": vinfo.get("layout", ""),  # LAYOUT_LOW… : posture assise (VehiclePose)  # VDT_* de vehicles.meta (référence, cf. VehicleDashboard)
         "ConverterVersion": __version__,
         "StudsPerMeter": args.studs_per_meter,
         "ProbePart": ref[0],
