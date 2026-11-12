@@ -211,7 +211,7 @@ SetHttpHandler(function(req, res)
         return json_response(res, {
             'accel', 'brake', 'handbrake', 'corner', 'reverse', 'curb', 'hill',
             'coast', 'stepsteer', 'steerfade', 'slalom', 'handling', 'raw', 'surfscan', 'roadscan', 'heightprobe',
-            'modelprobe', 'buildstep', 'clearstep', 'hillprobe', 'skidpad', 'gridprobe',
+            'modelprobe', 'buildstep', 'clearstep', 'hillprobe', 'skidpad', 'gridprobe', 'thrust',
         })
     end
 

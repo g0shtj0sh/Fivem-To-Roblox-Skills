@@ -1155,28 +1155,55 @@ longtemps). Le ressort, lui, garde sa force à vitesse nulle. `KStick` = 200 par
 0,8 mm de déformation à 17 % de pente, et le décrochage vient à 9,5 mm, ce qui est l'ordre de grandeur d'un
 flanc de pneu. `CStick` = 28 l'amortit.
 
-### Ce qui reste : GTA pousse plus fort en côte que sur le plat
+### GTA pousse plus fort en côte — mesuré, triplement vérifié, et non activé
 
-Le lancement reste à **−10,7 %** en vitesse finale (40,3 contre 45,1 km/h) pour **+6,4 %** en distance
-(34,6 contre 32,5 m) : le moteur accélère plus fort au début et moins à la fin. En cherchant pourquoi, une
-mesure inattendue, prise sur les deux moteurs en **2ᵉ, à vitesse et régime égaux** :
+Le lancement restait à −10,7 % en vitesse finale pour +6,4 % en distance. En cherchant pourquoi, une mesure
+inattendue : relevée sur **1046 images à plein gaz en 2ᵉ**, 14 traces (accélérations à plat, côtes, et un
+essai [`thrust`](../../tools/fivem-telemetry/README.md) écrit pour ça, qui monte à vitesse **tenue** jusqu'à
+une pente donnée puis met plein gaz sur une fenêtre courte, pour que ni la vitesse ni la pente ne bougent) :
 
-| | Sur le plat | En pente (25 à 37 %) |
+```
+poussée = 0,400 g + 0,537 × g × sin(pente)        écart 0,081 g
+```
+
+| Pente | Images | Poussée mesurée |
 |---|---|---|
-| **GTA** | 0,36 à 0,38 g | **0,47 g** |
-| moteur Roblox | 0,357 g | 0,38 g |
+| plat (< 5 %) | 534 | **0,398 g** |
+| 15 à 25 % | 138 | 0,596 g |
+| 25 à 35 % | 313 | 0,516 g |
+| > 35 % | 61 | 0,647 g |
 
-Les deux concordent sur le plat. **GTA produit donc ≈ 27 % de poussée en plus dans la pente**, à vitesse,
-rapport et régime identiques. Le moteur, lui, en produit autant dans les deux cas — ce qui est le
-comportement attendu d'un `fDriveForce` appliqué comme une accélération. Ce n'est donc pas un manque de
-poussée du moteur mais un apport de GTA, qui n'est pas dans le modèle.
+À plat, les **0,400 g sont exactement `fInitialDriveForce` × rapport × g** (0,2 × 2,0 × 9,81), et la valeur
+est constante de 0,50 à 0,90 de régime. En pente, GTA récupère **54 % de la résistance de la pente**. Une
+poussée constante donne 0,134 g d'écart, la loi 0,081 g, et le résidu ne corrèle plus ni avec la vitesse
+(+0,09) ni avec le régime (+0,08).
 
-Deux pistes, non tranchées : une aide en côte (beaucoup de jeux en ont une), ou un effet du report de charge
-sur un essieu moteur limité par l'adhérence — mais à 0,37 g pour `fTractionCurveMax` = 1,90, la limite
-d'adhérence est loin.
+**Trois vérifications, parce que le résultat est surprenant.** La pente lue sur la **trajectoire**
+(`dz` / distance horizontale), celle lue sur l'**assiette de caisse**, et celle relevée au **rayon sans
+véhicule** (`gridprobe` : 18,1 / 23,5 / 29,5 / 34,6 % le long de la montée) concordent. Et le **régime est
+identique** à plat et en pente à vitesse égale (0,542 contre 0,543 à 45 km/h) : c'est donc bien le même
+rapport, pas une rétrogradation déguisée.
 
-**L'essai qui trancherait** : tenir 40 km/h en 2ᵉ sur des pentes de 0, 10, 20 et 30 % et relever la poussée
-à chacune. C'est une variante de `hill` à écrire, et elle demande FiveM.
+**Deux fausses pistes écartées en route.** D'abord j'ai cru que `pz` mesurait le rebond de caisse et non la
+route : une fenêtre de pente longue (±0,4 s, 9 m) ne change rien. Ensuite, des poussées impossibles
+(1,2 à 1,37 g, soit trois fois la force disponible) venaient d'**une seule trace**, `hill_essai`, un essai
+préliminaire hors campagne : écartée, le reste redevient cohérent.
+
+**Et une ambiguïté non levée** : `GetVehicleWheelPower`, sommée sur les quatre roues, vaut **0,388 à plat
+comme en pente**, identique à trois décimales. Si cette colonne était une force, elle prouverait que GTA
+n'ajoute rien et que mon bilan est faux. Mais 0,388 est aussi exactement ce qu'on attend d'une puissance
+**normalisée** à plein gaz à mi-régime, donc elle ne tranche pas. Le relevé au rayon, lui, tranche : la
+pente est bien celle que je croyais.
+
+**Pourquoi ce n'est pas activé.** `SlopeAssist` est dans le moteur avec la valeur mesurée en commentaire,
+mais à **0**. L'activer fait **patiner** le démarrage en côte : au banc, en 1ʳᵉ sur 17 % de pente, le régime
+passe de 0,26 à 0,79 à 13 km/h, la boîte monte en 2ᵉ puis redescend et pompe, et la distance de lancement
+tombe de 34,6 à 26,1 m. Un apport de 9 % de la poussée ne devrait pas suffire à déclencher ça :
+l'interaction avec la dynamique de rotation de roue (`IwRel` = 0,03, inertie très faible) n'est pas comprise.
+Livrer le réglage sans la comprendre remplacerait une erreur de 10 % par un défaut de comportement.
+
+C'est donc le point à reprendre : **comprendre pourquoi un apport de 9 % de poussée fait patiner la 1ʳᵉ**,
+puis réactiver `SlopeAssist` à 0,537.
 
 ### Et une différence d'embrayage, mesurée mais non corrigée
 

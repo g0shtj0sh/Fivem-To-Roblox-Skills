@@ -530,6 +530,62 @@ end
 
 --- Cote : monter, s'arreter dans la pente, frein a main 1,5 s, tout relacher 2 s,
 --- puis plein gaz 4 s.
+--- Poussee maximale a pente et vitesse imposees : monte a vitesse tenue jusqu'au seuil de
+--- pente, puis plein gaz sur une fenetre courte. Avec `minPitch` = 0 et un depart a plat, c'est
+--- la reference sur le plat, a la meme vitesse et au meme rapport.
+function Tests.thrust(v, p)
+    local kmh = p.kmh or 40
+    local minPitch = p.minPitch or 0.0
+    local window = p.window or 0.6
+    if p.start then
+        resetAt(v, p.start.x, p.start.y, p.start.z, p.start.h)
+    end
+    settle(v)
+    setLine(v)
+    -- mise en vitesse, puis tenue jusqu'au seuil de pente
+    local atteint = false
+    hold(v, function()
+        local th, br = cruise(v, kmh)
+        return { throttle = th, brake = br }
+    end, p.climbSeconds or 40, function()
+        if math.abs(GetEntityRotation(v, 2).x) >= minPitch
+            and math.abs(speedKmh(v) - kmh) < 3.0 then
+            atteint = true
+            return true
+        end
+        return false
+    end, true)
+
+    local res = {
+        kmh = kmh, minPitch = minPitch, window = window, reached = atteint,
+        entrySpeed = r(speedKmh(v), 2), entryPitch = r(GetEntityRotation(v, 2).x, 3),
+        entryGear = GetVehicleCurrentGear(v), entryRpm = r(GetVehicleCurrentRpm(v), 4),
+    }
+    local p0 = GetEntityCoords(v)
+    -- plein gaz, fenetre courte : la trace contient tout, l'analyse se fait hors jeu
+    local n, srpm, sgear = 0, 0.0, 0
+    hold(v, { throttle = 1.0 }, window, function()
+        n = n + 1
+        srpm = srpm + GetVehicleCurrentRpm(v)
+        sgear = math.max(sgear, GetVehicleCurrentGear(v))
+        return false
+    end, true)
+    local p1 = GetEntityCoords(v)
+    res.exitSpeed = r(speedKmh(v), 2)
+    res.exitPitch = r(GetEntityRotation(v, 2).x, 3)
+    res.gear = sgear
+    res.rpm = (n > 0) and r(srpm / n, 4) or nil
+    res.dist = r(#(p1 - p0), 3)
+    res.dz = r(p1.z - p0.z, 3)
+    -- pente de la TRAJECTOIRE sur la fenetre (ne depend pas de l'assiette)
+    local dh = math.sqrt((p1.x - p0.x) ^ 2 + (p1.y - p0.y) ^ 2)
+    res.slopePct = (dh > 0.5) and r(100.0 * (p1.z - p0.z) / dh, 3) or nil
+    -- acceleration moyenne sur la fenetre, le long de la pente
+    res.accel = r((res.exitSpeed - res.entrySpeed) / 3.6 / window, 4)
+    settle(v)
+    return res
+end
+
 function Tests.hill(v, p)
     local kmh = p.kmh or 20
     local minPitch = p.minPitch or 5

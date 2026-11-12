@@ -107,6 +107,28 @@ Dyn.Tuning = {
 	-- à la fois le 0-100 et la vitesse de pointe. À 0,03 les deux tombent ensemble (banc longitudinal).
 	KDrag = 2.1, -- multiplie le coefficient de traînée issu du chargement (DragCoeff × 1e-4), dont le facteur
 	-- n'était qu'une hypothèse. MESURÉ : plateau à 118,9 km/h en 4ᵉ (régime 0,806) pour fInitialDragCoeff = 8,0.
+	-- Apport de poussée EN PENTE. MESURÉ (2026-11-12) sur 1046 images à plein gaz en 2ᵉ, 14 traces
+	-- (accélérations à plat, côtes, et l'essai `thrust` à pente et vitesse imposées) :
+	--     poussée = 0,400 g + 0,537 × g × sin(pente)
+	-- soit, à plat, exactement `fInitialDriveForce` × rapport × g (0,2 × 2,0 × g = 0,40 g, constant de
+	-- 0,50 à 0,90 de régime sur 534 images), et en pente **54 % de la résistance de la pente récupérés**.
+	-- Écart 0,081 g contre 0,134 g pour une poussée constante.
+	-- Vérifié trois fois, parce que le résultat est surprenant : la pente lue sur la TRAJECTOIRE
+	-- (dz / distance horizontale), celle lue sur l'assiette de caisse, et celle relevée au RAYON sans
+	-- véhicule (18,1 / 23,5 / 29,5 / 34,6 % le long de la montée) concordent. Et le régime est identique
+	-- à plat et en pente à vitesse égale (0,542 contre 0,543 à 45 km/h), donc c'est bien le même rapport.
+	-- LIMITE : les essais en côte lient encore la pente à la vitesse (chaque trace a la sienne), donc les
+	-- résidus par tranche de pente gardent une structure de ±0,08 g. La valeur 0,54 est à affiner.
+	-- Jamais mesuré en DESCENTE : l'apport est donc borné à la montée (`max(0, sin)`).
+	-- Inactif si l'appelant ne fournit pas `ctx.slopeSin` : aucune régression pour le code existant.
+	-- NON ACTIVÉ (0 au lieu de la valeur mesurée 0,537), et c'est délibéré : l'activer fait PATINER le
+	-- démarrage en côte. Au banc, en 1ʳᵉ sur 17 % de pente, le régime passe de 0,26 à 0,79 à 13 km/h, la
+	-- boîte monte en 2ᵉ puis redescend et pompe, et la distance de lancement tombe de 34,6 à 26,1 m. Un
+	-- apport de 9 % de la poussée ne devrait pas suffire à déclencher ça : l'interaction avec la dynamique
+	-- de rotation de roue (`IwRel` = 0,03, inertie très faible) n'est pas comprise, et livrer le réglage
+	-- sans la comprendre remplacerait une erreur de 10 % par un défaut de comportement.
+	-- La mesure, elle, tient : voir ci-dessus. Mettre 0,537 pour la réactiver une fois le patinage compris.
+	SlopeAssist = 0, -- fraction de g·sin(pente) ajoutée à la poussée, sous les gaz. MESURÉ : 0,537
 	FirstGearForce = 1.5, -- la 1ʳᵉ de GTA pousse plus fort que DriveForce × rapport × g. MESURÉ : 10,5 à 12,4 m/s²
 	-- en 1ʳᵉ là où la loi donne 6,53 (les 2ᵉ et 3ᵉ, elles, suivent la loi à 2 et 5 % près). Le rapport de
 	-- VITESSE de la 1ʳᵉ reste 3,333 : le régime de passage mesuré (0,821) le confirme à 0,002 près.
@@ -468,6 +490,8 @@ renvoie out :
   body = Vector3 (m/s², local) : traînée ; torque = Vector3 (couple spécifique m²/s², local) : aides
   rpm (0,2..1), gear (-1 = arrière), clutch, speed (m/s, + avant), omega[i], travel[i] (m, + = vers le haut),
   lock (rad), steerAngle (rad), reverse (bool)
+--- `ctx.slopeSin` (optionnel) : sinus de la pente longitudinale, positif en montee. Sert a l'apport
+--- de poussee en pente (SlopeAssist). Absent ou nul, le comportement est celui d'un sol plat.
 ]]
 function Dyn.step(sim, inp, contacts, dt, ctx)
 	local P, S, T = sim.P, sim.S, sim.T
@@ -643,6 +667,13 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		local gearForce = (S.gear == 1 or S.gear < 0) and (T.FirstGearForce or 1) or 1
 		local aDrive = P.driveForce * math.abs(ratio) * torqueCurve(S.rpm, S.gear) * thr * S.clutch * cut * P.g * dir
 			* gearForce
+		-- en pente, GTA pousse plus fort : 54 % de la résistance de la pente récupérés (MESURÉ ; voir
+		-- Dyn.Tuning). `ctx.slopeSin` est le sinus de la pente longitudinale, positif en montée ; absent,
+		-- l'apport est nul et le comportement est celui d'avant.
+		local slopeSin = math.max(ctx.slopeSin or 0, 0)
+		if slopeSin > 0 and T.SlopeAssist > 0 then
+			aDrive += T.SlopeAssist * P.g * slopeSin * thr * S.clutch * dir
+		end
 		-- frein moteur, gaz relâchés, embrayé (sauf FREEWHEEL_NO_GAS)
 		local engBrake = (not P.freewheel and thr < 0.05 and S.clutch >= 1 and engineOn) and T.EngineBrakeG * P.g * (S.rpm - 0.2) / 0.8 or 0
 
@@ -705,11 +736,13 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 					S.stick[i] += vSlip * dt
 					local Fs = -(T.KStick * S.stick[i] + T.CStick * vSlip) * N[i] / P.g
 					if math.abs(Fs) > fmax then
+						-- décrochage : on rend la force à l'adhérence, et on garde le glissement accumulé
+						-- à la valeur qui la produit (sans quoi il continuerait de croître sans effet).
+						-- Il FAUT l'affecter : sinon la roue motrice part sans réaction du sol et s'emballe.
 						Fs = sign(Fs) * fmax
 						S.stick[i] = -sign(vSlip) * fmax * P.g / math.max(T.KStick * N[i], 1e-6)
-					else
-						Fx = Fs
 					end
+					Fx = Fs
 				else
 					S.stick[i] = 0
 				end

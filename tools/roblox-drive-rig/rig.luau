@@ -98,6 +98,7 @@ local function step(sim, v, inp, pente)
 	end
 	local out = Dyn.step(sim, inp, contacts, DT, {
 		vBody = Vector3.new(0, 0, -v), wBody = Vector3.new(0, 0, 0), up = Vector3.new(0, 1, 0),
+		slopeSin = sinT,
 	})
 	local ax = 0
 	for i in ipairs(P.wheels) do ax += out.wheels[i].Fx end

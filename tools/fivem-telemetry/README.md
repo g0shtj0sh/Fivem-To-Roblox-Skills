@@ -64,6 +64,7 @@ curl "http://127.0.0.1:<port>/vehicle-telemetry/result?id=accel_1" > accel_1.jso
 | `steerfade` | **consigne constante en créneaux alternés** : loi de braquage roue / consigne / vitesse | `plateaus` (`wheelDeg`, `yawRate`, `kmh`, `slip`, `roll`) |
 | `slalom` | braquage sinusoïdal | `maxRoll`, `maxYawRate`, `maxSlip` |
 | `skidpad` | **cercle à consigne constante, vitesse tenue** : sépare la dérive de la vitesse | `plateau` (`wheelDeg`, `beta`, `yawRate`, `latG`, `radius`, `tyreFront/Rear`), `buckets` (½ s) |
+| `thrust` | **poussée à pente et vitesse imposées** : monte à vitesse tenue jusqu'à un seuil de pente, puis plein gaz sur une fenêtre courte | `accel`, `slopePct` (pente de la **trajectoire**), `entrySpeed`, `exitSpeed`, `gear`, `rpm` |
 | `raw` | entrées constantes (diagnostic) | cap parcouru, angle de roue |
 | `surfscan` | relevé du sol le long d'une ligne | profil `d, z, matériau, pitch, roll` |
 | `roadscan` | relevé **en travers** d'une route (noeud routier le plus proche) | profil `offset, z, matériau` |
