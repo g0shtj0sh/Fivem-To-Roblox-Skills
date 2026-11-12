@@ -1713,3 +1713,60 @@ mal cernée, mais son **signe est ferme**.
   base** n'a été passée que sur trois essais — démarrage, vol, surfaces — pour séparer ce qui tient
   au véhicule de ce qui tient au moteur du jeu. Ni moto, ni véhicule lourd.
 - Les traces contiennent **uniquement des mesures** : aucun fichier du jeu ni du mod.
+
+## Le départ arrêté et la courbe de couple (Studio, 2026-11-12, nuit)
+
+**Signalement** (utilisateur) : « le démarrage n'est pas très réaliste, il manque un peu de puissance ».
+
+**Mesure Studio avant correction** (runtime `b30ff518bd8c`, piste `TestTrack`, plein gaz, une passe ; le moteur
+est déterministe) : 0-60 en 4,53 s, 0-100 en 11,2 s ; **1→2 à 10 km/h à 0,35 s puis 2→1 à 0,85 s**.
+Trace image par image : les roues AVANT patinaient (59 km/h de roue à 9 km/h de caisse), les arrière
+non. Le régime suit la moyenne des roues motrices : il montait à 0,72, la 2ᵉ passait, les gaz étaient
+coupés pendant l'embrayage (0,5 s), le régime tombait à 0,2, la 1ʳᵉ revenait (encore 0,5 s sans gaz) :
+**une seconde entière sans poussée**. Charges : en 3D, le report de charge délestait l'avant de 24 % (2,5 →
+1,9 m/s² par roue) alors que toute la poussée arrivait à la première image (embrayage à 1) et que
+`LowSpeedTractionLossMult` divise l'adhérence par deux à l'arrêt : l'avant décrochait. Le banc
+longitudinal (lune) ne le voyait pas : il partait déjà embrayé et sans report de charge.
+
+**Ce que fait GTA** (`fivem/accel_1-3.json`, même véhicule) : à l'arrêt en 1ʳᵉ, embrayage **0,10** ; sous
+les gaz il monte (≈ 1,7 /s), plafonne vers 0,7–0,8 et ferme à **0,93 s** (24,9 km/h, régime de roue 0,51).
+La poussée passe pendant le patinage : puissance de roue 0,008 / 0,037 / 0,098 / 0,170 (pleine) à un
+embrayage de 0,10 / 0,26 / 0,43 / 0,59. Le moteur tient **0,31 → 0,45** de régime pendant le patinage.
+Les quatre roues restent à la vitesse de la caisse (glissement < 0,08) ; cabrage 0,5–0,76 °.
+
+**Corrections** (`VehicleDynamics`, `Dyn.Tuning`) :
+1. Départ arrêté : `LaunchClutch` 0,1, poussée `((embrayage − 0,1)/0,5)^1,3` (`LaunchFull` 0,6,
+   `LaunchCurve` 1,3), régime tenu `LaunchRpm` 0,42, embrayage plafonné à 0,8 tant que le régime de roue
+   n'a pas rejoint 0,42.
+2. Boîte : quand les roues patinent (régime > 115 % de celui de la vitesse de caisse), la montée se décide
+   sur la vitesse de la caisse. Sous ce seuil rien ne change (banc longitudinal identique au centième).
+3. Courbe de couple au-delà de 0,8 : `TorqueFallSlope` 1,2 au lieu de 2. MESURÉ : fenêtres de 0,3 s
+   embrayées, traînée retirée (1,68 × 10⁻³ v²), poussée relative 0,95 / 0,86–0,88 / 0,78–0,82 à 0,85 /
+   0,90 / 0,95 de régime, la même en 2ᵉ et en 3ᵉ.
+
+Le banc longitudinal gagne une attente de 0,3 s à l'arrêt avant les gaz (comme l'essai GTA) et une trace
+du départ (`RIG_DEPART=1 lune run tools/roblox-drive-rig/rig.luau report`).
+
+| Départ | 0,30 s | 0,50 s | 0,70 s | 0,90 s | 1,30 s | 1→2 |
+|---|---|---|---|---|---|---|
+| GTA (accel_1) | 3,4 km/h (0,29 s) | 8,0 → 10,7 (0,47–0,56 s) | 13,9 → 17,6 (0,66–0,75 s) | 24,9 (0,93 s) | 40,0 (1,31 s) | 39,8 km/h, 1,33 s |
+| Studio, après | 3,7 | 10,2 | 16,8 | 23,7 | 37,0 | 38,0 km/h, 1,33 s |
+
+| Accélération (Studio, une passe) | GTA | Avant | Après |
+|---|---|---|---|
+| 0-60 km/h | 3,43 s | 4,53 s | **3,68 s** |
+| 0-100 km/h | 8,73–8,90 s | 11,2 s | **10,10 s** |
+| Vitesse de pointe | 118,9 km/h | « 109 » (essai coupé au faux plateau du passage 3→4) | **122,7 km/h** |
+| 2→3 / 3→4 | 80,5 km/h 5,47 s / 110,3 km/h 11,2 s | 78 km/h 6,4 s / 109 km/h 15,5 s | 77,6 km/h 5,42 s / 109,1 km/h 12,98 s |
+| Glissement de roue max (> 3 km/h) | < 0,08 | ≈ 5 | 0,63 (avant, à 0,3–0,4 s, bref) |
+
+Banc longitudinal (lune) : écart quadratique 5,3 % (départ embrayé, sans report de charge) → 5,6 %
+(départ arrêté réaliste). **Reste** : 0-100 +12 % (la 3ᵉ de GTA pousse ≈ 1,13 × la loi, mesuré mais non
+appliqué : la vitesse de pointe est déjà +3 à +4 %), un bref patinage de l'avant au départ en 3D, et le
+`BenchAccel` de `DriveBench` qui s'arrête sur le faux plateau d'un passage lent.
+
+**Ce n'est pas le moteur qui manque de puissance, c'est le mod** : dans GTA ce m422 fait 0-100 en 8,9 s et
+plafonne à 119 km/h (`fInitialDriveForce` 0,20, `fMass` 2200, `fInitialDriveMaxFlatVel` 135, passages à
+`fClutchChangeRateScaleUpShift` 1,8 soit ≈ 0,5 s). La vraie M4 Competition : 0-100 en 3,9 s (propulsion) /
+3,5 s (xDrive), 1 725 kg. La voiture de GTA qui l'imite, l'Übermacht Cypher : `fInitialDriveForce` 0,326,
+`fInitialDriveMaxFlatVel` 147,85, 1 625 kg, embrayage 7,8 (gtacars.net).

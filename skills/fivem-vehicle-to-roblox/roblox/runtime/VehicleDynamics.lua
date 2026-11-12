@@ -154,6 +154,24 @@ Dyn.Tuning = {
 	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
 	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
 	LowSpeedFade = 8, -- m/s : vitesse où la perte d'adhérence au démarrage (burnout) disparaît
+	-- Départ arrêté, MESURÉ (accel 1-3, m422, FiveM) : à l'arrêt en 1ʳᵉ l'embrayage est à 0,10 ; sous les gaz il
+	-- monte (≈ 1,7 /s, la vitesse d'un passage) et GTA transmet la poussée PENDANT ce patinage. Puissance de roue
+	-- relevée 0,008 / 0,037 / 0,098 / 0,170 (pleine) à un embrayage de 0,10 / 0,26 / 0,43 / 0,59 ; les quatre
+	-- roues restent à la vitesse de la voiture (glissement < 0,08), 0 → 40 km/h en 1,31 s. Avant le 2026-11-12
+	-- le moteur partait embrayé (1,0) avec toute la poussée à la première image : en 3D le report de charge
+	-- délestait l'avant de 24 %, l'avant patinait (59 km/h de roue à 9 km/h), le régime de roue montait la 2ᵉ à
+	-- 10 km/h, les gaz étaient coupés pendant l'embrayage puis la 1ʳᵉ revenait : une seconde sans poussée.
+	TorqueFallSlope = 1.2, -- couple au-delà de 0,8 de régime : 1 − pente × (régime − 0,8), plancher 0,6. MESURÉ (accel
+	-- 1-3, fenêtres de 0,3 s embrayées, traînée retirée) : poussée relative 0,95 / 0,86–0,88 / 0,78–0,82 à 0,85 /
+	-- 0,90 / 0,95, la même en 2ᵉ et en 3ᵉ, soit une pente de 1,2. L'ancienne (2, soit 0,6 au rupteur) était posée
+	-- sans mesure. Banc longitudinal : 0-100 −2,3 %, vitesse de pointe +1,2 % ; écart quadratique 6,2 → 5,6 %.
+	LaunchClutch = 0.1, -- embrayage à l'arrêt, 1ʳᵉ engagée, gaz relâchés
+	LaunchFull = 0.6, -- embrayage à partir duquel toute la poussée passe pendant le départ
+	LaunchCurve = 1.3, -- forme de la montée de poussée : ((embrayage − 0,1) / 0,5)^1,3 (écart < 0,05 aux 4 points)
+	LaunchSpeed = 1.0, -- m/s : sous cette vitesse, gaz relâchés en 1ʳᵉ, l'embrayage revient à LaunchClutch
+	LaunchRpm = 0.42, -- régime tenu pendant le patinage du départ. MESURÉ : 0,31 / 0,40 / 0,45 à un embrayage de
+	-- 0,26 / 0,43 / 0,59, puis 0,36–0,46 jusqu'à l'embrayage complet (au-dessus du régime de roue : le moteur
+	-- « prend des tours » au départ, ce que le son fait entendre)
 	-- La direction, MESURÉE : essai `steerfade` (consigne constante en créneaux alternés), 20 plateaux
 	-- établis de 15 à 105 km/h, calibration/m422/steerfade-analyse.json. Le braquage de roue réellement
 	-- obtenu à pleine demande vaut 30,62 ° jusqu'à 30 km/h (butée mécanique), puis 21,20 / 14,69 / 10,81 /
@@ -465,6 +483,7 @@ end
 function Dyn.reset(sim)
 	local S, P = sim.S, sim.P
 	S.rpm, S.gear, S.clutch, S.shiftDir, S.reverseTimer = 0.2, 1, 1, 0, 0
+	S.launch = false
 	for i, w in ipairs(P.wheels) do
 		S.omega[i] = 0
 		S.x[i] = w.x0
@@ -474,11 +493,12 @@ function Dyn.reset(sim)
 end
 
 -- ------------------------------------------------------------------ morceaux du modèle
-local function torqueCurve(rpm, gear)
+local function torqueCurve(rpm, gear, T)
 	if gear == 1 or rpm <= 0.8 then
 		return 1
 	end
-	return math.max(1 - 2 * (rpm - 0.8), 0.6) -- 1 -> 0,6 entre 0,8 et 1,0
+	local slope = (T and T.TorqueFallSlope) or 2
+	return math.max(1 - slope * (rpm - 0.8), 0.6) -- plat jusqu'à 0,8, puis décroissance linéaire
 end
 
 local function muOf(P, s)
@@ -505,6 +525,7 @@ end
 
 local function shift(S, newGear, dir)
 	S.gear, S.shiftDir, S.clutch, S.lastShift = newGear, dir, 0.1, S.time
+	S.launch = false
 end
 
 -- downforce (« WDV ») ajoutée à l'adhérence de chaque roue, en g
@@ -658,6 +679,13 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	-- à l'arrêt sans gaz ni frein, le véhicule se tient (ne roule pas tout seul en pente), comme dans le jeu
 	local hold = (driveIn < 0.05 and math.abs(vf) < 0.6) and 0.5 or 0
 
+	-- départ arrêté façon GTA (MESURÉ, voir Dyn.Tuning) : à l'arrêt en 1ʳᵉ sans gaz, l'embrayage revient à
+	-- LaunchClutch ; sous les gaz il monte et la poussée passe pendant le patinage (S.launch)
+	if S.gear == 1 and math.abs(vf) < (T.LaunchSpeed or 0) and driveIn < 0.05 and (S.clutch >= 1 or S.launch) then
+		S.clutch, S.shiftDir, S.launch = T.LaunchClutch or 0.1, 1, true
+	end
+	local launchHold = S.launch and driveIn < 0.05
+
 	-- sous-pas : régime, embrayage, roues, pneus
 	local nSub = math.max(1, T.SubSteps)
 	local h = dt / nSub
@@ -677,13 +705,33 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		drivenSpeed = nd > 0 and drivenSpeed / nd or math.abs(vf)
 		local ratio = gearRatio(P, S, vf)
 		local gearTop = P.flatVel / math.abs(ratio)
-		if S.clutch < 1 then
+		if S.clutch < 1 and not launchHold then
 			S.clutch = math.min(1, S.clutch + ((S.shiftDir >= 0) and P.clutchUp or P.clutchDown) * h)
+			-- départ : l'embrayage ne se ferme qu'une fois les roues au régime tenu par le moteur (MESURÉ : GTA plafonne
+			-- vers 0,7–0,8 puis ferme à 0,93 s, 24,9 km/h, régime de roue 0,51) ; sinon le régime retombe d'un coup
+			if S.launch and drivenSpeed / gearTop < (T.LaunchRpm or 0.42) then
+				S.clutch = math.min(S.clutch, 0.8)
+			end
 		end
-		local thr = (S.clutch < 1) and 0 or driveIn
+		-- passage de rapport : gaz coupés tant que l'embrayage patine ; départ arrêté : la poussée passe
+		local thr = (S.clutch < 1 and not S.launch) and 0 or driveIn
+		local engage = S.clutch
+		if S.launch then
+			if S.clutch >= 1 then
+				S.launch = false
+			else
+				local span = math.max((T.LaunchFull or 0.6) - (T.LaunchClutch or 0.1), 1e-3)
+				engage = math.clamp((S.clutch - (T.LaunchClutch or 0.1)) / span, 0, 1) ^ (T.LaunchCurve or 1)
+			end
+		end
 		local free = math.clamp(S.rpm + (2 * thr - 1) * 2 * P.driveInertia * h, 0.2, 1)
 		local wheelRpm = drivenSpeed / gearTop
 		S.rpm = math.clamp(math.max(0.2, wheelRpm * S.clutch + free * (1 - S.clutch)), 0.2, 1.05)
+		if S.launch and thr > 0.05 then
+			local lr = T.LaunchRpm or 0.42
+			local up = math.clamp((S.clutch - (T.LaunchClutch or 0.1)) / 0.4, 0, 1)
+			S.rpm = math.max(S.rpm, 0.2 + (lr - 0.2) * up * thr)
+		end
 		if not engineOn then
 			S.rpm = math.max(wheelRpm, 0)
 		end
@@ -700,7 +748,12 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		-- boîte automatique
 		if P.gearbox ~= "manual" and not P.cvt and S.clutch >= 1 and S.gear >= 1 and S.time - S.lastShift > T.ShiftLockout then
 			local upRpm = (S.gear == 1) and (T.UpshiftRpmFirst or T.UpshiftRpm) or T.UpshiftRpm
-			if S.rpm > upRpm and S.gear < P.nGears and driveIn > 0.05 then
+			-- roues qui PATINENT (régime > 115 % de celui de la vitesse de la voiture) : la montée se décide sur la
+			-- vitesse de la voiture, sinon 2ᵉ à 10 km/h au démarrage puis retour en 1ʳᵉ (GTA reste en 1ʳᵉ).
+			-- Sous ce seuil (glissement normal de traction, ~1 %), rien ne change : le régime de roue décide.
+			local bodyRpm = math.abs(vf) / gearTop
+			local shiftRpm = (S.rpm > bodyRpm * 1.15) and bodyRpm or S.rpm
+			if shiftRpm > upRpm and S.gear < P.nGears and driveIn > 0.05 then
 				shift(S, S.gear + 1, 1)
 			elseif S.gear > 1
 				and S.rpm < ((driveIn > 0.05) and (T.DownshiftRpmThrottle or T.DownshiftRpm) or T.DownshiftRpm)
@@ -711,14 +764,14 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		local dir = (S.gear < 0) and -1 or 1
 		-- la marche arriere emploie le rapport de 1re (3,333) : elle recoit donc le meme gain
 		local gearForce = (S.gear == 1 or S.gear < 0) and (T.FirstGearForce or 1) or 1
-		local aDrive = P.driveForce * math.abs(ratio) * torqueCurve(S.rpm, S.gear) * thr * S.clutch * cut * P.g * dir
+		local aDrive = P.driveForce * math.abs(ratio) * torqueCurve(S.rpm, S.gear, T) * thr * engage * cut * P.g * dir
 			* gearForce
 		-- en pente, GTA pousse plus fort : 54 % de la résistance de la pente récupérés (MESURÉ ; voir
 		-- Dyn.Tuning). `ctx.slopeSin` est le sinus de la pente longitudinale, positif en montée ; absent,
 		-- l'apport est nul et le comportement est celui d'avant.
 		local slopeSin = math.max(ctx.slopeSin or 0, 0)
 		if slopeSin > 0 and T.SlopeAssist > 0 then
-			aDrive += T.SlopeAssist * P.g * slopeSin * thr * S.clutch * dir
+			aDrive += T.SlopeAssist * P.g * slopeSin * thr * engage * dir
 		end
 		-- frein moteur, gaz relâchés, embrayé (sauf FREEWHEEL_NO_GAS)
 		local engBrake = (not P.freewheel and thr < 0.05 and S.clutch >= 1 and engineOn) and T.EngineBrakeG * P.g * (S.rpm - 0.2) / 0.8 or 0
@@ -938,7 +991,7 @@ function Dyn.PredictTopSpeed(sim)
 	for i = 1, 400 do
 		local v = gearTop * 1.1 * i / 400
 		local rpm = v / gearTop
-		local a = P.driveForce * ratio * torqueCurve(rpm, P.nGears) * P.g
+		local a = P.driveForce * ratio * torqueCurve(rpm, P.nGears, P.T) * P.g
 			* ((P.nGears == 1) and (P.T.FirstGearForce or 1) or 1)
 		if P.hardRev and rpm >= 1 then
 			a = 0

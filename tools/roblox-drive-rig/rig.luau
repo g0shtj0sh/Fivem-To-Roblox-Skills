@@ -73,6 +73,7 @@ local function newSim(ov) return Dyn.new(cfg, Vector3.new(0, 0, 0), ov) end
 -- h etant la hauteur du centre de gravite au-dessus du contact (mesuree a 0,45 m en Studio).
 local COM_H = 0.45
 local TRACE = false
+local LAUNCH_TRACE = (process.env.RIG_DEPART == "1") -- RIG_DEPART=1 : trace du depart arrete (0-1,6 s)
 local function step(sim, v, inp, pente)
 	pente = pente or 0
 	local th = math.atan(pente / 100)
@@ -182,12 +183,19 @@ local STOP = { Throttle = 0, Brake = 1, Steer = 0, Engine = true }
 local function run(ov)
 	local res = {}
 	local sim = newSim(ov)
+	-- au repos, moteur au ralenti, avant les gaz (comme l'essai GTA) : le départ arrêté s'arme (Dyn.Tuning.Launch*)
+	for _ = 1, math.floor(0.3 / DT) do
+		step(sim, 0, NONE)
+	end
 	local v, t, dist, gear, lastRpm = 0, 0, 0, 1, 0.2
 	res.shifts = {}
 	local vmax = 0
 	while t < 45 do
 		local a, out = step(sim, v, FULL)
 		v = math.max(v + a * DT, 0); dist += v * DT; t += DT
+		if LAUNCH_TRACE and t <= 1.6 and math.abs(t % 0.09) < DT then
+			print(("  depart %5.2f s  %6.1f km/h  regime %.2f  embrayage %.2f  rapport %d"):format(t, v * 3.6, out.rpm, out.clutch, out.gear))
+		end
 		if out.gear > gear then
 			table.insert(res.shifts, { from = gear, to = out.gear, kmh = v * 3.6, rpm = lastRpm })
 			gear = out.gear
