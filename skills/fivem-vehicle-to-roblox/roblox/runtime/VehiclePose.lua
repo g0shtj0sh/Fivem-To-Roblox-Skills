@@ -16,7 +16,8 @@
 	  joue un conducteur incliné, jambes allongées vers les pédales ; le bassin du personnage est posé sur
 	  l'os du siège (`seat_*`) ;
 	- la caméra à la première personne est à `PovCameraOffset` de l'os du siège (`Seats[i].PovOffset`, repère du
-	  véhicule ; m422 : 22,5 cm en arrière et 58,5 cm au-dessus), pas sur la tête du personnage.
+	  véhicule ; m422 : 22,5 cm en arrière et 58,5 cm au-dessus), pas sur la tête du personnage : Pose.EyeWorld,
+	  utilisé par VehicleCamera.
 
 	Comment : les articulations (Motor6D.Transform) sont réécrites à chaque image après l'animation d'assise
 	(RunService.PreSimulation) ; les transforms ne se répliquent pas, d'où un calcul sur chaque client, identique
@@ -27,10 +28,8 @@
 
 	Réglages : attribut `DrivingPose = false` sur le véhicule pour garder la posture de Roblox.
 ]]
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
-local Workspace = game:GetService("Workspace")
 
 local Fit = require(script.Parent:WaitForChild("VehicleSeatFit"))
 
@@ -49,7 +48,6 @@ Pose.Skip = { "BIKE", "QUAD", "BOAT", "JETSKI", "HELI", "PLANE", "BICYCLE", "TRA
 Pose.GripAngle = 30 -- degrés au-dessus de l'horizontale : mains à 10 h 10
 Pose.GripRadius = 0.92 -- part du rayon de la jante (mesuré sur les pièces portées par l'os du volant)
 Pose.DefaultPov = Vector3.new(0, 0.585, 0.225) -- m, repère du véhicule (PovCameraOffset GTA le plus courant)
-Pose.FirstPersonZoom = 0.5 -- studs : distance minimale de la caméra de Roblox au point suivi
 Pose.HandTurnMax = 100 -- degrés : rotation du volant suivie par les mains
 
 local cfgCache = setmetatable({}, { __mode = "k" })
@@ -446,42 +444,21 @@ local function poseR6(r6, lay)
 	end
 end
 
--- ------------------------------------------------------------------ caméra et corps à la première personne
-local cameraSet = nil
-local function povWorld(model, cfg, seat)
-	local s = seatData(cfg, seat)
-	local spm = cfg.StudsPerMeter or 3.571
-	local hip = Pose.HipPoint(model, seat)
-	local off = (s and s.PovOffset) and Vector3.new(s.PovOffset[1], s.PovOffset[2], s.PovOffset[3]) or Pose.DefaultPov
-	-- la caméra de Roblox reste à 0,5 stud derrière le point suivi, même à la première personne (mesuré : 13 cm
-	-- derrière l'œil GTA) : on avance le point d'autant, le long de l'avant du véhicule
-	return model.PrimaryPart.CFrame:PointToWorldSpace((hip + off) * spm + Vector3.new(0, 0, -Pose.FirstPersonZoom))
-end
-
--- Décalage de caméra du Humanoid qui met le point suivi par la caméra sur l'œil GTA. La caméra de Roblox
--- suit HumanoidRootPart + (0, 1,5 + (taille Y − 2)/2, 0) (R15 mis à l'échelle ; R6 : 1,5) + CameraOffset,
--- dans le repère de HumanoidRootPart (CameraModule, BaseCamera:GetSubjectPosition).
-local function setCamera(hum, hrp, eye)
-	local h = (hum.RigType == Enum.HumanoidRigType.R15 and hum.AutomaticScalingEnabled) and (1.5 + (hrp.Size.Y - 2) / 2)
-		or 1.5
-	hum.CameraOffset = hrp.CFrame:VectorToObjectSpace(eye - hrp.Position) - Vector3.new(0, h, 0)
-	cameraSet = hum
-end
-
--- À la première personne, GTA montre les mains sur le volant et les jambes. Les épaules, le haut des bras et le
--- buste, collés à la caméra, bouchaient la vue (essai m422, avatar large) : seuls restent visibles les avant-bras,
--- les mains, le bassin et les jambes (R6 : rien, ses bras sont d'un seul bloc).
-Pose.FirstPersonVisible = {
-	LeftLowerArm = true, RightLowerArm = true, LeftHand = true, RightHand = true,
-	LowerTorso = true, LeftUpperLeg = true, RightUpperLeg = true, LeftLowerLeg = true, RightLowerLeg = true,
-	LeftFoot = true, RightFoot = true,
-}
-local function showBody(char)
-	for _, p in ipairs(char:GetChildren()) do
-		if p:IsA("BasePart") and Pose.FirstPersonVisible[p.Name] then
-			p.LocalTransparencyModifier = 0
-		end
+-- ------------------------------------------------------------------ œil du conducteur (VehicleCamera)
+-- Œil GTA de l'occupant d'un siège (studs, monde) : os du siège + PovCameraOffset (`Seats[i].PovOffset`).
+function Pose.EyeWorld(model, seat)
+	local cfg = config(model)
+	if not cfg then
+		return nil
 	end
+	local s = seatData(cfg, seat)
+	local hip = Pose.HipPoint(model, seat)
+	if not hip or not model.PrimaryPart then
+		return nil
+	end
+	local spm = cfg.StudsPerMeter or 3.571
+	local off = (s and s.PovOffset) and Vector3.new(s.PovOffset[1], s.PovOffset[2], s.PovOffset[3]) or Pose.DefaultPov
+	return model.PrimaryPart.CFrame:PointToWorldSpace((hip + off) * spm)
 end
 
 -- ------------------------------------------------------------------ boucle
@@ -506,7 +483,6 @@ function Pose.Start()
 		return
 	end
 	started = true
-	local player = Players.LocalPlayer
 	Pose.Stats = { frames = 0, posed = 0, error = nil } -- diagnostic : images, occupants posés, dernière erreur
 	RunService.PreSimulation:Connect(function()
 		Pose.Stats.frames += 1
@@ -542,27 +518,6 @@ function Pose.Start()
 					end
 				end
 			end
-		end
-	end)
-	-- occupant local : caméra à l'œil GTA, corps visible à la première personne (sauf tête et accessoires)
-	RunService:BindToRenderStep("F2R_VehiclePose", Enum.RenderPriority.Camera.Value + 1, function()
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		local seat = hum and hum.SeatPart
-		local model = seat and seat.Parent and seat.Parent.Name == "Seats" and seat.Parent.Parent
-		if model and CollectionService:HasTag(model, Pose.Tag) and Pose.Active(model, seat) and hum.RootPart then
-			local cfg = config(model)
-			setCamera(hum, hum.RootPart, povWorld(model, cfg, seat))
-			local cam = Workspace.CurrentCamera
-			local firstPerson = cam and (cam.CFrame.Position - cam.Focus.Position).Magnitude < 1
-			if firstPerson then
-				showBody(char)
-			end
-		elseif cameraSet then
-			if cameraSet.Parent then
-				cameraSet.CameraOffset = Vector3.zero
-			end
-			cameraSet = nil
 		end
 	end)
 end

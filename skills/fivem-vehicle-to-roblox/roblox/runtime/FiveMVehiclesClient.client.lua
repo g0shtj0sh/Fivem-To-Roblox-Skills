@@ -16,7 +16,8 @@ local Drive = require(folder:WaitForChild("VehicleDrive"))
 local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
 local Dashboard = require(folder:WaitForChild("VehicleDashboard"))
 local Pose = require(folder:WaitForChild("VehiclePose"))
-Pose.Start() -- posture des occupants de tous les véhicules (sur chaque client), caméra de l'occupant local
+Pose.Start() -- posture des occupants de tous les véhicules (sur chaque client)
+require(folder:WaitForChild("VehicleCamera")).Start() -- caméra de l'occupant local, vue intérieure façon GTA (V)
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 

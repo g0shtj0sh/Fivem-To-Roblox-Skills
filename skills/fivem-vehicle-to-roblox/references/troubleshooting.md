@@ -114,3 +114,17 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 - **Contrôle** (Play, m422, avatar R15 large) : adaptation au siège ok à 81 % (largeur 49 %) au lieu de 64 % ;
   tête à 2 cm du point d'œil GTA ; mains sur la jante, qui suivent un braquage de 75 ° ; caméra à
   (−0,37 ; 0,64 ; 0,23) m pour un œil GTA à (−0,37 ; 0,614 ; 0,236) ; à la descente, caméra et invites rendues.
+
+## Vue intérieure : corps visible, regard à 360 °
+
+- **Signalement** (2026-11-13) : « à la première personne on doit voir que les bras, pas le corps, et pas avoir
+  une vue à 360 °, comme dans GTA V ».
+- **Cause** : la caméra de Roblox à la première personne tourne librement dans le monde (elle ne suit même pas
+  le virage du véhicule) et cache ou montre le corps entier.
+- **Correction** : `VehicleCamera` prend la main (caméra `Scriptable`) quand on passe en vue intérieure : regard
+  relatif à l'habitacle, borné, recentré en roulant, regard arrière tenu ; seuls avant-bras et mains visibles.
+  On entre en vue intérieure face à la route (en reprenant le regard de la vue extérieure, on entrait tête
+  tournée vers la portière).
+- **Contrôle** (Play PC, m422) : bornes ±110 / +30 / −45 ° atteintes et tenues ; 30 → 2 ° en 2,5 s en roulant ;
+  C tenu : −180 ° puis retour à 0 ; V : vue extérieure à 20 studs, corps de nouveau visible, souris libérée.
+  Non vérifié : molette de sortie, mobile (bouton « Vue », glisser), manette.
