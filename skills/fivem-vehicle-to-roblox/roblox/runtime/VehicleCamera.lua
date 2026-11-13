@@ -44,7 +44,7 @@ Camera.ToggleKey = Enum.KeyCode.V -- et un bouton « Vue » à l'écran sur mobi
 Camera.LookBackKeys = { Enum.KeyCode.C, Enum.KeyCode.ButtonR3 }
 Camera.ExitZoom = 12 -- studs : distance de la vue extérieure en sortant de la vue intérieure
 -- pièces du personnage visibles en vue intérieure (R6 : aucune, ses bras sont d'un bloc depuis l'épaule)
-Camera.Visible = { LeftLowerArm = true, RightLowerArm = true, LeftHand = true, RightHand = true }
+Camera.Visible = { LeftLowerArm = 0.55, RightLowerArm = 0.55, LeftHand = 0.75, RightHand = 0.75 } -- et leur finesse
 
 local player = Players.LocalPlayer
 local state = {
@@ -87,12 +87,47 @@ local function anyDown(keys)
 	return false
 end
 
+-- Bras de la vue intérieure : les VRAIS avant-bras et mains, amincis sur ce client seulement (une taille changée
+-- par un client ne se réplique pas : les autres joueurs voient l'avatar tel quel). Des copies locales perdaient
+-- la texture du vêtement (appliquée au personnage) et sortaient grises. Avec un avatar large, les avant-bras
+-- bouchaient le volant (demande de l'utilisateur, 2026-11-13). Tailles d'origine rendues à la sortie ; une mise
+-- à l'échelle du serveur (VehicleSeatFit) pendant la vue est reprise comme nouvelle taille d'origine.
+local thinned = {} -- part -> { orig = Vector3, set = Vector3 }
+local function restoreArms()
+	for part, t in pairs(thinned) do
+		if part.Parent and part.Size == t.set then
+			part.Size = t.orig
+		end
+	end
+	table.clear(thinned)
+end
+local function thinArms(char)
+	for name, thin in pairs(Camera.Visible) do
+		local part = char:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			local t = thinned[part]
+			if not t or part.Size ~= t.set then
+				local orig = part.Size
+				-- l'axe long d'un membre R15 est Y : on n'amincit que X et Z
+				local set = Vector3.new(orig.X * thin, orig.Y, orig.Z * thin)
+				thinned[part] = { orig = orig, set = set }
+				part.Size = set
+			end
+		end
+	end
+end
+
 local function setBody(char, pov)
 	for _, p in ipairs(char:GetDescendants()) do
 		if p:IsA("BasePart") then
-			local isLimb = p.Parent == char and Camera.Visible[p.Name]
+			local isLimb = p.Parent == char and Camera.Visible[p.Name] ~= nil
 			p.LocalTransparencyModifier = (pov and not isLimb) and 1 or 0
 		end
+	end
+	if pov then
+		thinArms(char)
+	else
+		restoreArms()
 	end
 end
 

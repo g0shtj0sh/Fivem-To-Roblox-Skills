@@ -23,7 +23,7 @@
 	(RunService.PreSimulation) ; les transforms ne se répliquent pas, d'où un calcul sur chaque client, identique
 	partout (mêmes données). Bassin posé sur l'os du siège et incliné selon le layout ; jambes et bras par
 	cinématique inverse à deux segments vers des cibles du véhicule : pieds sur le plancher devant le siège
-	(lu dans la grille d'habitacle `CONFIG.Cabin`, sinon estimé), mains sur la jante du volant à 10 h 10 (elles
+	(lu dans la grille d'habitacle `CONFIG.Cabin`, sinon estimé), mains sur la jante du volant à 9 h 15 (elles
 	suivent sa rotation) pour le conducteur, sur les cuisses pour les passagers. R15 complet ; R6 : angles fixes.
 
 	Réglages : attribut `DrivingPose = false` sur le véhicule pour garder la posture de Roblox.
@@ -45,7 +45,8 @@ Pose.Layouts = {
 }
 -- layouts où cette posture n'a pas de sens (deux-roues, quads, bateaux, aéronefs) : posture de Roblox
 Pose.Skip = { "BIKE", "QUAD", "BOAT", "JETSKI", "HELI", "PLANE", "BICYCLE", "TRAIN" }
-Pose.GripAngle = 30 -- degrés au-dessus de l'horizontale : mains à 10 h 10
+Pose.GripAngle = 0 -- degrés au-dessus de l'horizontale : mains à 9 h 15, sur les côtés de la jante (à 30 °, « 10 h 10 », les avant-bras
+-- cachaient le volant et les compteurs à la première personne ; demande de l'utilisateur, 2026-11-13)
 Pose.GripRadius = 0.92 -- part du rayon de la jante (mesuré sur les pièces portées par l'os du volant)
 Pose.DefaultPov = Vector3.new(0, 0.585, 0.225) -- m, repère du véhicule (PovCameraOffset GTA le plus courant)
 Pose.HandTurnMax = 100 -- degrés : rotation du volant suivie par les mains

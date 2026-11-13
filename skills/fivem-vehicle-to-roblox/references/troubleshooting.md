@@ -143,3 +143,14 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
   commande, lui appliquent la même réduction avec la vitesse que le moteur de conduite. Un ancien CONFIG
   (MaxAngle 270) prend 90 °.
 - **Contrôle** (Play, m422) : à l'arrêt 90 ° à fond, 27 ° à 30 % ; à 69 km/h à fond, 32 ° (avant : 270 ° partout).
+
+## Vue intérieure : les avant-bras cachent le volant
+
+- **Signalement** (m422, avatar large, 2026-11-13) : « bras un peu plus fins, moins hauts sur le volant, plus sur
+  les côtés, pour bien voir le volant ».
+- **Corrections** : prises à 9 h 15 (`VehiclePose.GripAngle` 0 au lieu de 30) ; en vue intérieure, les VRAIS
+  avant-bras et mains amincis sur le client de l'occupant (`VehicleCamera.Visible` : 0,55 / 0,75 en X et Z),
+  rendus à la sortie. **Essai rejeté** : des copies locales amincies — elles perdent la texture du vêtement
+  (appliquée au personnage) et sortent grises.
+- **Contrôle** (Play, m422) : volant et compteurs dégagés ; serveur : avant-bras à 0,48 × 0,77 (inchangé, les
+  autres joueurs voient l'avatar normal) ; client en vue intérieure : 0,26 × 0,42 ; après V : 0,48 × 0,77.

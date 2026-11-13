@@ -233,14 +233,14 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 - **Posture de conduite** (`VehiclePose`, chaque client, automatique) : comme GTA, la posture dépend du
   `layout` du véhicule (`CONFIG.Layout` ; `LAYOUT_LOW` : dossier incliné, jambes allongées) et le bassin est
   posé sur l'os du siège ; jambes vers le plancher devant le siège (grille d'habitacle), mains sur la jante du
-  volant (elles suivent sa rotation jusqu'à ±100 °), mains sur les cuisses pour les passagers. Articulations
+  volant à 9 h 15 (elles suivent sa rotation jusqu'à ±100 °), mains sur les cuisses pour les passagers. Articulations
   `Motor6D` et `AnimationConstraint` ; R6 : angles fixes, non vérifié. `DrivingPose = false` pour la retirer.
   On ne s'assoit jamais en touchant un siège (`CanTouch = false`) : seulement par l'invite F ; à bord, les
   invites du véhicule sont masquées.
 - **Vue intérieure façon GTA** (`VehicleCamera`, occupant local) : V (bouton « Vue » sur mobile) bascule, comme
   zoomer à fond ; caméra sur l'œil GTA du siège (`Seats[i].PovOffset` = `PovCameraOffset`), qui tourne avec le
   véhicule, bornée à ±110 ° de cap, +30 / −45 ° d'inclinaison, revient vers l'avant en roulant (1,5 s sans
-  toucher à la vue), regarde derrière avec C / R3 ; seuls les avant-bras et les mains sont visibles. Bornes
+  toucher à la vue), regarde derrière avec C / R3 ; seuls les avant-bras et les mains sont visibles, amincis sur l'écran de l'occupant. Bornes
   posées à l'œil (celles de GTA ne sont pas documentées). `PovCamera = false` pour garder la caméra de Roblox.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
