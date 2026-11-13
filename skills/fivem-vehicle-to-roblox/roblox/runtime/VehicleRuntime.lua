@@ -18,6 +18,20 @@ local Workspace = game:GetService("Workspace")
 local Runtime = {}
 Runtime.__index = Runtime
 Runtime.RenderDistance = 350 -- studs
+Runtime.SteeringWheelDeg = 90 -- rotation du volant à pleine butée des roues (GTA, steerWheelMult = 1)
+
+-- réglages du moteur de conduite (fondu du braquage avec la vitesse), lus une fois
+local dynT
+local function dynTuning()
+	if dynT == nil then
+		local m = script.Parent:FindFirstChild("VehicleDynamics")
+		local ok, Dyn = pcall(function()
+			return m and require(m)
+		end)
+		dynT = (ok and Dyn and Dyn.Tuning) or {}
+	end
+	return dynT
+end
 Runtime.MasterVolume = 1
 
 local renderers = {} -- [model] = renderer
@@ -30,6 +44,27 @@ local LIGHT_COLORS = {
 	reverse = Color3.fromRGB(255, 255, 255),
 	drl = Color3.fromRGB(255, 252, 245),
 	plate = Color3.fromRGB(255, 244, 220),
+}
+
+-- Feux de croisement / pleins phares, comme GTA V (visualsettings.dat d'origine, relevé 2026-11-13 dans deux
+-- sauvegardes indépendantes du fichier du jeu : VisualV « original files » et EffectsOverhaul « BaseGameBackup ») :
+--   car.headlights.fullbeam.IntensityMult 1.1   car.headlights.fullbeam.DistMult 1.3
+--   car.headlights.aim.dippedbeam.mod    -0.2   car.headlights.aim.fullbeam.mod  0.0
+-- Les pleins phares portent PLUS LOIN (×1,3) et visent à l'horizontale ; l'intensité ne monte que de 10 %.
+-- Les croisements sont baissés vers la route. Dans Roblox la portée d'un SpotLight plafonne à 60 studs : les
+-- pleins phares prennent ce maximum et les croisements 60 / 1,3.
+-- Tangage des croisements : −10°. Essai Studio (2026-11-13, m422 de nuit, vue de dessus) : à −3° la tache au sol
+-- restait presque aussi longue qu'en pleins phares (le cône Roblox est rond, 60° soit ±30° : baisser l'axe de 3°
+-- ne coupe presque rien vers l'horizon) ; à −10° elle se ramasse devant la voiture et les pleins phares portent
+-- nettement plus loin. Hypothèse non vérifiée : l'`aim.dippedbeam.mod` −0,2 de GTA serait en radians (−11,5°).
+-- Ancien comportement (remplacé) : même portée et même angle, luminosité doublée (3 → 6).
+Runtime.Headlights = {
+	FullRange = 60, -- studs (maximum d'un SpotLight)
+	DistMult = 1.3, -- GTA fullbeam.DistMult
+	IntensityMult = 1.1, -- GTA fullbeam.IntensityMult
+	Brightness = 3, -- croisements
+	DippedPitch = -10, -- degrés, faisceau baissé (réglé à l'essai, voir plus haut)
+	FullPitch = 0,
 }
 
 local function bit(seq, beat)
@@ -306,11 +341,27 @@ function Runtime:_updateJoints(dt, s)
 			j.Transform = CFrame.fromAxisAngle(Vector3.new(ax[1], ax[2], ax[3]), cur * math.rad(hinge.OpenAngle or 60))
 		end
 	end
+	-- Volant : comme GTA, il suit l'ANGLE RÉEL des roues avant (réduit avec la vitesse), pas la commande, et ne
+	-- fait que ≈ 90 ° à pleine butée × steerWheelMult (vehicles.meta ; les mods « 480 ° / 900 ° » le relèvent).
+	-- Avant le 2026-11-13 : commande × 270 °, si bien qu'à vitesse, roues à peine braquées, le volant faisait
+	-- déjà presque un tour (signalé sur le m422). Un ancien CONFIG (MaxAngle 270, sans WheelMult) prend 90 °.
 	local sw = cfg.SteeringWheel
 	if sw and self.Joints[sw.Bone] then
 		local ax = sw.Axis
-		self.Joints[sw.Bone].Transform =
-			CFrame.fromAxisAngle(Vector3.new(ax[1], ax[2], ax[3]), (s.Steer or 0) * math.rad(sw.MaxAngle or 270))
+		local hd = cfg.Handling or {}
+		local T = dynTuning()
+		local mech = hd.SteeringLockRad or math.rad(hd.SteeringLockDeg or 35)
+		local full = mech * (T.SteerLockMeanPct or 1) -- butée réellement atteinte à l'arrêt (MESURÉ : 0,875)
+		-- angle des roues avant (rad). Le conducteur le connaît (télémétrie WheelSteer) ; les autres clients
+		-- n'ont que la commande : on lui applique la même réduction avec la vitesse que le moteur de conduite.
+		local lockNow = s.WheelSteer
+		if not lockNow then
+			local fade = 1 + (math.abs(s.Speed or 0) / (T.SteerFade or 15)) ^ (T.SteerFadePower or 2)
+			lockNow = math.min(math.max(mech / fade, mech * (T.SteerMinPct or 0.15)), full)
+		end
+		local frac = math.clamp((s.Steer or 0) * lockNow / math.max(full, 1e-3), -1, 1)
+		local maxDeg = Runtime.SteeringWheelDeg * (sw.WheelMult or 1)
+		self.Joints[sw.Bone].Transform = CFrame.fromAxisAngle(Vector3.new(ax[1], ax[2], ax[3]), frac * math.rad(maxDeg))
 	end
 	if s.Siren then
 		for i, siren in pairs(cfg.Sirens and cfg.Sirens.Lights or {}) do
@@ -370,6 +421,29 @@ function Runtime:_setRole(role, on, color, brightness)
 	end
 end
 
+-- Portée et visée des phares selon le mode (croisement ou route). Les attachments des phares sont posés par
+-- VehicleLights.Rig aux axes du véhicule (avant = −Z) : on garde cette pose et on la tourne autour de X.
+function Runtime:_aimHeadlights(full)
+	if self.HeadBeamFull == full then
+		return
+	end
+	self.HeadBeamFull = full
+	local H = Runtime.Headlights
+	local range = full and H.FullRange or H.FullRange / H.DistMult
+	local pitch = math.rad(full and H.FullPitch or H.DippedPitch)
+	self.HeadBase = self.HeadBase or {}
+	for _, role in ipairs({ "headlight_l", "headlight_r" }) do
+		for _, l in ipairs(self.LightObjects[role] or {}) do
+			l.Range = range
+			local a = l.Parent
+			if a and a:IsA("Attachment") then
+				self.HeadBase[a] = self.HeadBase[a] or a.CFrame
+				a.CFrame = self.HeadBase[a] * CFrame.Angles(pitch, 0, 0)
+			end
+		end
+	end
+end
+
 function Runtime:_updateLights(s)
 	local now = os.clock()
 	local blink = (now % 0.75) < 0.4
@@ -390,9 +464,13 @@ function Runtime:_updateLights(s)
 	local wigL = s.Siren and sirenCfg and sirenCfg.HeadLightLeft and sirenCfg.HeadLightLeft ~= 0 and bit(sirenCfg.HeadLightLeft, beat)
 	local wigR = s.Siren and sirenCfg and sirenCfg.HeadLightRight and sirenCfg.HeadLightRight ~= 0 and bit(sirenCfg.HeadLightRight, beat)
 
-	-- croisement / route ; ombres portées seulement pour la voiture du joueur local
-	self:_setRole("headlight_l", hl >= 1 or wigL, headColor, hl >= 2 and 6 or 3)
-	self:_setRole("headlight_r", hl >= 1 or wigR, headColor, hl >= 2 and 6 or 3)
+	-- croisement / route (portée et visée, voir Runtime.Headlights) ; ombres seulement pour la voiture du joueur local
+	local H = Runtime.Headlights
+	local full = hl >= 2
+	local headBright = full and H.Brightness * H.IntensityMult or H.Brightness
+	self:_setRole("headlight_l", hl >= 1 or wigL, headColor, headBright)
+	self:_setRole("headlight_r", hl >= 1 or wigR, headColor, headBright)
+	self:_aimHeadlights(full)
 	local shadows = self.IsLocalOccupant == true
 	if self.HeadShadows ~= shadows then
 		self.HeadShadows = shadows
