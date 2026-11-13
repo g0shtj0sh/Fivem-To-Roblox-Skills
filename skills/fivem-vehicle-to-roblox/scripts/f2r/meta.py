@@ -68,6 +68,7 @@ def parse_vehicles(paths, report: Report) -> dict[str, dict]:
                 "requiredExtras": (xval(item, "requiredExtras") or "").split(),
                 "extraIncludes": [e.text for e in item.findall("extraIncludes/Item") if e.text],
                 "dashboardType": xval(item, "dashboardType", ""),
+                "steerWheelMult": xfloat(item, "steerWheelMult", 1.0),  # rotation visuelle du volant (×)
                 # caméra à la première personne, relative à l'os du siège (GTA : x droite, y avant, z haut, m)
                 "povCameraOffset": xvec(item, "PovCameraOffset", (0.0, -0.225, 0.585))[:3],
                 "povPassengerCameraOffset": xvec(item, "PovPassengerCameraOffset", (0.0, 0.0, 0.0))[:3],

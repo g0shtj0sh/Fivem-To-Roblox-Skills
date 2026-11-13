@@ -514,7 +514,9 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
             fwd = np.array(bones[sb]["Forward"])
             if fwd[2] > 0:
                 fwd = -fwd
-            steering = {"Bone": sb, "Axis": r4(fwd), "MaxAngle": 270}
+            # GTA : le volant suit l'angle des roues avant, ≈ 90 ° à pleine butée × steerWheelMult (vehicles.meta)
+            mult = float(vinfo.get("steerWheelMult") or 1.0)
+            steering = {"Bone": sb, "Axis": r4(fwd), "WheelMult": round(mult, 3), "MaxAngle": round(90 * mult, 1)}
             dynamic = sorted(set(dynamic) | {sb})
             break
 

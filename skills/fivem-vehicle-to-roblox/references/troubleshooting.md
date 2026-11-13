@@ -128,3 +128,18 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 - **Contrôle** (Play PC, m422) : bornes ±110 / +30 / −45 ° atteintes et tenues ; 30 → 2 ° en 2,5 s en roulant ;
   C tenu : −180 ° puis retour à 0 ; V : vue extérieure à 20 studs, corps de nouveau visible, souris libérée.
   Non vérifié : molette de sortie, mobile (bouton « Vue », glisser), manette.
+
+## Le volant fait presque un tour dès qu'on tourne un peu
+
+- **Signalement** (m422, 2026-11-13) : « on tourne à peine que le volant fait déjà le tour complet ; pas naturel,
+  pas comme GTA V ».
+- **Cause** : le volant suivait la COMMANDE (−1..1) × 270 °. La commande est normalisée par le braquage permis à la
+  vitesse du moment : à 70 km/h, roues à 8 °, la commande vaut déjà 1, donc 270 °.
+- **Ce que fait GTA** : le volant suit l'angle réel des roues avant et ne fait qu'environ 90 ° à pleine butée
+  (`steerWheelMult` de vehicles.meta, 1,0 par défaut ; les mods « 480 ° / 900 ° » le relèvent ; ~90 ° est un
+  relevé de joueurs, non mesuré par nous).
+- **Correction** : rotation = (angle des roues ÷ butée atteinte à l'arrêt) × 90 ° × `WheelMult` ; le
+  convertisseur exporte `SteeringWheel.WheelMult` (et `MaxAngle` = 90 × mult). Les autres clients, qui n'ont que la
+  commande, lui appliquent la même réduction avec la vitesse que le moteur de conduite. Un ancien CONFIG
+  (MaxAngle 270) prend 90 °.
+- **Contrôle** (Play, m422) : à l'arrêt 90 ° à fond, 27 ° à 30 % ; à 69 km/h à fond, 32 ° (avant : 270 ° partout).
