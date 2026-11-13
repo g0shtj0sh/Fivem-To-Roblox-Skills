@@ -1770,3 +1770,42 @@ plafonne à 119 km/h (`fInitialDriveForce` 0,20, `fMass` 2200, `fInitialDriveMax
 `fClutchChangeRateScaleUpShift` 1,8 soit ≈ 0,5 s). La vraie M4 Competition : 0-100 en 3,9 s (propulsion) /
 3,5 s (xDrive), 1 725 kg. La voiture de GTA qui l'imite, l'Übermacht Cypher : `fInitialDriveForce` 0,326,
 `fInitialDriveMaxFlatVel` 147,85, 1 625 kg, embrayage 7,8 (gtacars.net).
+
+## Frein à main en virage : déclencher la glisse sans tête-à-queue (Studio, 2026-11-13)
+
+**Signalement** (utilisateur) : « le frein à main ne marche pas très bien, il ne déclenche pas le drift comme dans
+GTA V ». **Banc** : `DriveBench.hbcorner(kmh, consigne)`, protocole exact de `Tests.handbrake_corner`
+(vitesse tenue, consigne 0,5 une seconde, frein à main une seconde gaz coupés, 1,5 s au régulateur) ; mêmes
+grandeurs par phase que les traces `fivem/hbcorner_40_1` et `hbcorner_70_1`. Une passe par réglage (moteur
+déterministe), PC Studio, m422.
+
+| 70 km/h, pendant le frein à main | lacet moy. (max) | dérive | roues arr. | km/h fin | braquage | dérive après |
+|---|---|---|---|---|---|---|
+| **GTA** | **38,8 (47,4)** | **9,9 °** | **−0,63** | **42,9** | **3,97 °** | **3,7 °** |
+| `HandbrakeGripRear` 1,0 (ancien) | 36,4 (40,4) | 3,2 ° | −0,51 | 41,5 | 5,5 ° | 0,6 ° |
+| 0,9 | 40,9 (46,8) | 4,5 ° | −0,51 | 41,1 | 5,2 ° | 0,6 ° |
+| 0,85 | 57,6 (102) | 8,4 ° | −0,52 | 36,9 | 4,1 ° | **24 °** (tête-à-queue) |
+| 0,8 / 0,6 / 0,4 | jusqu'à 159 / 225 / 274 | 12,6 / 22 / 28 ° | | | | tête-à-queue |
+
+**Cause démontrée de l'emballement** : sous frein à main, la roue arrière glisse en longitudinal (−0,5) ; dans le
+cercle d'adhérence (`Fy = F · sa / s`), ce glissement ôte 60 à 80 % du latéral, et tout réglage qui laissait
+l'arrière décrocher faisait diverger le lacet (24 → 154 °/s en une seconde, essai à 0,8). Dans GTA la glisse est
+bornée (dérive ≤ ~17 °) et se rattrape dès le relâchement.
+
+**Correction** : sous frein à main, le latéral arrière ne passe plus par le cercle d'adhérence ; il vaut
+`HandbrakeGripRear` à faible dérive et revient en entier entre `HandbrakeSlideStart` et `HandbrakeSlideFull`
+degrés de dérive de la roue.
+
+| 70 km/h, latéral découplé | lacet moy. (max) | dérive | après |
+|---|---|---|---|
+| 0,5 [6-16] | 42,7 (45,6) | 5,1 ° | 0,7 ° |
+| 0,5 [8-20] | 51,5 (58,1) | 7,5 ° | 1,2 ° |
+| **0,4 [8-20] — retenu** | 57,6 (66,5) | **9,3 °** | 2,1 ° |
+| 0,3 [8-20] | 63,2 (73,6) | 10,9 ° | 3,75 ° |
+
+Retenu 0,4 [8-20] : dérive et braquage de GTA, glisse rattrapée au relâchement. Ligne droite 60-0 au frein à
+main : lacet max 3,0 °/s (GTA 0,13), 17,6 m (GTA 20,0) — la voiture reste droite.
+
+**Reste** : le lacet vaut ~1,5 × GTA quand la dérive est juste (GTA fait glisser la voiture plus qu'il ne la fait
+tourner) ; à 40 km/h la dérive reste à 1,3 ° (GTA 4,8 °) car notre braquage remonte quand la vitesse tombe
+(9,4 ° contre 4,6 ° dans GTA, qui le réduit) — à mesurer : quelle loi réduit le braquage de GTA sous frein à main.

@@ -11,6 +11,7 @@
 		Bench.reverse(4)                         -- marche arrière
 		Bench.curb(20, 160)                      -- bordure abordée à 20 km/h, jusqu'à 160 m parcourus
 		Bench.hill(20)                           -- démarrage en côte : arrêt, maintien, recul, reprise
+		Bench.hbcorner(70, 0.5)                  -- frein à main 1 s en virage (protocole GTA handbrake_corner)
 		Bench.stepsteer(60, 0.5)                 -- créneau : consigne GTA 0,5 (demande effective 1/3, zone morte)
 		Bench.slalom(60, 0.5, 2, 12)             -- slalom : consigne sinus (amplitude, période s, durée s), écrêtée par la zone morte
 		Bench.air(90, "roulis", 1)               -- vol au tremplin (Track.buildRamp) : entrée en vol libre seulement
@@ -361,6 +362,66 @@ local function cruise(s, kmh)
 	return math.clamp(0.25 + err * 0.5, 0, 1), 0
 end
 Bench._cruise = cruise
+
+-- Frein à main en entrée de virage, protocole de tools/fivem-telemetry (Tests.handbrake_corner) : vitesse tenue,
+-- consigne de braquage GTA `steer` (0,5 par défaut) une seconde, frein à main une seconde gaz coupés, puis 1,5 s au
+-- régulateur. Mêmes grandeurs par phase que la trace GTA : angle de roue, lacet moyen et max, dérive de caisse,
+-- glissement longitudinal des roues ARRIÈRE, vitesse en fin de phase.
+function Bench.hbcorner(kmh, steer, opts)
+	opts = opts or {}
+	steer = steer or 0.5
+	local a = active()
+	settle(a)
+	Bench.setLine(a.root.CFrame)
+	hold({ Throttle = 1, Brake = 0, Steer = 0, Handbrake = false }, 40, function()
+		return state(a).speed * 3.6 >= kmh
+	end, true)
+	hold(function()
+		local th, br = cruise(state(a), kmh)
+		return { Throttle = th, Brake = br, Steer = 0, Handbrake = false }
+	end, 0.8, nil, true)
+	local res = { kmh = kmh, steer = steer, entrySpeed = state(a).speed * 3.6 }
+	local P = a.sim and a.sim.P
+	local function phase(name, seconds, hb)
+		local n, sw, syaw, sbeta, skr, maxYaw = 0, 0, 0, 0, 0, 0
+		hold(function()
+			local th, br = cruise(state(a), kmh)
+			return { Throttle = hb and 0 or th, Brake = 0, Steer = Bench.gtaAxis(steer), Consigne = steer, Handbrake = hb }
+		end, seconds, function()
+			local s = state(a)
+			local S = a.sim and a.sim.S
+			n += 1
+			sw += math.abs(math.deg(S and S.steerAngle or 0))
+			local yaw = math.abs(math.deg(s.yawRate))
+			syaw += yaw
+			maxYaw = math.max(maxYaw, yaw)
+			if math.abs(s.speed) > 2 then
+				sbeta += math.abs(math.deg(math.atan2(s.lat, math.abs(s.speed))))
+			end
+			local vf = math.abs(s.speed)
+			local nr = 0
+			for i, w in ipairs(P and P.wheels or {}) do
+				if not w.front then
+					skr += (math.abs(S.omega[i] * w.radius) - vf) / math.max(vf, 1)
+					nr += 1
+				end
+			end
+			return false
+		end, false)
+		if n > 0 then
+			res[name] = {
+				n = n, wheelDeg = sw / n, yawRate = syaw / n, yawMax = maxYaw, beta = sbeta / n,
+				kappaRear = skr / (2 * n), kmh = state(a).speed * 3.6,
+			}
+		end
+	end
+	phase("avant", opts.before or 1.0, false)
+	phase("pendant", opts.pull or 1.0, true)
+	phase("apres", opts.after or 1.5, false)
+	Bench.setLine(nil)
+	settle(a)
+	return res
+end
 
 -- Bordure de trottoir prise de face à vitesse tenue : tangage, roues décollées, vitesse perdue.
 function Bench.curb(kmh, untilMeters)

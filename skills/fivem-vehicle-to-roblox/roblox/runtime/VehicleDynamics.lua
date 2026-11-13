@@ -242,12 +242,25 @@ Dyn.Tuning = {
 	SteerTau = 0.08, -- s : constante de temps de l'angle de roue ; 0 = instantané (ancien comportement)
 	AbsSlip = 0.18, -- ABS : glissement au-delà duquel le frein est relâché
 	AbsRelease = 0.35, -- ABS : fraction du freinage gardée quand il relâche
-	HandbrakeGripRear = 1.0, -- adhérence latérale arrière frein à main serré. MESURÉ : à 60 km/h volant droit
-	-- les roues arrière glissent (5,3 m/s contre 9,2 m/s) mais le lacet reste à 0,1–0,2 °/s et la dérive à
-	-- 0,07 ° : le frein à main de GTA bloque l'arrière SANS lui faire perdre son adhérence latérale.
-	-- VÉRIFIÉ EN STUDIO (2026-11-12) : 60-0 au frein à main volant droit, lacet max 0,8–1,0 °/s (GTA 0,13 ; 69 °/s
-	-- avant le calage). Mais à 0,75 il reste droit aussi (1,35 °/s) : sur le plat, ce n'était pas ce réglage qui
-	-- faisait pivoter. Il reste la valeur mesurée ; le tête-à-queue d'avant venait d'ailleurs (non isolé).
+	-- FREIN À MAIN EN VIRAGE, recalé le 2026-11-13 (« le frein à main ne déclenche pas bien le drift ») sur les
+	-- traces GTA `hbcorner_40/70` (consigne 0,5, frein à main 1 s, protocole Bench.hbcorner) :
+	--   70 km/h, pendant | GTA : lacet 38,8 °/s (max 47), dérive 9,9 ° (jusqu'à 17), roues arr. −0,63 ; après 3,7 °
+	--   ancien (1,0)    | 36,4 (40), dérive 3,2 °, −0,51 ; après 0,6 °  → l'arrière ne décrochait pas
+	--   0,8 / 0,6        | tête-à-queue (lacet jusqu'à 159 / 225 °/s) : le blocage passait par le cercle
+	--                      d'adhérence et ôtait 60 à 80 % du latéral, la rotation s'emballait
+	-- Retenu : le latéral sous frein à main ne passe plus par le cercle d'adhérence (VehicleDynamics, boucle des
+	-- pneus), vaut HandbrakeGripRear à faible dérive et revient en entier entre HandbrakeSlideStart et
+	-- HandbrakeSlideFull degrés de dérive de la roue : la glisse se borne d'elle-même et se rattrape au relâchement.
+	--   0,4 [8-20]       | lacet 57,6 (66), dérive 9,3 °, −0,53 ; après 2,1 ° ; braquage 3,8 ° (GTA 4,0)
+	--   (0,5 [6-16] : lacet 42,7 mais dérive 5,1 ; 0,3 [8-20] : dérive 10,9, lacet 63)
+	--   60-0 en ligne droite : lacet max 3,0 °/s (GTA 0,13), 17,6 m (GTA 20,0) — la voiture reste droite.
+	-- LIMITES : le lacet reste ~1,5 × GTA quand la dérive est juste ; à 40 km/h la dérive reste à 1,3 ° (GTA 4,8)
+	-- car notre braquage REMONTE quand la vitesse tombe (9,4 ° contre 4,6 dans GTA). Une passe par réglage.
+	HandbrakeSlideStart = 8, -- degrés de dérive de la roue arrière où l'adhérence ôtée commence à revenir
+	HandbrakeSlideFull = 20, -- degrés où elle est entièrement revenue
+	HandbrakeGripRear = 0.4, -- part du latéral arrière gardée sous frein à main, à faible dérive. Avant le 2026-11-13 :
+	-- 1,0, pris sur la ligne droite (« GTA bloque l'arrière sans lui faire perdre son adhérence latérale »), qui
+	-- reste vrai : en ligne droite la dérive est nulle, et il n'y a rien à faire glisser.
 	-- CONTRÔLE EN L'AIR. MESURÉ (2026-11-12) sur 15 vols au tremplin, 3 passes par cas. GTA
 	-- n'applique pas un couple amorti : il applique un couple CONSTANT, saturé par un PLAFOND de
 	-- vitesse angulaire, et borne l'assiette en piqué. Les trois valeurs ci-dessous sont lues
@@ -812,7 +825,15 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 					Fy = -F * sa / s
 				end
 				if hand then
-					Fy *= T.HandbrakeGripRear
+					-- la glisse se borne d'elle-même : l'adhérence perdue revient à mesure que l'angle de dérive de la
+					-- roue grandit (HandbrakeSlideStart → HandbrakeSlideFull), sinon la rotation s'emballe
+					-- Le latéral d'une roue tenue par le frein à main ne dépend PAS de son blocage (MESURÉ en ligne droite :
+					-- GTA bloque l'arrière sans lui ôter son adhérence latérale) : il ne passe pas par le cercle
+					-- d'adhérence, où un blocage (glissement −0,5 à −0,7) le réduisait de 60 à 80 % et faisait partir
+					-- la voiture en tête-à-queue dès que l'arrière décrochait.
+					local aDeg = math.deg(math.abs(alpha))
+					local back = math.clamp((aDeg - T.HandbrakeSlideStart) / math.max(T.HandbrakeSlideFull - T.HandbrakeSlideStart, 1e-3), 0, 1)
+					Fy = -fmax * math.clamp(sa, -1, 1) * (T.HandbrakeGripRear + (1 - T.HandbrakeGripRear) * back)
 				end
 				-- plafond latéral proportionnel à la vitesse latérale au contact (MESURÉ ; voir Dyn.Tuning).
 				-- Il ne touche QUE le latéral : en ligne droite vLat ≈ 0, donc Fy ≈ 0 de toute façon, et la
