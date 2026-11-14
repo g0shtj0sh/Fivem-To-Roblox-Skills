@@ -21,6 +21,7 @@ local folder = script.Parent
 local Dyn = require(folder:WaitForChild("VehicleDynamics"))
 local Runtime = require(folder:WaitForChild("VehicleRuntime"))
 local Input = require(folder:WaitForChild("VehicleInput"))
+local TyreFx = require(folder:WaitForChild("VehicleTyreFx"))
 
 local Drive = {}
 Drive.Active = nil -- { car, cfg, sim, root, spm, wheels, ... }
@@ -203,10 +204,12 @@ local function step(a, dt)
 	-- télémétrie -> rendu (son moteur, roues, volant, feux de recul, compte-tours)
 	local audio = a.cfg.Audio or {}
 	local idle, maxRpm = audio.IdleRpm or 850, audio.MaxRpm or 7200
-	local spin, susp = {}, {}
+	local spin, susp, tyre = {}, {}, {}
 	for i, w in ipairs(P.wheels) do
 		spin[w.bone] = out.omega[i]
 		susp[w.bone] = out.travel[i]
+		local ow = out.wheels[i]
+		tyre[w.bone] = TyreFx.Intensity(ow.slip, ow.slipV, ow.grounded)
 	end
 	Runtime.SetTelemetry(car, {
 		Rpm = idle + (math.clamp(out.rpm, 0.2, 1) - 0.2) / 0.8 * (maxRpm - idle),
@@ -219,6 +222,8 @@ local function step(a, dt)
 		WheelSteer = out.lock,
 		WheelSpin = spin,
 		Suspension = susp,
+		TyreFx = tyre, -- traces et fumée par roue (VehicleTyreFx), 0..1
+		Burnout = out.burnout,
 	})
 	car:SetAttribute("Gear", out.gear)
 end

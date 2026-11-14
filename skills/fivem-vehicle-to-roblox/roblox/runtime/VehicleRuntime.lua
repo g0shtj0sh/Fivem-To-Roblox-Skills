@@ -21,6 +21,18 @@ Runtime.RenderDistance = 350 -- studs
 Runtime.SteeringWheelDeg = 90 -- rotation du volant à pleine butée des roues (GTA, steerWheelMult = 1)
 
 -- réglages du moteur de conduite (fondu du braquage avec la vitesse), lus une fois
+local tyreFx
+local function tyreFxModule()
+	if tyreFx == nil then
+		local m = script.Parent:FindFirstChild("VehicleTyreFx")
+		local ok, mod = pcall(function()
+			return m and require(m)
+		end)
+		tyreFx = (ok and mod) or false
+	end
+	return tyreFx
+end
+
 local dynT
 local function dynTuning()
 	if dynT == nil then
@@ -178,6 +190,12 @@ function Runtime:_state()
 		Rpm = m:GetAttribute("Rpm"),
 		Gear = m:GetAttribute("Gear"),
 	}
+	-- traces et fumée des autres conducteurs (VehicleTyreFx) ; le conducteur local les a dans sa télémétrie
+	local fxMod = tyreFxModule()
+	if fxMod then
+		self.TyreFxBones = self.TyreFxBones or fxMod.Bones(cfg)
+		s.TyreFx = fxMod.Unpack(m:GetAttribute("TyreFx"), self.TyreFxBones)
+	end
 	local vel = self.Root.AssemblyLinearVelocity
 	local fwd = self.Root.CFrame.LookVector
 	s.Speed = vel:Dot(fwd) / self.Spm -- m/s, signé
@@ -665,6 +683,10 @@ function Runtime:Update(dt)
 	self:_updateJoints(dt, s)
 	self:_updateLights(s)
 	self:_updateAudio(dt, s)
+	local fxMod = tyreFxModule()
+	if fxMod then
+		fxMod.Update(self, dt, s)
+	end
 end
 
 local accum = 0
@@ -685,6 +707,10 @@ RunService.RenderStepped:Connect(function(dt)
 				r:Update(dt)
 			elseif slowTick then
 				r:_stopAllSounds()
+				local fxMod = tyreFxModule()
+				if fxMod then
+					fxMod.Stop(r)
+				end
 			end
 		end
 	end

@@ -151,3 +151,33 @@ Par priorité :
 - Le frein à main se mesure depuis un départ propre sur la ligne : enchaîné après le slalom, il est
   entré en correction de cap et a donné 36,5 °/s de lacet au lieu de 1,4.
 
+
+## Traces de pneus, fumée et burn (2026-11-14)
+
+Demande de l'utilisateur : « exactement comme dans GTA », traces et fumée par roue, burn et donuts ; rien sur l'eau ;
+retours de flamme plus tard. Règle tirée de deux vidéos de drift GTA V (analyse image par image) et du code de GTA
+Vice City rétro-ingénié (reVC, `CAutomobile` : fumée `PARTICLE_RUBBER_SMOKE` et trace `CSkidmarks::RegisterOne`
+dans le même test, roue `SPINNING`, `SKIDDING` ou `FIXED`).
+
+**Essais** : m422 (4×4, `fDriveBiasFront` 0,5), piste `TestTrack` en Play Studio PC, 1 joueur, entrées imposées
+par `VehicleDrive.SetOverride`, intensité par roue lue dans la télémétrie et dans l'attribut répliqué.
+
+| Scénario | Résultat |
+|---|---|
+| burn (W + S à l'arrêt) | 0,0 km/h, régime 0,99, les deux roues arrière à 39 rad/s (13,4 m/s de patinage), avant à 0 ; intensité 1,0 à l'arrière, 0 à l'avant ; 6 couches de tache par roue ; fumée des deux côtés |
+| donut (W + S + A) | lacet 53 °/s (cible 80), voiture qui pivote sur l'avant, arc noir au sol |
+| relâcher S | 0 → 38 km/h en 1,2 s ; patinage bref d'une roue avant (différentiel libre 4×4), trace courte |
+| frein à main à 50 km/h puis contre-braquage | arrière 0,4 → 1,0, avant 0 à 0,14 (une pointe à 0,55 pendant la bascule) |
+| ligne droite 40-55 km/h, gaz partiels | 0 sur les quatre roues, aucune nouvelle trace |
+| réplication | attribut `TyreFx` décodé = intensité locale (pic de chaque 0,1 s) |
+
+**Défauts trouvés et corrigés pendant les essais** : une seule roue patinait et s'emballait (1 700 rad/s) → les
+roues du burn tournent ensemble, couple entier pour elles, adhérence × 0,35 ; coupure nette au rupteur → les roues
+retombaient de 75 à 5 rad/s à chaque rebond, la tache ne se formait jamais → coupure progressive sous le rupteur ;
+4×4 : la moitié du couple ne vainquait pas l'adhérence → tout le couple aux roues arrière pendant le burn ; burn
+sur place sans tache (aucun déplacement) → couches de gomme superposées sous la roue.
+
+**Non vérifié** : seuils de GTA (aucune source publique : `BurnoutEnter/Exit`, `BurnoutYawRate`, `Fx.V0/V1`
+posés à l'œil) ; rendu chez un deuxième joueur (même code, attribut vérifié seulement) ; téléphone et coût avec
+plusieurs voitures (1 500 segments au plus par client) ; sols meubles. Absents : pneu qui éclate après un long burn,
+crissement des pneus, retour de flamme.

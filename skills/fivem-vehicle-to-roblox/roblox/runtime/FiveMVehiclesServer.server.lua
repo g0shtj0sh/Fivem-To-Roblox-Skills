@@ -99,7 +99,7 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 end)
 
 -- Télémétrie du conducteur (10 Hz, non fiable) -> attributs lus par les autres clients
-telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, brake, reverse, gear)
+telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, brake, reverse, gear, tyreFx)
 	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
 		return
 	end
@@ -119,6 +119,10 @@ telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, br
 	model:SetAttribute("Reverse", reverse == true)
 	if type(gear) == "number" then
 		model:SetAttribute("Gear", math.clamp(math.floor(gear), -1, 12))
+	end
+	-- traces et fumée par roue (VehicleTyreFx : 4 bits par roue), purement visuelles
+	if type(tyreFx) == "number" and tyreFx == tyreFx then
+		model:SetAttribute("TyreFx", math.clamp(math.floor(tyreFx), 0, 0xFFFFFFFF))
 	end
 end)
 
@@ -210,6 +214,7 @@ local function setupVehicle(model)
 					model:SetAttribute("Brake", false)
 					model:SetAttribute("Throttle", 0)
 					model:SetAttribute("Steer", 0)
+					model:SetAttribute("TyreFx", 0)
 					Access.OnDriverChanged(model, nil)
 				end
 			end

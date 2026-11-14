@@ -242,6 +242,13 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   véhicule, bornée à ±110 ° de cap, +30 / −45 ° d'inclinaison, revient vers l'avant en roulant (1,5 s sans
   toucher à la vue), regarde derrière avec C / R3 ; seuls les avant-bras et les mains sont visibles, amincis sur l'écran de l'occupant. Bornes
   posées à l'œil (celles de GTA ne sont pas documentées). `PovCamera = false` pour garder la caméra de Roblox.
+- **Traces de pneus, fumée et burn façon GTA** (`VehicleTyreFx`, chaque client ; `VehicleDynamics`) : par roue,
+  trace noire au sol + fumée légère **ensemble**, dès que la roue glisse dans son propre repère au-delà du pic
+  d'adhérence (drift, frein à main, patinage, roue bloquée) ; une roue avant braquée dans le sens de la trajectoire ne
+  marque pas ; rien sur l'eau ; sols meubles : poussière et trace de la couleur du sol. **Burn** : W + S à l'arrêt, les
+  roues motrices patinent sur place (régime tenu sous le rupteur, tache noire qui fonce) ; avec A / D, **donut** autour
+  de l'avant ; relâcher S lance la voiture. Couleur de fumée : attribut `TyreSmokeColor`. Seuils posés à l'œil contre
+  des vidéos GTA, non mesurés dans FiveM ; pas encore de pneu qui éclate après un long burn ni de crissement.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 

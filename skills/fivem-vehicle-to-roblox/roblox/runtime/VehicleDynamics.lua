@@ -154,6 +154,19 @@ Dyn.Tuning = {
 	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
 	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
 	LowSpeedFade = 8, -- m/s : vitesse où la perte d'adhérence au démarrage (burnout) disparaît
+	-- BURN façon GTA V (2026-11-14) : W + S tenus ensemble, arrêté ou presque, en marche avant → les roues
+	-- motrices sont libérées du frein et patinent, les autres restent freinées (native SET_VEHICLE_BURNOUT :
+	-- « spins the driven wheels with the others braked, so you don't go anywhere ») ; A / D en même temps font
+	-- tourner la voiture autour de l'avant (donuts). Relâcher S lance la voiture. Seuils posés à l'œil, NON
+	-- MESURÉS dans FiveM : à caler sur une trace GTA (vitesse de sortie, régime tenu, dérive en donut).
+	BurnoutInput = 0.5, -- gaz ET frein au-delà de cette valeur
+	BurnoutEnter = 2.5, -- m/s : vitesse sous laquelle le burn démarre
+	BurnoutExit = 6, -- m/s : vitesse au-delà de laquelle il s'arrête (hystérésis : la voiture rampe un peu)
+	BurnoutYawRate = 80, -- °/s : donut (burn + direction), la voiture pivote autour de l'avant. Posé à l'œil.
+	BurnoutYawGain = 6, -- 1/s : vitesse à laquelle la rotation rejoint sa cible
+	BurnoutGrip = 0.35, -- part de l'adhérence gardée par les roues qui patinent pendant le burn
+	BurnoutPush = 0.25, -- part de la poussée des roues qui patinent transmise au sol pendant le burn (la voiture
+	-- reste presque sur place, comme dans GTA ; 1 = poussée entière contre le frein avant)
 	-- Départ arrêté, MESURÉ (accel 1-3, m422, FiveM) : à l'arrêt en 1ʳᵉ l'embrayage est à 0,10 ; sous les gaz il
 	-- monte (≈ 1,7 /s, la vitesse d'un passage) et GTA transmet la poussée PENDANT ce patinage. Puissance de roue
 	-- relevée 0,008 / 0,037 / 0,098 / 0,170 (pleine) à un embrayage de 0,10 / 0,26 / 0,43 / 0,59 ; les quatre
@@ -476,16 +489,27 @@ function Dyn.new(cfg, comLocal, overrides)
 			P.nDriven += 1
 		end
 	end
+	-- roues qui patinent pendant le burn : les motrices ; une transmission intégrale garde l'avant freiné
+	for _, w in ipairs(wheels) do
+		w.burnSpin = w.driveShare > 0 and (P.nDriven < #wheels or not w.front)
+	end
+	P.nBurnSpin = 0
+	for _, w in ipairs(wheels) do
+		if w.burnSpin then
+			P.nBurnSpin += 1
+		end
+	end
 
 	local S = {
 		rpm = 0.2, gear = 1, clutch = 1, shiftDir = 0, lastShift = -1, time = 0,
 		reverseTimer = 0, steerAngle = 0, lock = P.steerLock,
-		omega = {}, x = {}, slip = {}, stick = {},
+		omega = {}, x = {}, slip = {}, slipV = {}, stick = {}, burnout = false,
 	}
 	for i, w in ipairs(wheels) do
 		S.omega[i] = 0
 		S.x[i] = w.x0
 		S.slip[i] = 0
+		S.slipV[i] = 0
 		S.stick[i] = 0
 	end
 	return { P = P, S = S, T = T }
@@ -497,10 +521,12 @@ function Dyn.reset(sim)
 	local S, P = sim.S, sim.P
 	S.rpm, S.gear, S.clutch, S.shiftDir, S.reverseTimer = 0.2, 1, 1, 0, 0
 	S.launch = false
+	S.burnout = false
 	for i, w in ipairs(P.wheels) do
 		S.omega[i] = 0
 		S.x[i] = w.x0
 		S.slip[i] = 0
+		S.slipV[i] = 0
 		S.stick[i] = 0
 	end
 end
@@ -613,6 +639,11 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		driveIn = 0
 	end
 
+	-- burn façon GTA (voir Dyn.Tuning, BurnoutInput) : W + S en marche avant, à l'arrêt ou presque
+	local wantBurn = S.gear >= 1 and engineOn and throttle > T.BurnoutInput and brake > T.BurnoutInput
+	S.burnout = wantBurn and math.abs(vf) < (S.burnout and T.BurnoutExit or T.BurnoutEnter)
+	local burnout = S.burnout
+
 	-- rapports manuels (impulsions)
 	if inp.GearUp and S.gear >= 1 and S.gear < P.nGears then
 		shift(S, S.gear + 1, 1)
@@ -710,7 +741,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		-- vitesse périphérique moyenne des roues motrices
 		local drivenSpeed, nd = 0, 0
 		for i, w in ipairs(P.wheels) do
-			if w.driveShare > 0 then
+			-- burn : le moteur ne voit que les roues qui patinent (l'avant d'une 4×4 est freiné, sans couple)
+			if (burnout and w.burnSpin) or (not burnout and w.driveShare > 0) then
 				drivenSpeed += math.abs(S.omega[i]) * w.radius
 				nd += 1
 			end
@@ -749,8 +781,16 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			S.rpm = math.max(wheelRpm, 0)
 		end
 		local cut = 1
+		if burnout then
+			-- burn : le régime se tient juste sous le rupteur (coupure progressive). Une coupure nette à 1
+			-- faisait chuter les roues de 75 à 5 rad/s à chaque rebond (banc 2026-11-14) et la tache noire
+			-- ne se formait jamais.
+			cut = math.clamp((1 - S.rpm) / 0.05, 0, 1)
+		end
 		if S.rpm >= 1 then
-			if P.hardRev then
+			if P.hardRev or (not burnout and wheelRpm > (math.abs(vf) / gearTop) * 1.15 + 0.05) then
+				-- roues qui patinent (roue délestée d'un différentiel libre, départ) : seul le rupteur borne leur
+				-- régime, sinon elles s'emballent sans fin
 				cut = 0
 			elseif (S.gear == P.nGears or S.gear < 0) and not P.cvt then
 				-- MESURÉ : la marche arrière plafonne à −48,8 km/h, soit exactement
@@ -793,9 +833,17 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			local c = contacts[i] or { grounded = false, vLong = 0, vLat = 0, grip = 1 }
 			local vLong, vLat = c.vLong or 0, c.vLat or 0
 			local aW = aDrive * w.driveShare
+			if burnout then
+				-- burn : tout le couple va aux roues qui patinent (une transmission intégrale garde l'avant
+				-- freiné et sans couple) ; sans ça la poussée partagée ne vainc pas l'adhérence (essai m422 4×4)
+				aW = w.burnSpin and aDrive / math.max(P.nBurnSpin, 1) or 0
+			end
 			-- « g par roue » × biais d'essieu (2b) : BrakeForce = 1 demande ≈ 4 g en tout ; la roue bloque dès que
 			-- BrakeForce > adhérence / 4 (règle connue du jeu), l'ABS relâche alors
 			local brakeA = P.brake * math.max(brakeIn, hold) * w.brakeBias * P.g
+			if burnout and w.burnSpin then
+				brakeA = 0 -- la roue motrice est libérée du frein : elle patine
+			end
 			local hand = inp.Handbrake and not w.front
 			if hand then
 				brakeA += P.handbrake * P.g
@@ -817,12 +865,22 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				local skF = sk * T.FalloffKappa
 				local sFall = math.sqrt(skF * skF + sa * sa)
 				S.slip[i] = s
+				-- vitesse de glissement au contact (m/s) : ce qui fait la trace et la fumée (VehicleTyreFx)
+				local vSlipLong = omega * w.radius - vLong
+				S.slipV[i] = math.sqrt(vSlipLong * vSlipLong + vLat * vLat)
 				local grip = 1 - (1 - (c.grip or 1)) * P.lossMult
 				local fmax = (N[i] * muOf(P, sFall) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
+				if burnout and w.burnSpin then
+					fmax *= T.BurnoutGrip -- la roue décroche et patine même sur un moteur modeste (GTA force le patinage)
+				end
 				if s > 1e-6 then
 					local F = fmax * math.min(s, 1)
 					Fx = F * sk / s
 					Fy = -F * sa / s
+				end
+				if burnout and not w.burnSpin then
+					-- donut : l'avant freiné tient latéralement (pivot), sinon toute la voiture glisse de côté
+					Fy = -fmax * math.clamp(sa, -1, 1)
 				end
 				if hand then
 					-- la glisse se borne d'elle-même : l'adhérence perdue revient à mesure que l'angle de dérive de la
@@ -851,7 +909,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				end
 				-- frottement STATIQUE : ressort sur le glissement accumulé, qui ne s'annule pas à vitesse
 				-- nulle (voir Dyn.Tuning). Il décroche à l'adhérence et rend alors la main au glissement.
-				if still then
+				if still and not (burnout and w.burnSpin) then
 					local vSlip = vLong - omega * w.radius
 					S.stick[i] += vSlip * h -- le PAS INTERNE, pas dt : sinon la raideur dépend de SubSteps
 					local Fs = -(T.KStick * S.stick[i] + T.CStick * vSlip) * N[i] / P.g
@@ -898,16 +956,33 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				end
 				S.omega[i] = o
 				S.slip[i] = 0
+				S.slipV[i] = 0
 			end
-			sumFx[i] += Fx
+			-- burn : la roue garde toute la réaction du sol (elle patine), la caisse n'en reçoit qu'une part
+			sumFx[i] += (burnout and w.burnSpin) and Fx * T.BurnoutPush or Fx
 			sumFy[i] += Fy
+		end
+		-- burn : les roues motrices patinent ensemble (deux traces, deux fumées, comme dans GTA) ; sans ça, la
+		-- moins chargée part seule et l'autre reste tenue (essai du 2026-11-14 : une seule roue arrière tournait)
+		if burnout then
+			local top
+			for i, w in ipairs(P.wheels) do
+				if w.burnSpin and (top == nil or math.abs(S.omega[i]) > math.abs(top)) then
+					top = S.omega[i]
+				end
+			end
+			for i, w in ipairs(P.wheels) do
+				if w.burnSpin then
+					S.omega[i] = top
+				end
+			end
 		end
 	end
 
 	-- sorties
 	local out = {
 		wheels = {}, omega = {}, travel = {}, rpm = S.rpm, gear = S.gear, clutch = S.clutch,
-		speed = vf, lock = lock, steerAngle = S.steerAngle, reverse = S.gear < 0,
+		speed = vf, lock = lock, steerAngle = S.steerAngle, reverse = S.gear < 0, burnout = burnout,
 	}
 	for i, w in ipairs(P.wheels) do
 		local x = S.x[i]
@@ -920,6 +995,9 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			steer = w.steer and S.steerAngle or 0,
 			point = Vector3.new(wheelCenter.X, contactY, wheelCenter.Z), -- contact (charge normale)
 			lateralPoint = Vector3.new(wheelCenter.X, contactY + w.rc, wheelCenter.Z), -- centre de roulis
+			slip = S.slip[i], -- glissement combiné (> 1 : au-delà du pic d'adhérence)
+			slipV = S.slipV[i], -- vitesse de glissement au contact (m/s)
+			grounded = contacts[i] ~= nil and contacts[i].grounded == true,
 		}
 		out.omega[i] = S.omega[i]
 		out.travel[i] = (contacts[i] and contacts[i].grounded) and (x - w.x0) or (-w.x0)
@@ -992,6 +1070,13 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		-- partie de ce retour est l'atterrissage et je n'ai pas isolé le couple qui le produit.
 		-- Le véhicule reste donc à la borne plutôt que d'être repoussé par une valeur inventée.
 		torque += (Vector3.new(ax, 0, az) - w * T.AirDamp) * T.GyrationSq
+	end
+	-- donut : burn + direction, la voiture tourne sur elle-même autour de l'avant (pivot tenu par les roues
+	-- avant freinées) ; direction à gauche (Steer < 0) → rotation vers la gauche (+Y)
+	if burnout and grounded > 0 and math.abs(inp.Steer or 0) > 0.1 then
+		local target = -(inp.Steer or 0) * math.rad(T.BurnoutYawRate)
+		local acc = math.clamp((target - w.Y) * T.BurnoutYawGain, -math.rad(400), math.rad(400))
+		torque += Vector3.new(0, acc, 0) * T.GyrationSq
 	end
 	local up = ctx.up or Vector3.yAxis
 	if up.Y < 0.7 and speed < T.RightingSpeed and grounded < #P.wheels then

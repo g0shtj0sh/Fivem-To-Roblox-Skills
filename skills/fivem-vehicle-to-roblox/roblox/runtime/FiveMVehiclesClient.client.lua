@@ -258,7 +258,9 @@ end
 player.CharacterAdded:Connect(hookCharacter)
 
 -- Entrées locales -> rendu immédiat + télémétrie 10 Hz vers le serveur
+local TyreFx = require(folder:WaitForChild("VehicleTyreFx"))
 local sendAcc = 0
+local tyrePeak = {} -- intensité max de chaque roue depuis le dernier envoi (un patinage bref n'est pas perdu)
 RunService.Heartbeat:Connect(function(dt)
 	local m = driving
 	if not m then
@@ -274,9 +276,15 @@ RunService.Heartbeat:Connect(function(dt)
 	if r then
 		r.LocalOverride = { Steer = c.Steer, Throttle = c.Throttle, Brake = brake, Reverse = reverse }
 	end
+	local tele = r and r.Telemetry
+	for bone, k in pairs((tele and tele.TyreFx) or {}) do
+		tyrePeak[bone] = math.max(tyrePeak[bone] or 0, k)
+	end
 	sendAcc += dt
 	if sendAcc >= 0.1 then
 		sendAcc = 0
-		telemetry:FireServer(m, st.Rpm or 0, c.Throttle, c.Steer, brake, reverse, st.Gear)
+		local packed = r and TyreFx.Pack(tyrePeak, TyreFx.Bones(r.Config)) or 0
+		table.clear(tyrePeak)
+		telemetry:FireServer(m, st.Rpm or 0, c.Throttle, c.Steer, brake, reverse, st.Gear, packed)
 	end
 end)

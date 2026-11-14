@@ -58,6 +58,9 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | `Brake`, `Reverse` | bool | feux stop / recul |
 | `Horn`, `Siren`, `SirenSound` | | klaxon, gyrophares, tonalité ("wail","yelp","priority","off") |
 | `Rpm`, `Throttle`, `Steer`, `Gear` | number | télémétrie relayée aux autres joueurs (10 Hz) |
+| `TyreFx` | entier | traces et fumée par roue (4 bits par roue, os triés par nom ; `VehicleTyreFx.Unpack`), relayé à 10 Hz |
+| `TyreSmokeColor` | Color3 | couleur de la fumée de pneus (comme dans GTA ; défaut gris clair) |
+| `TyreFx` = false | bool | sur le véhicule : coupe traces et fumée (l'attribut numérique ci-dessus est alors ignoré) |
 | `Door_<os>` | 0..1 | ouverture porte / capot / coffre |
 | `Mod_<Slot>`, `Color_<Couche>`, `Livery`, `Extra_<n>`, `WindowTint`, `Neon`, `NeonColor`, `XenonColor`, `PlateText`, `Perf_<Slot>` | | custom (voir API) |
 
@@ -75,6 +78,7 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | ← / → / ↓ | — | clignotant gauche / droit / warnings |
 | Q / R | croix gauche / — | sirène / tonalité |
 | W A S D, Espace | gâchettes, stick, R1 | conduite, frein à main (lus par ton moteur via `VehicleInput.Controls`) |
+| W + S (+ A / D) | gaz + frein (+ stick) | arrêté : **burn** (roues motrices qui patinent sur place) ; avec la direction : **donut** |
 | Maj / Ctrl | croix haut / X | rapport + / − (`Input.Action`) |
 
 Mobile : les invites s'affichent en bouton ; à bord, bouton « Descendre ».
@@ -307,8 +311,11 @@ Runtime.SetTelemetry(car, {
 	Steer = steer, WheelSteer = maxSteerRad,          -- angle des roues = -Steer × WheelSteer
 	WheelSpin = { wheel_lf = omega, ... },            -- rad/s, + = avant
 	Suspension = { wheel_lf = travel, ... },          -- m, + = vers le haut, relatif au repos
+	TyreFx = { wheel_lf = 0..1, ... },                -- traces + fumée : VehicleTyreFx.Intensity(slip, slipV, grounded)
 })
 ```
+`TyreFx` vient du glissement de chaque roue (`slip` combiné, 1 = pic d'adhérence ; `slipV` en m/s au contact) ;
+`FiveMVehiclesClient` en envoie le maximum de chaque 0,1 s au serveur, qui le pose dans l'attribut `TyreFx`.
 Sans `SetTelemetry`, le rendu estime le régime et la rotation des roues depuis la vitesse de `VehicleRoot`.
 
 ## Données physiques exportées (`VehicleConfig.Handling` et `VehicleConfig.Physics`)
