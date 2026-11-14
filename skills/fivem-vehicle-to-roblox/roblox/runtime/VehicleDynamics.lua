@@ -610,6 +610,10 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 
 	-- marche arrière façon GTA : à l'arrêt, frein maintenu -> arrière ; en arrière, « frein » accélère
 	local throttle, brake = inp.Throttle or 0, inp.Brake or 0
+	-- arrêté en marche arrière (S tenu) puis W ajouté : GTA part en burn, pas en marche arrière freinée
+	if S.gear < 0 and throttle > T.BurnoutInput and brake > T.BurnoutInput and math.abs(vf) < T.BurnoutEnter then
+		S.gear, S.clutch, S.reverseTimer = 1, 1, 0
+	end
 	if S.gear >= 1 then
 		if brake > 0.1 and throttle < 0.05 and vf < 0.8 then
 			S.reverseTimer += dt

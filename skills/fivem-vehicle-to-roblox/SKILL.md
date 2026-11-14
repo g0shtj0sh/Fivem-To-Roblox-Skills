@@ -249,6 +249,11 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   roues motrices patinent sur place (régime tenu sous le rupteur, tache noire qui fonce) ; avec A / D, **donut** autour
   de l'avant ; relâcher S lance la voiture. Couleur de fumée : attribut `TyreSmokeColor`. Seuils posés à l'œil contre
   des vidéos GTA, non mesurés dans FiveM ; pas encore de pneu qui éclate après un long burn ni de crissement.
+- **Retours de flamme façon GTA** (`VehicleBackfire`, chaque client, aucun réseau en plus) : jet de flamme + lumière
+  orange à chaque os `exhaust*` du modèle, au lever de pied à haut régime (salve de 2 à 4), au passage de rapport sous
+  les gaz et au rupteur (burn compris). Comme GTA, seulement avec un échappement amélioré (`Mod_Exhaust` > 0) sauf
+  attribut `Backfire`. Son : attribut `BackfireSoundId` (aucun son fourni : le son de GTA appartient à Rockstar).
+  Seuils et rendu posés à l'œil.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 

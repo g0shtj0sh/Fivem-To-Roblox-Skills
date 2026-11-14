@@ -181,3 +181,20 @@ sur place sans tache (aucun déplacement) → couches de gomme superposées sous
 posés à l'œil) ; rendu chez un deuxième joueur (même code, attribut vérifié seulement) ; téléphone et coût avec
 plusieurs voitures (1 500 segments au plus par client) ; sols meubles. Absents : pneu qui éclate après un long burn,
 crissement des pneus, retour de flamme.
+
+## Retours de flamme (2026-11-14)
+
+Demande de l'utilisateur : retours de flamme comme GTA V, avec de la lumière. Quand (forums et vidéos de joueurs, aucun
+seuil publié) : lever de pied à haut régime, passage de rapport, rupteur ; surtout avec un échappement amélioré.
+
+**Essais** (m422, 4 os `exhaust*`, attribut `Backfire = true` posé en Play seulement, Play Studio PC, 1 joueur) :
+passage 1→2 plein gaz → 1 détonation ; lever de pied à 0,92 de régime → salve de 3 puis 4 détonations ; burn → une
+détonation environ toutes les 0,5 s ; aucune en accélération continue sans passage. Rendu de nuit : jet orange aux 4
+sorties, flaque de lumière au sol (observé par l'agent, non approuvé par l'utilisateur).
+
+**Erreurs corrigées** : flamme en nuage d'étincelles (rotation libre, traînée forte) → particules couchées dans leur
+déplacement et étirées, cœur lumineux bref ; après un arrêt en tenant S la boîte passait en marche arrière et W + S ne
+lançait plus le burn → passage en 1ʳᵉ et burn, comme GTA.
+
+**Non fait** : son (génération indisponible sur le compte ; le son de GTA n'est pas repris, il appartient à Rockstar),
+rendu chez un 2ᵉ joueur, téléphone.

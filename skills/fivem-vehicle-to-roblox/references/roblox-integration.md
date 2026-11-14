@@ -59,6 +59,8 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | `Horn`, `Siren`, `SirenSound` | | klaxon, gyrophares, tonalité ("wail","yelp","priority","off") |
 | `Rpm`, `Throttle`, `Steer`, `Gear` | number | télémétrie relayée aux autres joueurs (10 Hz) |
 | `TyreFx` | entier | traces et fumée par roue (4 bits par roue, os triés par nom ; `VehicleTyreFx.Unpack`), relayé à 10 Hz |
+| `Backfire` | bool | retours de flamme : true toujours, false jamais, absent = seulement avec un échappement amélioré (`Mod_Exhaust` > 0), comme GTA |
+| `BackfireSoundId` | string | son d'une détonation (aussi sur `ReplicatedStorage.FiveMVehicles`) ; vide = flamme muette |
 | `TyreSmokeColor` | Color3 | couleur de la fumée de pneus (comme dans GTA ; défaut gris clair) |
 | `TyreFx` = false | bool | sur le véhicule : coupe traces et fumée (l'attribut numérique ci-dessus est alors ignoré) |
 | `Door_<os>` | 0..1 | ouverture porte / capot / coffre |

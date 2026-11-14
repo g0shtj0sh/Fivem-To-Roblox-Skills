@@ -33,6 +33,18 @@ local function tyreFxModule()
 	return tyreFx
 end
 
+local backfire
+local function backfireModule()
+	if backfire == nil then
+		local m = script.Parent:FindFirstChild("VehicleBackfire")
+		local ok, mod = pcall(function()
+			return m and require(m)
+		end)
+		backfire = (ok and mod) or false
+	end
+	return backfire
+end
+
 local dynT
 local function dynTuning()
 	if dynT == nil then
@@ -686,6 +698,10 @@ function Runtime:Update(dt)
 	local fxMod = tyreFxModule()
 	if fxMod then
 		fxMod.Update(self, dt, s)
+	end
+	local bf = backfireModule()
+	if bf then
+		bf.Update(self, dt, s)
 	end
 end
 
