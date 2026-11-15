@@ -11,6 +11,7 @@ import numpy as np
 from PIL import Image
 
 from .icon_atlas import has_alpha_mask, refine_icon_atlas
+from .light_emissive import emissive_mask, upscale as light_upscale
 from .util import Report
 
 # Plafond de Roblox mesuré le 2026-11-15 (GLB importé) : 2048 gardé tel quel (rendu net en qualité 21),
@@ -179,6 +180,13 @@ class TextureStore:
             img = edit(img, role)
         self.avg.setdefault(name.lower(), average_color(img))
         self.flat.setdefault(name.lower(), float(np.asarray(img.convert("RGB"), np.float32).std()) / 255.0 < FLAT_STD)
+        if role in ("light", "emask"):  # optique : texture agrandie et masque d'émission (light_emissive.py)
+            big = light_upscale(img, self.max_size)
+            img = emissive_mask(big) if role == "emask" else big
+            dst = self.out_dir / f"{name.lower()}{'_light' if role == 'light' else '_emask'}.png"
+            img.save(dst, optimize=True)
+            self.cache[key] = dst
+            return dst
         if role in ("color", "opaque") and name.lower() in self.icon_atlases and has_alpha_mask(img):
             img = refine_icon_atlas(img, self.max_size)
             if role == "opaque":  # pièce opaque (bouton de porte, console) : symbole clair sur fond sombre, sans trou

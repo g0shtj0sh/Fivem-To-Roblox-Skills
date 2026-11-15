@@ -413,7 +413,41 @@ end
 -- Une optique allumée est du Neon SANS texture : un MeshPart Neon qui garde son TextureID (texture GTA
 -- sombre) reste presque éteint (mesuré sur le m422, 2026-11-12). La texture revient à l'extinction
 -- (attribut OffTexture, posé par VehicleLights.Rig).
+-- Optique à émission masquée (VehicleLights.EmissiveSetup) : seule la partie claire de sa texture s'allume, à une
+-- intensité par famille de feu (réglée de jour et de nuit sur la m422, 2026-11-15) ; teinte = couleur du feu
+-- ramenée à sa composante la plus forte (la texture donne déjà la couleur du verre).
+Runtime.EmissiveStrength = {
+	headlight = 10, always_on = 8, taillight = 4, brakelight = 12, reversinglight = 10, indicator = 12,
+	extralight = 12, default = 8,
+}
+local function emissiveFamily(part, color)
+	local role = part:GetAttribute("LightRole") or ""
+	local family = string.match(role, "^(%a+)") or "default"
+	if role == "always_on" then
+		family = "always_on"
+	elseif family == "taillight" and color and color.R > 0.9 and color.G < 0.2 then
+		family = "brakelight" -- feu arrière qui sert aussi de stop (véhicule sans pièce brakelight)
+	end
+	return family
+end
+
 local function setPart(part, on, color)
+	local sa = part:GetAttribute("EmissiveLit") and part:FindFirstChildOfClass("SurfaceAppearance")
+	if sa then
+		local S = Runtime.EmissiveStrength
+		if on then
+			local c = color or Color3.new(1, 1, 1)
+			local m = math.max(c.R, c.G, c.B, 1e-3)
+			sa.EmissiveTint = Color3.new(c.R / m, c.G / m, c.B / m)
+			sa.EmissiveStrength = S[emissiveFamily(part, color)] or S.default
+			sa.Color = Color3.new(1, 1, 1)
+		else
+			sa.EmissiveStrength = 0
+			local off = part:GetAttribute("EmissiveOffTint") or 1
+			sa.Color = Color3.new(off, off, off)
+		end
+		return
+	end
 	local offTex = part:GetAttribute("OffTexture")
 	if on then
 		part.Material = Enum.Material.Neon

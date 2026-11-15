@@ -18,7 +18,7 @@
 local CONFIG = __CONFIG_TABLE__
 local CONFIG_SOURCE = __CONFIG_SOURCE__
 local PARTS = __PARTS_TABLE__
-local SOUND_IDS = __SOUND_IDS__ -- { ["engine_on_1.wav"] = "rbxassetid://123", ... } (vide = à remplir)
+local SOUND_IDS = __SOUND_IDS__ -- { ["engine_on_1.wav"] = "rbxassetid://123", ["light_emissive_emask.png"] = ... } : sons ET masques d'émission mis en ligne (vide = à remplir)
 local SOURCES = __RUNTIME_SOURCES__ -- nil dans la variante « studio/ » : runtime installé à part (FiveMRuntime.lua)
 local RUNTIME_VERSION = __RUNTIME_VERSION__
 
@@ -393,6 +393,11 @@ for name, info in pairs(PARTS) do
 		elseif kind == "light" or kind == "siren" then
 			if sa then
 				sa:Destroy()
+			end
+			-- masque d'émission mis en ligne (même table que les sons) : VehicleLights.Rig en fait une optique qui
+			-- n'allume que les parties claires de sa texture
+			if info.EmissiveMask and SOUND_IDS[info.EmissiveMask] then
+				p:SetAttribute("EmissiveMask", SOUND_IDS[info.EmissiveMask])
 			end
 			local role = info.Light or ("siren" .. tostring(info.Siren))
 			if kind == "light" then

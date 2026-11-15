@@ -31,11 +31,14 @@ class GMaterial:
     metallic: float = 0.0
     roughness: float = 0.6
     emissive: list[float] | None = None
+    # glTF emissiveTexture : masque d'émission d'une optique (light_emissive.py)
+    emissive_png: Path | None = None
     double_sided: bool = False
 
     def key(self):
         return (tuple(round(c, 4) for c in self.base_color), str(self.color_png), str(self.normal_png),
-                str(self.mr_png), self.alpha, self.metallic, self.roughness, tuple(self.emissive or ()), self.double_sided)
+                str(self.mr_png), self.alpha, self.metallic, self.roughness, tuple(self.emissive or ()), self.double_sided,
+                str(self.emissive_png))
 
 
 class GlbWriter:
@@ -97,6 +100,9 @@ class GlbWriter:
             mat["normalTexture"] = {"index": self._image(m.normal_png)}
         if m.emissive:
             mat["emissiveFactor"] = m.emissive[:3]
+        if m.emissive_png:
+            mat["emissiveTexture"] = {"index": self._image(m.emissive_png)}
+            mat.setdefault("emissiveFactor", [1.0, 1.0, 1.0])
         self.gltf["materials"].append(mat)
         self._mat_index[k] = len(self.gltf["materials"]) - 1
         return self._mat_index[k]

@@ -1363,8 +1363,9 @@ function groups.lights()
 	local function neonCount(role)
 		local n = 0
 		for _, p in ipairs(byRole[role] or {}) do
-			if p.Material == Enum.Material.Neon then
-				n += 1
+			local sa = p:FindFirstChildOfClass("SurfaceAppearance")
+			if p.Material == Enum.Material.Neon or (p:GetAttribute("EmissiveLit") and sa and sa.EmissiveStrength > 0) then
+				n += 1 -- Néon, ou optique à émission masquée allumée (VehicleLights.EmissiveSetup)
 			end
 		end
 		return n

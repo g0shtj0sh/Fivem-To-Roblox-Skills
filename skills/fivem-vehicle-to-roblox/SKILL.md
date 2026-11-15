@@ -144,6 +144,21 @@ Un véhicule déjà installé et retouché : ne pas le réinstaller, remplacer l
 planche par les deux nouvelles (decal : `AlphaMode.Transparency`), puis `sync_catalog`. Contrôle : gros plans
 du volant, de la console et des portes.
 
+## 1e. Optiques : seules les parties claires s'allument (automatique)
+
+GTA allume une optique (`vehicle_lightsemissive`) par sa texture : les traits d'un feu de jour brillent, le fond
+reste sombre. La conversion (`f2r/light_emissive.py`) écrit pour chaque texture d'optique une version agrandie ×4
+(`<tex>_light.png`, dans le GLB) et un **masque d'émission** (`<tex>_emask.png`, copié dans `<sortie>/<nom>/emissive/`) :
+aplats clairs ou vifs + traits fins plus clairs que leur voisinage, texture sombre (verre rouge) normalisée.
+**L'importeur Roblox ignore la texture d'émission du GLB** (vérifié 2026-11-15) : mettre en ligne les fichiers
+de `emissive/` comme les sons (§ 2) et écrire leurs ids dans `emissive/emissive_ids.json` (ou dans le JSON des
+sons), puis reconvertir. Le Setup pose l'attribut `EmissiveMask`, `VehicleLights.EmissiveSetup` crée la
+`SurfaceAppearance` (texture, masque, teinte éteinte `EmissiveOffTint` 0,55) et le runtime règle
+`EmissiveStrength` par famille (`Runtime.EmissiveStrength` : feux de jour 8, phares 10, arrière 4, stop 12,
+clignotants 12) et `EmissiveTint` = couleur du feu. Sans masque, l'ancien comportement (Néon) reste.
+Véhicule déjà installé : poser `OffTexture`/`TextureID` (texture agrandie) et `EmissiveMask` sur chaque optique, puis
+`VehicleLights.Rig(model)` ; `sync_catalog`. Contrôle : gros plans de jour (éteint) et de nuit (allumé).
+
 ## 2. Uploader le modèle et les sons (assets privés)
 
 En parallèle :

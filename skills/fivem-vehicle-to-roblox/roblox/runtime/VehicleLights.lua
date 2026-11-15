@@ -86,6 +86,48 @@ local function indicatorDir(role, center, lenStuds)
 	return (string.sub(role, -2, -2) == "l") and "left" or "right"
 end
 
+-- Optique à émission masquée (2026-11-15, m422) : au lieu d'une pièce entière en Néon sans texture (qui cachait
+-- les traits du feu de jour et brillait plus fort que les autres feux), la pièce garde sa texture dans une
+-- SurfaceAppearance et un masque (EmissiveMaskContent, attribut `EmissiveMask` posé par le Setup) n'allume que
+-- ses parties claires ; le runtime règle EmissiveStrength / EmissiveTint. Éteinte : texture visible, sans Néon.
+Lights.EmissiveOffTint = 0.55
+
+function Lights.EmissiveSetup(part)
+	local mask = part:GetAttribute("EmissiveMask")
+	if not (mask and part:IsA("MeshPart")) then
+		return false
+	end
+	local tex = part:GetAttribute("OffTexture")
+	if tex == nil or tex == "" then
+		tex = part.TextureID
+	end
+	local sa = part:FindFirstChildOfClass("SurfaceAppearance") or Instance.new("SurfaceAppearance")
+	if tex and tex ~= "" then
+		sa.ColorMap = tex
+	end
+	sa.EmissiveMaskContent = Content.fromUri(mask)
+	sa.EmissiveTint = Color3.new(1, 1, 1)
+	sa.EmissiveStrength = 0
+	-- éteinte, la texture est assombrie : les lentilles des projecteurs sont dessinées blanches dans la texture GTA et
+	-- paraissaient allumées en plein jour (m422) ; allumée, le runtime remet la teinte à blanc
+	local off = Lights.EmissiveOffTint
+	sa.Color = Color3.new(off, off, off)
+	part:SetAttribute("EmissiveOffTint", off)
+	sa.Parent = part
+	part.TextureID = ""
+	part:SetAttribute("OffTexture", nil)
+	part:SetAttribute("EmissiveLit", true)
+	part:SetAttribute("OffMaterial", "SmoothPlastic")
+	part:SetAttribute("OffTransparency", 0)
+	part:SetAttribute("OffColor", Color3.new(1, 1, 1))
+	part.Material = Enum.Material.SmoothPlastic
+	part.Color = Color3.new(1, 1, 1)
+	if part:GetAttribute("Visible") ~= false then
+		part.Transparency = 0
+	end
+	return true
+end
+
 function Lights.Rig(model)
 	local root = model.PrimaryPart
 	local cfgModule = model:FindFirstChild("VehicleConfig")
@@ -109,10 +151,12 @@ function Lights.Rig(model)
 			local role = d:GetAttribute("LightRole")
 			byRole[role] = byRole[role] or {}
 			table.insert(byRole[role], d)
-			-- état éteint : la texture GTA de l'optique, retirée par le runtime à l'allumage
-			if d:IsA("MeshPart") and d:GetAttribute("OffTexture") == nil then
+			-- état éteint : la texture GTA de l'optique, retirée par le runtime à l'allumage ; optique à masque
+			-- d'émission : sa texture passe dans une SurfaceAppearance (Lights.EmissiveSetup)
+			if d:IsA("MeshPart") and d:GetAttribute("OffTexture") == nil and not d:GetAttribute("EmissiveLit") then
 				d:SetAttribute("OffTexture", d.TextureID)
 			end
+			Lights.EmissiveSetup(d)
 		end
 	end
 

@@ -490,6 +490,13 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         mat, has_tex = make_material(p, store, paint_default, livery_names)
         glb.add_mesh(p.name, p.pos, p.nrm, p.uv, p.idx, mat)
         info = part_info(p, vb, store, has_tex)
+        if mat.emissive_png is not None:
+            # masque d'émission d'une optique : l'importeur Roblox l'ignore dans le GLB (vérifié 2026-11-15) ->
+            # fichier à mettre en ligne (emissive/), id lu avec les sons (--sound-ids), posé par le Setup
+            edir = out / "emissive"
+            edir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(mat.emissive_png, edir / mat.emissive_png.name)
+            info["EmissiveMask"] = mat.emissive_png.name
         parts_cfg[p.name] = info
 
     collision_cfg = add_collision(frag_path, vb, glb, parts_cfg, args, report)
@@ -613,7 +620,15 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
     color_png = normal_png = None
     alpha = "OPAQUE"
     has_tex = False
-    if p.kind == "paint" or p.paint:
+    emissive_png = None
+    if p.kind == "light" and p.tex_diffuse and store.find(p.tex_diffuse) is not None:
+        # optique : sa texture (agrandie) éteinte, et un masque d'émission pour n'allumer que ses parties claires
+        # (traits du feu de jour…) au lieu d'une pièce entière en Néon (light_emissive.py, m422 2026-11-15)
+        color_png = store.get(p.tex_diffuse, "light")
+        emissive_png = store.get(p.tex_diffuse, "emask")
+        store.average(p.tex_diffuse)
+        has_tex = color_png is not None
+    elif p.kind == "paint" or p.paint:
         c = p.custom_color or paint.get(p.paint or "Primary", [0.85, 0.85, 0.85])
         base = [*c, 1.0]
         if p.livery and livery_names:
@@ -649,7 +664,7 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
         mr = getattr(p, "mr_override", None)
         mr_png = store.flat_metal_rough(*mr) if mr else store.metal_rough(p.shader, p.tex_diffuse)
     mat = GMaterial(name=f"{p.shader.name}_{p.name}"[:60], base_color=base, color_png=color_png,
-                    normal_png=normal_png, mr_png=mr_png, alpha=alpha,
+                    normal_png=normal_png, mr_png=mr_png, alpha=alpha, emissive_png=emissive_png,
                     double_sided=p.kind in ("decal", "glass"))
     return mat, has_tex
 
@@ -844,12 +859,14 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
 
 
 def load_sound_ids(path: str | None, sounds_dir: Path) -> dict:
-    candidates = [Path(path)] if path else [sounds_dir / "sound_ids.json"]
-    for c in candidates:
+    """Ids des fichiers mis en ligne : sons (--sound-ids ou sounds/sound_ids.json) et masques d'émission des
+    optiques (emissive/emissive_ids.json, ou dans le même JSON que les sons)."""
+    ids: dict = {}
+    for c in ([Path(path)] if path else [sounds_dir / "sound_ids.json"]) + [sounds_dir.parent / "emissive" / "emissive_ids.json"]:
         if c.exists():
             data = json.loads(c.read_text(encoding="utf-8"))
-            return {k: (v if str(v).startswith("rbxassetid://") else f"rbxassetid://{v}") for k, v in data.items()}
-    return {}
+            ids.update({k: (v if str(v).startswith("rbxassetid://") else f"rbxassetid://{v}") for k, v in data.items()})
+    return ids
 
 
 # ------------------------------------------------------------------ main
