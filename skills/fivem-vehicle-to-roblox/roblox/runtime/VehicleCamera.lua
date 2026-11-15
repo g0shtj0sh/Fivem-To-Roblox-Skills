@@ -15,8 +15,11 @@
 	- ne montre que les avant-bras et les mains du personnage (posés sur le volant par VehiclePose), pas le corps.
 
 	Entrer / sortir : V (bouton « Vue » à l'écran sur mobile) bascule, comme la touche « vue » de GTA ; zoomer
-	jusqu'au bout (molette, pincement) entre aussi en vue intérieure, et reculer la molette en sort. Un jeu en LockFirstPerson reste en vue
-	intérieure dans le véhicule.
+	jusqu'au bout (molette, pincement) entre aussi en vue intérieure si le jeu laisse la caméra de Roblox aller
+	jusqu'à la première personne. Reculer la molette n'en sort PAS par défaut (GTA : seule la touche « vue »
+	change de vue) ; attribut `PovWheelExit = true` sur ReplicatedStorage.FiveMVehicles pour l'autoriser.
+	Pendant le ciblage de VehicleTarget (Alt maintenu), la vue est figée et la souris libre. Un jeu en
+	LockFirstPerson reste en vue intérieure dans le véhicule.
 
 	Les bornes de GTA ne sont pas documentées (DEFAULT_POV_CAMERA_LOOKAROUND_MID, dans les métadonnées de caméra du
 	jeu) : YawMax, PitchUp, PitchDown et le recentrage sont posés à l'œil, à mesurer dans FiveM.
@@ -259,7 +262,12 @@ function Camera.Start()
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.MouseWheel and not processed then
-			if input.Position.Z < 0 and player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
+			-- sortie à la molette : seulement si le jeu la demande (attribut `PovWheelExit` du dossier FiveMVehicles).
+			-- Par défaut, comme GTA V, seule la touche « vue » (V) quitte la vue intérieure (demande de l'utilisateur,
+			-- brolver-rp 2026-11-15 : la molette ne doit pas faire passer en troisième personne, V seulement).
+			local folder = script.Parent
+			if input.Position.Z < 0 and folder:GetAttribute("PovWheelExit") == true
+				and player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
 				local _, _, _, char = occupied()
 				exit(char, true)
 			end

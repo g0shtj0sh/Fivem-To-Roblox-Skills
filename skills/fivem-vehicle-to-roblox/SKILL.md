@@ -290,7 +290,8 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   bouton à l'écran sur mobile), W/S/A/D, Espace frein à main (un passager qui saute descend aussi), E klaxon,
   H phares (off/codes/pleins), ←/→ clignotants, ↓ warnings, Q sirène, R tonalité, Z moteur, **Alt gauche maintenu + clic
   sur une portière / le capot / le coffre** pour l'ouvrir ou la fermer (`VehicleTarget`, comme ox_target sur FiveM ;
-  invites « Ouvrir / fermer » gardées au tactile et à la manette),
+  invites « Ouvrir / fermer » gardées au tactile et à la manette ; **assis**, aussi, sur son véhicule seulement, sans
+  limite de portée, même verrouillé, vue intérieure figée pendant le maintien),
   X remettre sur ses roues (manette : croix bas), Maj / Ctrl rapports (manette : croix haut / X).
 - **Monter / descendre** (`VehicleAccess`, serveur) : distance, place libre et verrou (`Locked`) vérifiés,
   portière ouverte puis refermée, joueur assis sans marcher ; à la descente il est posé au sol à côté de **sa**
@@ -327,7 +328,8 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   On ne s'assoit jamais en touchant un siège (`CanTouch = false`) : seulement par l'invite F ; à bord, les
   invites du véhicule sont masquées.
 - **Vue intérieure façon GTA** (`VehicleCamera`, occupant local) : V (bouton « Vue » sur mobile) bascule, comme
-  zoomer à fond ; caméra sur l'œil GTA du siège (`Seats[i].PovOffset` = `PovCameraOffset`), qui tourne avec le
+  zoomer à fond ; reculer la molette n'en sort pas (comme GTA ; `PovWheelExit = true` sur le dossier `FiveMVehicles`
+  pour l'autoriser) ; caméra sur l'œil GTA du siège (`Seats[i].PovOffset` = `PovCameraOffset`), qui tourne avec le
   véhicule, bornée à ±110 ° de cap, +30 / −45 ° d'inclinaison, revient vers l'avant en roulant (1,5 s sans
   toucher à la vue), regarde derrière avec C / R3 ; seuls les avant-bras et les mains sont visibles, amincis sur l'écran de l'occupant. Bornes
   posées à l'œil (celles de GTA ne sont pas documentées). `PovCamera = false` pour garder la caméra de Roblox.
