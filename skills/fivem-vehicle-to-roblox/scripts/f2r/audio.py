@@ -256,51 +256,107 @@ def build_audio(out_dir: Path, *, wavs: dict[str, Path], audio_name: str, vclass
     manifest: dict = {"Source": "synthese", "Cylinders": cyl, "IdleRpm": idle_rpm, "MaxRpm": max_rpm,
                       "EngineLoops": [], "Files": {}}
 
-    accel = pick_stream(wavs, ["engine_accel", "accel", "exhaust_accel", "engine"])
-    decel = pick_stream(wavs, ["engine_decel", "decel", "exhaust_decel", "revs_off"])
-    idle = pick_stream(wavs, ["idle"])
-    if accel is None and wavs:
-        # Flux nommés par hash : le plus long est généralement le balayage
-        # d'accélération. On exclut klaxon, sirènes et clignotants, sinon une
-        # sirène de 6 s se retrouve découpée en boucles « moteur ».
-        cands = [p for k, p in wavs.items()
-                 if not any(x in k.lower() for x in ("horn", "siren", "indicator", "klaxon"))]
-        if cands:
-            accel = max(cands, key=lambda p: p.stat().st_size)
-    positions = [0.12, 0.35, 0.6, 0.85]
-    if accel is not None:
-        try:
-            sweep, sr = read_wav(accel)
-            manifest["Source"] = f"awc:{accel.name}"
-            manifest["EngineLoops"] += cut_sweep_loops(sweep, sr, positions, idle_rpm, max_rpm, "engine",
-                                                       out_dir, "on")
-            if decel is not None and decel != accel:
-                dsweep, dsr = read_wav(decel)
-                manifest["EngineLoops"] += cut_sweep_loops(dsweep[::-1], dsr, positions, idle_rpm, max_rpm,
-                                                           "engine", out_dir, "off")
-            if idle is not None:
-                iw, isr = read_wav(idle)
-                seg = _loopify(iw[: int(isr * 1.5)], int(isr * 0.08))
-                write_wav(out_dir / "engine_idle.wav", seg, isr)
-                manifest["Files"]["Idle"] = "engine_idle.wav"
-            report.info(f"Son moteur découpé depuis {accel.name} (approximation du moteur granulaire GTA).")
-        except Exception as exc:  # noqa: BLE001
-            report.warn(f"Découpe du son {accel.name} impossible ({exc}) : synthèse à la place.")
-            manifest["EngineLoops"] = []
-            manifest["Source"] = "synthese"
+    # ---- boucles moteur : deux couches (moteur côté capot, échappement côté pots), comme GTA, chacune en
+    # accélérateur enfoncé (balayage d'accélération) et relâché (décélération), plus son ralenti. Régime de
+    # chaque boucle MESURÉ dans le balayage (engine_loops.py), hauteur aplatie, raccord sur un cycle moteur.
+    from . import engine_loops as EL
+
+    def stream(*names):
+        for n in names:
+            for k, pth in wavs.items():
+                if k.lower() == n:
+                    return pth
+        return None
+
+    layers = {
+        "engine": {"accel": stream("engine_accel"), "decel": stream("engine_decel"), "idle": stream("engine_idle")},
+        "exhaust": {"accel": stream("exhaust_accel"), "decel": stream("exhaust_decel"),
+                    "idle": stream("exhaust_idle")},
+    }
+    if not any(v["accel"] for v in layers.values()):
+        # pack sans nommage moteur/échappement : une seule couche, prise comme avant
+        accel = pick_stream(wavs, ["engine_accel", "accel", "exhaust_accel", "engine"])
+        decel = pick_stream(wavs, ["engine_decel", "decel", "exhaust_decel", "revs_off"])
+        idle = pick_stream(wavs, ["idle"])
+        if accel is None and wavs:
+            # flux nommés par hash : le plus long est généralement le balayage d'accélération (klaxon, sirènes
+            # et clignotants exclus, sinon une sirène de 6 s se retrouve découpée en boucles « moteur »)
+            cands = [pth for k, pth in wavs.items()
+                     if not any(x in k.lower() for x in ("horn", "siren", "indicator", "klaxon"))]
+            if cands:
+                accel = max(cands, key=lambda pth: pth.stat().st_size)
+        layers = {"engine": {"accel": accel, "decel": decel if decel != accel else None, "idle": idle}}
+
+    def emit_layer(layer, data, sr):
+        """data : {'accel': signal|None, 'decel': signal|None, 'idle': signal|None} déjà au même gain."""
+        streams = [d for d in (data.get("accel"), data.get("decel")) if d is not None]
+        for kind in ("accel", "decel"):
+            sig = data.get(kind)
+            if sig is None:
+                continue
+            rising = kind == "accel"
+            same = [data[k] for k in (kind,) if data.get(k) is not None]
+            curve = shared.get(kind)
+            loops, info = EL.extract_loops(sig, sr, idle_rpm, max_rpm, rising=rising, count=LOOPS_PER_SWEEP,
+                                           cylinders=cyl, report=report, label=f"{layer} {kind}", curve=curve)
+            load = "on" if rising else "off"
+            for i, (rpm, loop) in enumerate(loops, start=1):
+                f = out_dir / f"{layer}_{load}_{i}.wav"
+                write_wav(f, loop, sr)
+                manifest["EngineLoops"].append({"File": f.name, "Rpm": round(rpm), "Load": load, "Layer": layer})
+            manifest.setdefault("Sweeps", {})[f"{layer}_{kind}"] = info
+        idle_sig = data.get("idle")
+        if idle_sig is not None:
+            seg = EL.make_loop(idle_sig, sr, idle_rpm, min(0.6, len(idle_sig) / sr * 0.7), cyl)
+            f = out_dir / f"{layer}_idle.wav"
+            write_wav(f, seg, sr)
+            manifest["EngineLoops"].append({"File": f.name, "Rpm": round(idle_rpm), "Load": "idle", "Layer": layer})
+        _ = streams
+
+    LOOPS_PER_SWEEP = 8
+    shared: dict = {}
+    try:
+        # une prise = un régime : la courbe est mesurée sur la somme des couches synchrones
+        loaded = {}
+        for layer, d in layers.items():
+            loaded[layer] = {k: (read_wav(pth) if pth is not None else None) for k, pth in d.items()}
+        srs = {v[1] for d in loaded.values() for v in d.values() if v is not None}
+        if loaded and srs:
+            sr = max(srs)
+            for kind, rising in (("accel", True), ("decel", False)):
+                sigs = [d[kind][0] for d in loaded.values() if d.get(kind) is not None and d[kind][1] == sr]
+                if sigs:
+                    shared[kind] = EL.shared_curve(sigs, sr, idle_rpm, max_rpm, rising=rising, report=report,
+                                                   label=kind)
+            for layer, d in loaded.items():
+                # un seul gain par couche : les niveaux relatifs (ralenti plus doux, haut plus fort) sont gardés
+                peak = max((float(np.abs(v[0]).max()) for v in d.values() if v is not None), default=0.0)
+                if peak < 1e-4:
+                    continue
+                data = {k: (v[0] / peak * 0.9 if v is not None and v[1] == sr else None) for k, v in d.items()}
+                emit_layer(layer, data, sr)
+            if manifest["EngineLoops"]:
+                src = [pth.name for d in layers.values() for pth in d.values() if pth is not None]
+                manifest["Source"] = "awc:" + ",".join(src)
+                report.info(f"Son moteur : {len(manifest['EngineLoops'])} boucles ({', '.join(layers)}), régimes "
+                            "mesurés dans les balayages (" + "; ".join(
+                                f"{k} {v.get('rpm_range')}" for k, v in manifest.get("Sweeps", {}).items()) + ").")
+    except Exception as exc:  # noqa: BLE001
+        report.warn(f"Découpe des balayages impossible ({exc}) : synthèse à la place.")
+        manifest["EngineLoops"] = []
+        manifest["Source"] = "synthese"
 
     if not manifest["EngineLoops"]:
-        rpms = [idle_rpm + p * (max_rpm - idle_rpm) for p in positions]
-        for i, rpm in enumerate(rpms):
-            for load in ("on", "off"):
-                f = out_dir / f"engine_{load}_{i + 1}.wav"
-                write_wav(f, synth_engine_loop(rpm, cyl, load, seed=i))
-                manifest["EngineLoops"].append({"File": f.name, "Rpm": round(rpm), "Load": load})
-        report.info(f"Son moteur synthétisé ({cyl} cylindres, basé sur audioNameHash='{audio_name}'). "
+        # moteur ORIGINAL de synthèse, passé par la même chaîne (balayages → boucles mesurées)
+        sr = SR
+        shared = {}
+        for layer in ("engine", "exhaust"):
+            data = {"accel": EL.synth_sweep(idle_rpm, max_rpm, cyl, layer=layer, load="on", sr=sr),
+                    "decel": EL.synth_sweep(idle_rpm, max_rpm, cyl, layer=layer, load="off", sr=sr),
+                    "idle": synth_engine_loop(idle_rpm, cyl, "off", seconds=1.0, seed=99 + (layer == "exhaust"))}
+            emit_layer(layer, data, sr)
+        report.info(f"Son moteur synthétisé ({cyl} cylindres, basé sur audioNameHash='{audio_name}', 2 couches). "
                     "Remplaçable par de vrais enregistrements dans sounds/.")
-    if "Idle" not in manifest["Files"]:
-        write_wav(out_dir / "engine_idle.wav", synth_engine_loop(idle_rpm, cyl, "off", seed=99))
-        manifest["Files"]["Idle"] = "engine_idle.wav"
 
     write_wav(out_dir / "engine_start.wav", synth_start(cyl))
     write_wav(out_dir / "indicator_on.wav", synth_click(2600))

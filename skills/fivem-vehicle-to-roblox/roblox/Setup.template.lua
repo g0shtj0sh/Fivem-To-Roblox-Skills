@@ -734,8 +734,22 @@ local function makeSound(name, file, volume)
 	s.Parent = sounds
 	return s
 end
+-- son d'échappement aux pots (moyenne des os exhaust*), comme GTA : moteur à l'avant, échappement à l'arrière
+local exhaustSounds
 for _, loop in ipairs(CONFIG.Audio.EngineLoops or {}) do
-	makeSound(loop.Name, loop.File, 0).Looped = true
+	local s = makeSound(loop.Name, loop.File, 0)
+	s.Looped = true
+	if loop.Layer == "exhaust" then
+		if not exhaustSounds then
+			exhaustSounds = Instance.new("Attachment")
+			exhaustSounds.Name = "SoundsExhaust"
+			exhaustSounds.Parent = root
+			exhaustSounds.WorldPosition = L2W(CONFIG.ExhaustPosition or { 0, 0.3, 2.2 })
+		end
+		s.RollOffMinDistance = 12
+		s.RollOffMaxDistance = 320
+		s.Parent = exhaustSounds
+	end
 end
 for key, file in pairs(CONFIG.Audio.Files or {}) do
 	makeSound(key, file, (key == "Horn" or string.find(key, "^Siren")) and 1 or 0.6)

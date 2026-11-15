@@ -164,6 +164,11 @@ function Runtime.Detach(model)
 	local r = renderers[model]
 	if r then
 		r:_stopAllSounds()
+		for _, l in pairs(r.Layers or {}) do
+			if l.group then
+				l.group:Destroy()
+			end
+		end
 		renderers[model] = nil
 	end
 end
@@ -556,29 +561,142 @@ function Runtime:_updateLights(s)
 end
 
 -- ------------------------------------------------------------------ audio
+-- ------------------------------------------------------------------ son moteur (façon GTA)
+-- GTA V joue deux sources par voiture : le MOTEUR (côté capot, vers l'avant) et l'ÉCHAPPEMENT (aux pots, vers
+-- l'arrière, audible de plus loin), chacune en accélérateur enfoncé et relâché, au régime courant
+-- (conférence GDC 2014 de Rockstar North, « The Sound of GTA V »). Ici, chaque couche a des boucles à régimes
+-- mesurés (convertisseur, engine_loops.py) : on mélange les deux voisines du régime (fondu à puissance
+-- constante), on règle leur hauteur sur le régime exact, et on passe d'enfoncé à relâché en fondu lissé.
+-- Les voitures lointaines ne jouent que l'échappement (comme les PNJ de GTA, version allégée) ; en vue
+-- intérieure, l'échappement est étouffé et le moteur passe devant.
+Runtime.EngineAudio = {
+	LayerGain = { engine = 0.75, exhaust = 1.0 },
+	LodDistance = 140, -- studs : au-delà, la couche moteur se tait (l'échappement porte plus loin)
+	Rolloff = { engine = { 8, 170 }, exhaust = { 12, 320 } }, -- studs (min, max), InverseTapered
+	LoadAttack = 0.06, -- s : passage relâché → enfoncé
+	LoadRelease = 0.12, -- s : enfoncé → relâché
+	VolumeRate = 16, -- 1/s : lissage des volumes
+	PitchMin = 0.5,
+	PitchMax = 2.0,
+	InteriorExhaustDb = { High = -14, Mid = -6, Low = 0 }, -- égaliseur de l'échappement en vue intérieure
+	InteriorEngineBoost = 1.25,
+}
+
+local function exhaustPosition(cfg)
+	if cfg.ExhaustPosition then
+		return Vector3.new(cfg.ExhaustPosition[1], cfg.ExhaustPosition[2], cfg.ExhaustPosition[3])
+	end
+	local sum, n = Vector3.zero, 0
+	for name, b in pairs(cfg.Bones or {}) do
+		if (name == "exhaust" or string.match(name, "^exhaust_%d+$")) and b.Position then
+			sum += Vector3.new(b.Position[1], b.Position[2], b.Position[3])
+			n += 1
+		end
+	end
+	if n > 0 then
+		return sum / n
+	end
+	local bnd = cfg.Bounds
+	if bnd and bnd.Max then
+		return Vector3.new(0, (bnd.Min and bnd.Min[2] or 0) + 0.3, bnd.Max[3] - 0.2)
+	end
+	return Vector3.new(0, 0.3, 2.2)
+end
+
 function Runtime:_prepareAudio()
-	self.Loops = { on = {}, off = {} }
+	self.Layers = {}
 	local a = self.Config.Audio
 	if not (a and self.Sounds) then
 		return
 	end
+	local E = Runtime.EngineAudio
+	local function layer(name)
+		local l = self.Layers[name]
+		if not l then
+			l = { on = {}, off = {}, idle = nil }
+			self.Layers[name] = l
+		end
+		return l
+	end
 	for _, loop in ipairs(a.EngineLoops or {}) do
-		local snd = self.Sounds:FindFirstChild(loop.Name)
-		if snd then
+		local snd = self.Sounds:FindFirstChild(loop.Name, true) or (self.Root and self.Root:FindFirstChild(loop.Name, true))
+		if snd and snd:IsA("Sound") then
 			snd.Looped = true
 			snd.Volume = 0
-			table.insert(self.Loops[loop.Load] or self.Loops.on, { Sound = snd, Rpm = loop.Rpm })
+			local l = layer(loop.Layer or "engine")
+			if loop.Load == "idle" then
+				l.idle = { Sound = snd, Rpm = loop.Rpm or a.IdleRpm or 850 }
+			else
+				table.insert(l[loop.Load == "off" and "off" or "on"], { Sound = snd, Rpm = loop.Rpm })
+			end
 		end
 	end
-	for _, list in pairs(self.Loops) do
-		table.sort(list, function(x, y)
+	-- ancien format : un seul « Idle » (couche moteur)
+	local legacyIdle = self.Sounds:FindFirstChild("Idle")
+	if legacyIdle and legacyIdle:IsA("Sound") then
+		local l = layer("engine")
+		if not l.idle then
+			legacyIdle.Looped = true
+			l.idle = { Sound = legacyIdle, Rpm = a.IdleRpm or 850 }
+		end
+	end
+	-- placement (local à ce client) : l'échappement aux pots, le moteur au capot ; portée propre à chaque couche
+	local exhaust = self.Layers.exhaust
+	local exhaustAtt
+	if exhaust then
+		exhaustAtt = self.Root:FindFirstChild("SoundsExhaust")
+		if not exhaustAtt then
+			exhaustAtt = Instance.new("Attachment")
+			exhaustAtt.Name = "SoundsExhaust"
+			exhaustAtt.Position = exhaustPosition(self.Config) * self.Spm
+			exhaustAtt.Parent = self.Root
+		end
+	end
+	for name, l in pairs(self.Layers) do
+		table.sort(l.on, function(x, y)
 			return x.Rpm < y.Rpm
 		end)
+		table.sort(l.off, function(x, y)
+			return x.Rpm < y.Rpm
+		end)
+		-- le ralenti ouvre chaque liste : le fondu passe sans trou du ralenti à la première boucle
+		if l.idle then
+			table.insert(l.on, 1, l.idle)
+			table.insert(l.off, 1, l.idle)
+		end
+		-- groupe de son par couche (égaliseur de la vue intérieure)
+		local g = Instance.new("SoundGroup")
+		g.Name = "F2R_" .. name .. "_" .. self.Model.Name
+		g.Volume = 1
+		local eq = Instance.new("EqualizerSoundEffect")
+		eq.Enabled = false
+		eq.Parent = g
+		g.Parent = game:GetService("SoundService")
+		l.group, l.eq = g, eq
+		local ro = E.Rolloff[name] or E.Rolloff.engine
+		l.rpmOf = {}
+		for _, list in ipairs({ l.on, l.off }) do
+			for _, item in ipairs(list) do
+				local snd = item.Sound
+				l.rpmOf[snd] = item.Rpm
+				snd.SoundGroup = g
+				snd.RollOffMode = Enum.RollOffMode.InverseTapered
+				snd.RollOffMinDistance = ro[1]
+				snd.RollOffMaxDistance = ro[2]
+				if name == "exhaust" and exhaustAtt and snd.Parent ~= exhaustAtt then
+					snd.Parent = exhaustAtt
+				end
+			end
+		end
 	end
-	self.Idle = self.Sounds:FindFirstChild("Idle")
-	if self.Idle then
-		self.Idle.Looped = true
-	end
+	self.LoadSmooth = 0
+	self.Model.Destroying:Connect(function()
+		for _, l in pairs(self.Layers or {}) do
+			if l.group then
+				l.group:Destroy()
+			end
+		end
+	end)
 end
 
 function Runtime:_stopAllSounds()
@@ -589,9 +707,20 @@ function Runtime:_stopAllSounds()
 			end
 		end
 	end
+	-- l'échappement vit sur sa propre attache (SoundsExhaust)
+	local ex = self.Root and self.Root:FindFirstChild("SoundsExhaust")
+	if ex then
+		for _, s in ipairs(ex:GetChildren()) do
+			if s:IsA("Sound") then
+				s:Stop()
+				s.Volume = 0
+			end
+		end
+	end
 end
 
 local function crossfade(list, rpm)
+	-- poids des boucles : les deux voisines du régime, fondu à puissance constante
 	local w = {}
 	local n = #list
 	if n == 0 then
@@ -606,7 +735,7 @@ local function crossfade(list, rpm)
 			local a, b = list[i].Rpm, list[i + 1].Rpm
 			if rpm >= a and rpm <= b then
 				local t = (rpm - a) / math.max(b - a, 1)
-				w[i] = math.cos(t * math.pi / 2) -- fondu à puissance constante
+				w[i] = math.cos(t * math.pi / 2)
 				w[i + 1] = math.sin(t * math.pi / 2)
 				break
 			end
@@ -615,11 +744,27 @@ local function crossfade(list, rpm)
 	return w
 end
 
+local cameraModule
+local function interiorView(r)
+	if not r.IsLocalOccupant then
+		return false
+	end
+	if cameraModule == nil then
+		local m = script.Parent:FindFirstChild("VehicleCamera")
+		local ok, mod = pcall(function()
+			return m and require(m)
+		end)
+		cameraModule = (ok and mod) or false
+	end
+	return cameraModule and cameraModule.IsPov and cameraModule.IsPov() or false
+end
+
 function Runtime:_updateAudio(dt, s)
 	if not self.Sounds then
 		return
 	end
 	local a = self.Config.Audio or {}
+	local E = Runtime.EngineAudio
 	local vol = Runtime.MasterVolume * (a.Volume or 1)
 	local engineOn = s.Engine
 	if engineOn and not self.EngineWasOn then
@@ -629,40 +774,56 @@ function Runtime:_updateAudio(dt, s)
 		end
 	end
 	self.EngineWasOn = engineOn
-	local idleRpm = a.IdleRpm or 850
-	local maxRpm = a.MaxRpm or 7200
-	local rpm = s.Rpm or idleRpm
-	local idleW = math.clamp(1 - (rpm - idleRpm) / (0.12 * (maxRpm - idleRpm)), 0, 1)
-	local hasOff = #self.Loops.off > 0
-	local load = math.clamp((s.Throttle or 0) * 1.5, 0, 1)
-	for loadName, list in pairs(self.Loops) do
-		local weights = crossfade(list, rpm)
-		local mix
-		if loadName == "on" then
-			mix = hasOff and load or (0.55 + 0.45 * load)
-		else
-			mix = 1 - load
+	local rpm = s.Rpm or a.IdleRpm or 850
+	-- charge : enfoncé ↔ relâché, lissée (attaque rapide, relâche un peu plus lente)
+	local target = math.clamp((s.Throttle or 0) * 1.6, 0, 1)
+	local tau = target > (self.LoadSmooth or 0) and E.LoadAttack or E.LoadRelease
+	self.LoadSmooth = (self.LoadSmooth or 0) + (target - (self.LoadSmooth or 0)) * (1 - math.exp(-dt / tau))
+	local load = self.LoadSmooth
+	local onMix, offMix = math.sin(load * math.pi / 2), math.cos(load * math.pi / 2)
+	local cam = Workspace.CurrentCamera
+	local dist = cam and (cam.CFrame.Position - self.Root.Position).Magnitude or 0
+	local inside = interiorView(self)
+	local k = math.clamp(dt * E.VolumeRate, 0, 1)
+	for name, l in pairs(self.Layers or {}) do
+		local gain = (a.LayerGain and a.LayerGain[name]) or E.LayerGain[name] or 1
+		if name == "engine" and dist > E.LodDistance and not self.IsLocalOccupant then
+			gain = 0 -- version allégée de loin : l'échappement seul
 		end
-		for i, l in ipairs(list) do
-			local target = engineOn and (weights[i] or 0) * mix * (1 - idleW * 0.85) * vol or 0
-			local snd = l.Sound
-			snd.Volume = snd.Volume + (target - snd.Volume) * math.clamp(dt * 12, 0, 1)
-			snd.PlaybackSpeed = math.clamp(rpm / l.Rpm, 0.45, 2.2)
-			if snd.Volume > 0.005 and not snd.IsPlaying then
-				snd:Play()
-			elseif snd.Volume <= 0.005 and snd.IsPlaying and not engineOn then
-				snd:Stop()
+		if inside then
+			gain *= (name == "engine") and E.InteriorEngineBoost or 1
+		end
+		if l.eq then
+			local muffle = inside and name == "exhaust"
+			l.eq.Enabled = muffle
+			if muffle then
+				l.eq.HighGain, l.eq.MidGain, l.eq.LowGain = E.InteriorExhaustDb.High, E.InteriorExhaustDb.Mid, E.InteriorExhaustDb.Low
 			end
 		end
-	end
-	if self.Idle then
-		local target = engineOn and idleW * vol or 0
-		self.Idle.Volume = self.Idle.Volume + (target - self.Idle.Volume) * math.clamp(dt * 12, 0, 1)
-		self.Idle.PlaybackSpeed = math.clamp(rpm / idleRpm, 0.8, 1.6)
-		if engineOn and not self.Idle.IsPlaying then
-			self.Idle:Play()
-		elseif not engineOn and self.Idle.IsPlaying and self.Idle.Volume < 0.01 then
-			self.Idle:Stop()
+		local hasOff = #l.off > ((l.idle and 1) or 0)
+		local seen = {}
+		for _, pair in ipairs({ { l.on, hasOff and onMix or (0.55 + 0.45 * load) }, { l.off, hasOff and offMix or 0 } }) do
+			local list, mix = pair[1], pair[2]
+			local weights = crossfade(list, rpm)
+			for i, item in ipairs(list) do
+				local snd = item.Sound
+				local part = engineOn and (weights[i] or 0) * mix or 0
+				-- le ralenti est dans les deux listes : ses deux parts s'ajoutent en puissance
+				seen[snd] = math.sqrt((seen[snd] or 0) ^ 2 + part * part)
+			end
+		end
+		for snd, part in pairs(seen) do
+			local want = part * gain * vol
+			snd.Volume += (want - snd.Volume) * k
+			snd.PlaybackSpeed = math.clamp(rpm / math.max(l.rpmOf[snd] or rpm, 1), E.PitchMin, E.PitchMax)
+			if snd.Volume > 0.004 then
+				if not snd.IsPlaying then
+					snd.TimePosition = math.random() * math.max(snd.TimeLength - 0.05, 0)
+					snd:Play()
+				end
+			elseif snd.IsPlaying then
+				snd:Stop() -- une boucle muette ne garde pas de voix
+			end
 		end
 	end
 	local horn = self.Sounds:FindFirstChild("Horn")

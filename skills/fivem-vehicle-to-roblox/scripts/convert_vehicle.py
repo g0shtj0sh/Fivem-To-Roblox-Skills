@@ -591,13 +591,17 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
     engine_pos = bones.get("engine", {}).get("Position") or r4([0, (lo[1] + hi[1]) / 2, lo[2] + 0.8])
     extras = sorted({i["Extra"] for i in parts_cfg.values() if "Extra" in i})
 
-    loops = [{"Name": f"engine_{l['Load']}_{k + 1}", "File": l["File"], "Rpm": l["Rpm"], "Load": l["Load"]}
-             for k, l in enumerate(audio["EngineLoops"])]
-    # noms uniques par charge
+    loops = [{"Name": "", "File": l["File"], "Rpm": l["Rpm"], "Load": l["Load"], "Layer": l.get("Layer", "engine")}
+             for l in audio["EngineLoops"]]
+    # noms uniques par couche et par charge (engine_on_1, exhaust_off_3, exhaust_idle…)
     counters: dict[str, int] = {}
     for l in loops:
-        counters[l["Load"]] = counters.get(l["Load"], 0) + 1
-        l["Name"] = f"engine_{l['Load']}_{counters[l['Load']]}"
+        key = f"{l['Layer']}_{l['Load']}"
+        counters[key] = counters.get(key, 0) + 1
+        l["Name"] = key if l["Load"] == "idle" else f"{key}_{counters[key]}"
+    # sortie d'échappement : moyenne des os exhaust* (le son d'échappement y est placé, comme dans GTA)
+    ex = [b["Position"] for n, b in bones.items() if (n == "exhaust" or n.startswith("exhaust_")) and b.get("Position")]
+    exhaust_pos = r4([sum(p[i] for p in ex) / len(ex) for i in range(3)]) if ex else r4([0, lo[1] + 0.3, hi[2] - 0.2])
 
     ref = pick_ref_parts([p for p in vb.parts])
     bones_min = {b: {"Position": v["Position"], "Parent": v["Parent"]} for b, v in bones.items()}
@@ -632,6 +636,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Cabin": cabin_cfg,
         "DoorPrompts": not args.no_door_prompts,
         "EnginePosition": engine_pos,
+        "ExhaustPosition": exhaust_pos,
         "Audio": {"IdleRpm": audio["IdleRpm"], "MaxRpm": audio["MaxRpm"], "Volume": 1,
                   "Cylinders": audio["Cylinders"], "Source": audio["Source"],
                   "EngineLoops": loops, "Files": audio["Files"]},
