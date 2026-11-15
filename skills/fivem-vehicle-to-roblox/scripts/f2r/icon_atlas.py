@@ -11,6 +11,8 @@ Correction, limitée à la « zone d'icônes » (pixels à moins de ZONE_RADIUS 
   - fond (alpha bas) et contour sombre des symboles -> couleur sombre du plastique de la planche (médiane
     des pixels opaques hors zone) ;
   - corps clair d'un symbole neutre -> clair (GLYPH_LIGHT) ; symbole coloré (rouge du bouton START, M rouge) gardé ;
+  - aplats clairs pleins au contact de la zone (fonds de rétroéclairage : bandeau de clim, dessus de molette)
+    -> couleur du fond, opaques ;
   - agrandissement x UPSCALE (plafond max_size) : alpha bicubique puis seuil doux (smoothstep), couleur
     recomposée = mélange fond / symbole par cet alpha net. Hors zone : agrandissement Lanczos ordinaire.
 Le canal alpha est gardé : une pièce transparente (badges, dash_emissive) montre le symbole seul, une pièce
@@ -28,6 +30,8 @@ GLYPH_LIGHT = 232      # gris clair des symboles neutres (rétroéclairage blanc
 NEUTRAL_SAT = 0.25     # saturation sous laquelle un symbole est « neutre »
 UPSCALE = 4
 EDGE = (0.35, 0.65)    # smoothstep de l'alpha agrandi : bords nets sans crénelage
+PLATE_MIN = 8          # px : un aplat clair plein plus grand que ça (dans les deux sens) est un fond, pas un symbole
+PLATE_FILL = 0.9       # part de l'encadrement remplie : un aplat plein, pas un symbole évidé
 GLYPH_LUM = (70.0, 150.0)  # clarté (0..255) qui sépare le contour sombre du symbole de son corps clair
 
 
@@ -45,6 +49,38 @@ def _smoothstep(x: np.ndarray, e0: float, e1: float) -> np.ndarray:
     return t * t * (3 - 2 * t)
 
 
+def _light_plates(rgb: np.ndarray, a: np.ndarray, near: np.ndarray) -> np.ndarray:
+    """Aplats clairs pleins (rectangles blancs opaques de la planche) au contact de la zone d'icônes : ce sont des
+    fonds de rétroéclairage (bandeau central de la clim, dessus de la molette VOL de la m422), pas des symboles.
+    Dessinés clairs, ils font des panneaux blancs dans Roblox ; ils prennent la couleur du fond."""
+    mx, mn = rgb.max(-1), rgb.min(-1)
+    light = (a >= 200) & (rgb.mean(-1) >= 170) & ((mx - mn) / np.maximum(mx, 1.0) < NEUTRAL_SAT)
+    h, w = light.shape
+    seen = np.zeros_like(light)
+    plates = np.zeros_like(light)
+    for y0, x0 in zip(*np.nonzero(light)):
+        if seen[y0, x0]:
+            continue
+        stack, pts = [(y0, x0)], []
+        seen[y0, x0] = True
+        while stack:
+            y, x = stack.pop()
+            pts.append((y, x))
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < h and 0 <= xx < w and light[yy, xx] and not seen[yy, xx]:
+                    seen[yy, xx] = True
+                    stack.append((yy, xx))
+        ys = np.array([q[0] for q in pts])
+        xs = np.array([q[1] for q in pts])
+        bh, bw = ys.max() - ys.min() + 1, xs.max() - xs.min() + 1
+        if min(bh, bw) >= PLATE_MIN and len(pts) / (bh * bw) >= PLATE_FILL and near[ys, xs].any():
+            plates[ys, xs] = True
+    if plates.any():  # bord adouci de l'aplat (pixels de transition) : sinon un liseré clair reste visible
+        ring = np.asarray(Image.fromarray((plates * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+        plates |= ring & (rgb.mean(-1) >= 90)
+    return plates
+
+
 def refine_icon_atlas(img: Image.Image, max_size: int) -> Image.Image:
     src = np.asarray(img.convert("RGBA")).astype(np.float32)
     h, w = src.shape[:2]
@@ -54,6 +90,13 @@ def refine_icon_atlas(img: Image.Image, max_size: int) -> Image.Image:
     zone = np.asarray(zone_img) > 0
     outside = (~zone) & (a >= 250)
     bg = np.median(rgb[outside], axis=0) if outside.any() else np.array([30.0, 31.0, 34.0])
+    near = np.asarray(zone_img.filter(ImageFilter.MaxFilter(5))) > 0
+    plates = _light_plates(rgb, a, near)
+    if plates.any():  # fonds de rétroéclairage -> plastique sombre, opaques, dans la zone traitée
+        rgb = rgb.copy()
+        rgb[plates] = bg
+        zone = zone | plates
+        zone_img = Image.fromarray((zone * 255).astype(np.uint8))
 
     # Le symbole visible est la partie CLAIRE de la zone opaque : chaque symbole porte un contour sombre
     # dans son alpha (dessiné sombre par GTA sur le plastique). Couverture = alpha x clarté pour les

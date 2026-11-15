@@ -130,7 +130,7 @@ Les symboles des boutons (volant, portes, console, clim) sont dans la planche du
 (ex. `int_emis`, 512 px) et n'existent que dans son **alpha** ; sous le fond transparent le RVB est blanc. Sans
 traitement, Roblox montre des rectangles blancs et des symboles flous (m422, 2026-11-15). La conversion
 (`f2r/icon_atlas.py`) : fond -> plastique sombre de la planche, corps clair des symboles neutres -> gris clair
-(couleurs gardées), agrandie ×4 (plafond 2048) avec des bords nets ; les pièces `dash_emissive` deviennent des
+(couleurs gardées), aplats blancs pleins au contact des icônes (fonds de rétroéclairage) -> plastique sombre, agrandie ×4 (plafond 2048) avec des bords nets ; les pièces `dash_emissive` deviennent des
 `decal` (transparentes) ; les pièces opaques qui échantillonnent la planche reçoivent `<nom>_opaque.png` (sans
 trou, sinon `Part.Color` ou du blanc apparaît en mode Overlay). Rapport : « Planche d'icônes … agrandie à N px ».
 Un véhicule déjà installé et retouché : ne pas le réinstaller, remplacer la ColorMap/TextureID de l'ancienne
