@@ -428,6 +428,28 @@ Jantes → `Wheel` (`Alloy` + `Classic`) ; Intérieur / Tableau de bord → `Int
 personnalisée → op `"Color"` ; Combinaison d'usine → op `"Factory"`. Caméléon : pas de peinture dans la palette
 (DLC), rien à brancher.
 
+## Textures et brillance (2026-11-15)
+
+- **Taille** : `--max-texture` (défaut **2048**). Mesuré par un GLB de test (rayures d'un pixel) importé
+  par `upload_file` + `insert_asset` : une texture 2048 est stockée en 2048 × 2048 et rendue nette en
+  qualité graphique 21 (période des rayures exacte à l'écran) ; une 4096 est ramenée à 2048. Une 2048
+  coûte 4 × la mémoire d'une 1024 : seules les sources > 1024 (livrées 4096 surtout) en profitent.
+- **Brillance** : la carte `SpecSampler` de GTA (R = intensité, G = brillance, B = Fresnel ; alpha plein)
+  et `specularIntensityMult` / `specularFalloffMult` / `specMapIntMask` deviennent une
+  `metallicRoughnessTexture` glTF (G = rugosité, B = métal) par `TextureStore.metal_rough()`.
+  L'importeur de Roblox en tire **`RoughnessMap` + `MetalnessMap`** (vérifié : pixel 0,05/1 → 12 et 255,
+  0,9/0 → 229 et 0). Conversion heuristique, réglable en tête de `f2r/textures.py` :
+  rugosité = 1 − G × min(1, log2(1+falloff)/8) × √intensité ; défauts intensité 1 / falloff 100 ;
+  métal = noms `chrome` / `alloy` ; chrome plafonné à 0,10. m422 : peinture 0,15, plastiques ≈ 0,94,
+  jantes alu 0,25 métal. Carte uniforme → 4 × 4 px.
+- **Limite** : l'importeur crée aussi une `MetalnessMap` noire (inutile, mémoire) sur les pièces non
+  métalliques ; la vider (`sa.MetalnessMap = ""`) en Edit après l'import.
+- **Juger le rendu en qualité graphique fixée (21)** : en `Automatic`, Studio peut afficher les textures
+  réduites et sans relief (cause démontrée sur la m422, A/B/A). Les reflets demandent aussi
+  `Lighting.EnvironmentSpecularScale` > 0 dans la place (réglage du jeu, pas du skill).
+- **Peinture** : une pièce peinte qui garde une SurfaceAppearance ignore `Custom.SetFinish` (la
+  rugosité de la SA décide) ; voir « Custom ».
+
 ## Limites Roblox prises en compte
 
 - ≤ 20 000 triangles par MeshPart : découpage automatique à 19 000 (`--max-tris`).
