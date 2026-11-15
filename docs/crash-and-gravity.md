@@ -13,10 +13,19 @@ pleine vitesse « la gravité n'est pas réaliste ».
   5,7 × plus vite que la voiture — d'où l'impression de « Lune » à côté du reste de Roblox.
 - **Choc frontal contre un mur de béton à 106 km/h** : la voiture repartait en arrière à 36 km/h en une image
   (restitution 0,32), à plat. Cause : coque de collision en Plastic par défaut (élasticité 0,5 ; béton 0,2 ;
-  Roblox fait la moyenne pondérée). → `VehicleCollision.ApplyCrashMaterial` : élasticité 0, poids 100 sur la
-  coque, les roues de collision et la `Hitbox` (Setup + démarrage serveur, idempotent). Après : 103 km/h → 0 en
-  une image, rebond 1 km/h.
+  Roblox fait la moyenne pondérée). → `VehicleCollision.ApplyCrashMaterial` : élasticité fixée, poids 100 sur
+  la coque, les roues de collision et la `Hitbox` (Setup + démarrage serveur, idempotent ; la restitution vaut
+  alors ≈ `CrashElasticity` quel que soit l'obstacle).
+  - Essai 0 : 103 km/h → 0 en une image, rebond 1 km/h. **Refusé par l'utilisateur** (« ça rebondit plus du
+    tout… ça s'arrête net »).
+  - **Retenu 0,15** (ordre de grandeur d'une voiture réelle en choc frontal) : 106 km/h → **−14,6 km/h**,
+    secousse verticale 8 cm, caisse qui reste presque à plat.
+
+## Gravité en vol (choix de l'utilisateur, brolver-rp)
+`Dyn.Tuning.AirGravityScale` (défaut 1 = GTA), relevable par l'attribut `AirGravityScale` du dossier
+`ReplicatedStorage.FiveMVehicles` (réglage du jeu, conservé par une réinstallation du runtime — vérifié) ou par
+`DriveTuning` du véhicule ; force ajoutée seulement quand les 4 roues ont décollé, conduite au sol inchangée.
+brolver-rp : **1,5** (choisi parmi ×1 / ×1,5 / ×2). Mesuré : chute libre 14,55–14,62 m/s².
 
 ## Non fait / ouvert
-- Gravité en vol plus forte que GTA : choix de l'utilisateur (fidélité au mod décidée le 2026-11-12).
 - Pas de tangage au choc (arrêt « rigide », caisse à plat) : non comparé à GTA (aucune trace de choc).

@@ -191,9 +191,12 @@ end
 -- POURQUOI (m422, 2026-11-15, mesuré en Play Studio) : la coque de collision était en Plastic par défaut,
 -- élasticité 0,5. Contre un mur de béton (0,2) Roblox combine (e1·w1 + e2·w2) / (w1 + w2) ≈ 0,35 : à 106 km/h
 -- la voiture repartait en arrière à 36 km/h en une image, « comme une balle ». Une voiture absorbe le choc
--- (déformation) : on met l'élasticité de toute la coque à 0 avec un poids qui l'emporte sur celui de l'obstacle.
+-- (déformation) mais repart un peu : on fixe l'élasticité de la coque avec un poids qui l'emporte sur celui de
+-- l'obstacle, donc la restitution vaut ≈ CrashElasticity quel que soit l'obstacle.
+-- 0 essayé (2026-11-15) : arrêt net, refusé par l'utilisateur (« ça rebondit plus du tout… ça s'arrête net »).
+-- 0,15 ≈ restitution d'une voiture réelle en choc frontal (ordre de grandeur 0,1–0,2) : 100 km/h → ~15 km/h.
 -- Densité et frottement gardés (la masse vient du lest ; le frottement règle la glisse le long d'un mur).
-Collision.CrashElasticity = 0
+Collision.CrashElasticity = 0.15
 Collision.CrashElasticityWeight = 100
 
 function Collision.ApplyCrashMaterial(model)

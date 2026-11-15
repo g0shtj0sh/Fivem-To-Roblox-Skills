@@ -301,6 +301,11 @@ Dyn.Tuning = {
 	-- MESURÉ grossièrement — le taux passe de −58 à +13 °/s en ≈ 0,10 s, sur 3 passes. Un ordre de
 	-- grandeur au-dessus du couple de contrôle : à la borne, GTA ARRÊTE la rotation, il ne la
 	-- contre pas doucement. La valeur exacte n'est pas calée, seul son ordre l'est.
+	-- Gravité EN VOL (4 roues décollées) en multiple de la gravité du véhicule. GTA : 1 (MESURÉ 9,76–9,80 m/s²
+	-- sur 14 vols libres de la campagne m422 ; Roblox reproduit 9,68–9,71, voir docs/crash-and-gravity.md).
+	-- Un jeu peut la relever (sauts plus courts, plus « lourds ») sans toucher à la conduite au sol, calée sur
+	-- GTA : attribut `AirGravityScale` du dossier FiveMVehicles (réglage du jeu) ou `DriveTuning` du véhicule.
+	AirGravityScale = 1,
 	AirDamp = 0, -- amortissement angulaire en l'air. MESURÉ NUL : sans entrée l'accélération
 	-- angulaire vaut +1,1 °/s² et le véhicule garde ses −28 à −32 °/s pendant toute la seconde de
 	-- vol. C'est le plafond qui borne la rotation, pas un amortissement. Le réglage reste exposé
@@ -360,6 +365,15 @@ end
 -- ------------------------------------------------------------------ paramètres + état
 function Dyn.new(cfg, comLocal, overrides)
 	local T = table.clone(Dyn.Tuning)
+	-- réglages du jeu posés en attributs sur le dossier du runtime (ReplicatedStorage.FiveMVehicles)
+	-- (pcall : le module tourne aussi hors de Roblox, banc lune, sans `script`)
+	local okAttr, gameAir = pcall(function()
+		return script.Parent:GetAttribute("AirGravityScale")
+	end)
+	gameAir = okAttr and gameAir or nil
+	if type(gameAir) == "number" and gameAir > 0 then
+		T.AirGravityScale = gameAir
+	end
 	for k, v in pairs(cfg.DriveTuning or {}) do
 		T[k] = v
 	end
@@ -1039,6 +1053,11 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	end
 	local w = ctx.wBody or Vector3.zero
 	if grounded == 0 then
+		-- gravité de vol relevée (AirGravityScale > 1) : force vers le bas du monde, en repère local
+		local airG = (T.AirGravityScale or 1) - 1
+		if airG ~= 0 and ctx.up then
+			out.body -= ctx.up * (airG * P.g)
+		end
 		-- EN L'AIR : couple constant, plafond de vitesse angulaire, borne d'assiette en piqué.
 		-- Voir les mesures sur AirPitch / AirRateMax / AirPitchFloor dans Dyn.Tuning.
 		local ax = ((inp.Brake or 0) - (inp.Throttle or 0)) * T.AirPitch -- W pique du nez, S le relève
