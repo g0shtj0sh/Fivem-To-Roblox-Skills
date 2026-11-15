@@ -264,7 +264,9 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   après `Custom.SetRemotePolicy` : `references/roblox-integration.md`, « Brancher un menu de custom ».
 - Contrôles par défaut (GTA-like) : **F monter / descendre** (invite par siège, côté portière ; manette Y ;
   bouton à l'écran sur mobile), W/S/A/D, Espace frein à main (un passager qui saute descend aussi), E klaxon,
-  H phares (off/codes/pleins), ←/→ clignotants, ↓ warnings, Q sirène, R tonalité, Z moteur, G portes,
+  H phares (off/codes/pleins), ←/→ clignotants, ↓ warnings, Q sirène, R tonalité, Z moteur, **Alt gauche maintenu + clic
+  sur une portière / le capot / le coffre** pour l'ouvrir ou la fermer (`VehicleTarget`, comme ox_target sur FiveM ;
+  invites « Ouvrir / fermer » gardées au tactile et à la manette),
   X remettre sur ses roues (manette : croix bas), Maj / Ctrl rapports (manette : croix haut / X).
 - **Monter / descendre** (`VehicleAccess`, serveur) : distance, place libre et verrou (`Locked`) vérifiés,
   portière ouverte puis refermée, joueur assis sans marcher ; à la descente il est posé au sol à côté de **sa**

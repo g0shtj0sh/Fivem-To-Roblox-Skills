@@ -18,6 +18,11 @@ local Dashboard = require(folder:WaitForChild("VehicleDashboard"))
 local Pose = require(folder:WaitForChild("VehiclePose"))
 Pose.Start() -- posture des occupants de tous les véhicules (sur chaque client)
 require(folder:WaitForChild("VehicleCamera")).Start() -- caméra de l'occupant local, vue intérieure façon GTA (V)
+-- portières / capot / coffre : Alt gauche maintenu + clic, comme ox_target sur FiveM (invites gardées au tactile / manette)
+local targetModule = folder:WaitForChild("VehicleTarget", 10)
+if targetModule then
+	require(targetModule).Start()
+end
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 

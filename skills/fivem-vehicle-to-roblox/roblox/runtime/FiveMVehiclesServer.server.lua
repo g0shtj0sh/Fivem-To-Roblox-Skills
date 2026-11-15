@@ -78,6 +78,52 @@ local function isOccupantOrNear(player, model, maxDist)
 	return root ~= nil and model.PrimaryPart ~= nil and (root.Position - model.PrimaryPart.Position).Magnitude <= maxDist
 end
 
+-- Portes : DOOR_RATE par seconde, rafale DOOR_BURST (6 éléments ouverts d'un coup par un menu + marge).
+local DOOR_RATE, DOOR_BURST = 6, 8
+local doorBuckets = {}
+local function doorAllowed(player)
+	local now = os.clock()
+	local b = doorBuckets[player]
+	if not b then
+		b = { tokens = DOOR_BURST, t = now }
+		doorBuckets[player] = b
+	end
+	b.tokens = math.min(DOOR_BURST, b.tokens + (now - b.t) * DOOR_RATE)
+	b.t = now
+	if b.tokens < 1 then
+		return false
+	end
+	b.tokens -= 1
+	return true
+end
+Players.PlayerRemoving:Connect(function(player)
+	doorBuckets[player] = nil
+end)
+
+-- Dehors : le joueur doit être près de la charnière visée (ox_target : 2 m du point visé ; ici 3,5 m de la
+-- charnière, une portière mesure ≈ 1,2 m, plus la latence) et le véhicule déverrouillé. À bord : toujours permis.
+local DOOR_REACH_M = 3.5
+local function canReachDoor(player, model, bone, cfg)
+	local hum = humanoidOf(player)
+	if not hum or hum.Health <= 0 then
+		return false
+	end
+	if hum.SeatPart and hum.SeatPart:IsDescendantOf(model) then
+		return true
+	end
+	if model:GetAttribute("Locked") == true then
+		return false
+	end
+	local root = hum.RootPart
+	local joints = model:FindFirstChild("Joints")
+	local pivot = joints and joints:FindFirstChild("Pivot_" .. bone)
+	local at = (pivot and pivot:IsA("BasePart") and pivot.Position) or (model.PrimaryPart and model.PrimaryPart.Position)
+	if not root or not at then
+		return false
+	end
+	return (root.Position - at).Magnitude <= DOOR_REACH_M * (cfg.StudsPerMeter or 3.571)
+end
+
 remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
 		return
@@ -98,11 +144,17 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		end
 		model:SetAttribute(key, value)
 	elseif action == "Door" then
-		local cfg = require(model.VehicleConfig)
-		if type(key) ~= "string" or not (cfg.Hinges and cfg.Hinges[key]) then
+		-- portières / capot / coffre : à bord (menus du jeu), ou dehors à portée de la charnière visée
+		-- (VehicleTarget, Alt + clic ; invites au tactile). Débit limité : un menu « toutes les portes » en
+		-- envoie jusqu'à 6 d'un coup.
+		if not doorAllowed(player) then
 			return
 		end
-		if not isOccupantOrNear(player, model, 25) then
+		local cfg = require(model.VehicleConfig)
+		if type(key) ~= "string" or #key > 64 or not (cfg.Hinges and cfg.Hinges[key]) then
+			return
+		end
+		if not canReachDoor(player, model, key, cfg) then
 			return
 		end
 		local cur = model:GetAttribute("Door_" .. key) or 0
@@ -273,7 +325,8 @@ local function setupVehicle(model)
 		if prompt:GetAttribute("HingeBone") then
 			prompt.Triggered:Connect(function(player)
 				local bone = prompt:GetAttribute("HingeBone")
-				if not isOccupantOrNear(player, model, prompt.MaxActivationDistance + 10) then
+				-- invite (tactile / manette) : mêmes règles que Alt + clic (VehicleTarget)
+				if not doorAllowed(player) or not canReachDoor(player, model, bone, require(model.VehicleConfig)) then
 					return
 				end
 				local cur = model:GetAttribute("Door_" .. bone) or 0
