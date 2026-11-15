@@ -61,10 +61,11 @@ def test_pipeline():
         assert abs(cfg["Colors"]["Default"]["Primary"][0] - 192 / 255) < 0.01  # index 27 = Metallic Red
         # repère : avant = -Z
         assert cfg["Lights"]["headlight_l"][2] < 0 < cfg["Lights"]["taillight_l"][2]
-        # textures <= 1024 px
+        # textures <= 2048 px (plafond de Roblox) ; la source 2048 du pneu est gardée telle quelle
         from PIL import Image
         for png in (out / "textures").glob("*.png"):
-            assert max(Image.open(png).size) <= 1024, png
+            assert max(Image.open(png).size) <= 2048, png
+        assert Image.open(out / "textures" / "testcar_tyre.png").size == (2048, 2048)
         # sons
         assert len(cfg["Audio"]["EngineLoops"]) >= 4 and cfg["Audio"]["Source"].startswith("awc:")
         for f in cfg["Audio"]["Files"].values():
