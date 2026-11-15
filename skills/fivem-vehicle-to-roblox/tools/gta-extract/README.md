@@ -21,6 +21,10 @@ skills/fivem-vehicle-to-roblox/tools/gta-extract/build.sh
 Pré-requis : **SDK .NET 8** et **git**. Résultat : `bin/gta-extract.exe`. Le skill le compile
 tout seul au premier lancement.
 
+Le clone de CodeWalker est remis à sa révision figée à chaque compilation, puis les correctifs de
+[`patches/`](patches/README.md) lui sont appliqués. Rien n'est à modifier à la main dans
+`.cache/CodeWalker` : l'arbre y est écrasé.
+
 ## `export` — convertir des fichiers
 
 ```
@@ -55,6 +59,11 @@ Le dossier du jeu est cherché dans cet ordre :
 S'il n'est trouvé nulle part et qu'un `.awc` chiffré se présente, l'erreur le dit au lieu de
 partir en `NullReferenceException`. Les autres formats n'ont pas besoin de la clé : elle n'est
 chargée que si on la trouve. **GTA V n'est lu, jamais écrit.**
+
+Le déchiffrement travaille par mots de 4 octets. Les `.awc` remballés par les packs moddés n'ont
+pas toujours un dernier paquet audio aligné, ce qui faisait échouer la lecture du conteneur entier
+en amont (`Offset and length were out of bounds for the array`) ; c'est ce que répare
+`patches/0001-awc-chiffrement-longueur-non-alignee.patch`.
 
 ### Convertir un pack de sons entier
 
@@ -106,8 +115,8 @@ réapparaît que si la chaîne exacte est connue d'avance.
 un `.awc` l'outil sème l'index avec cette combinaison pour tous les rôles listés dans
 `extra_strings.txt`.
 
-Le rendement dépend entièrement du conteneur. Mesuré sur un pack de 1 323 conteneurs
-(36 837 flux), part des flux sortis avec un nom en clair :
+Le rendement dépend entièrement du conteneur. Mesuré sur un pack de 1 330 conteneurs
+(38 456 flux, 72 % nommés en tout), part des flux sortis avec un nom en clair :
 
 | Conteneur | Flux nommés |
 |---|---|

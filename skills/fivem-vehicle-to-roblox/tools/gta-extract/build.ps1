@@ -31,7 +31,14 @@ if (-not (Test-Path (Join-Path $Cache ".git"))) {
 }
 Write-Host "Recuperation de la revision $CwRef ..."
 Invoke-Native "git fetch" "git" @("-C", $Cache, "fetch", "--quiet", "origin", $CwRef)
-Invoke-Native "git checkout" "git" @("-C", $Cache, "checkout", "--quiet", $CwRef)
+Invoke-Native "git checkout" "git" @("-C", $Cache, "checkout", "--quiet", "--force", $CwRef)
+Invoke-Native "git restore" "git" @("-C", $Cache, "checkout", "--quiet", "--", ".")
+
+# Correctifs maison appliques au clone (voir patches\README.md).
+Get-ChildItem (Join-Path $Here "patches") -Filter *.patch -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object {
+    Invoke-Native "correctif $($_.Name)" "git" @("-C", $Cache, "apply", $_.FullName)
+    Write-Host "  correctif applique : $($_.Name)"
+}
 
 Write-Host "Compilation ..."
 Invoke-Native "dotnet build" "dotnet" @("build", (Join-Path $Here "GtaExtract.csproj"), "-c", "Release", "-o", (Join-Path $Here "bin"), "-nologo", "-v", "quiet")

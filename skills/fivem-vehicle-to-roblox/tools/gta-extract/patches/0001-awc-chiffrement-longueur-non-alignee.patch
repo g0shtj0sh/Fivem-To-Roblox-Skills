@@ -1,0 +1,56 @@
+diff --git a/CodeWalker.Core/GameFiles/FileTypes/AwcFile.cs b/CodeWalker.Core/GameFiles/FileTypes/AwcFile.cs
+index 42a30f5..6b2675a 100644
+--- a/CodeWalker.Core/GameFiles/FileTypes/AwcFile.cs
++++ b/CodeWalker.Core/GameFiles/FileTypes/AwcFile.cs
+@@ -44,10 +44,14 @@ namespace CodeWalker.GameFiles
+         {
+             // Rockstar's modified version of XXTEA
+             var key = GTA5Keys.PC_AWC_KEY;
+-            uint[] blocks = new uint[data.Length / 4];
+-            Buffer.BlockCopy(data, 0, blocks, 0, data.Length);
++            // Le chiffrement travaille par mots de 4 octets. Les paquets audio dont la longueur
++            // n'est pas alignee (dernier bloc tronque de certains .awc remballes) gardent leurs
++            // octets de queue en clair, au lieu de faire deborder la copie.
++            int block_count = data.Length / 4;
++            if (block_count <= 0) return;
++            uint[] blocks = new uint[block_count];
++            Buffer.BlockCopy(data, 0, blocks, 0, block_count * 4);
+ 
+-            int block_count = blocks.Length;
+             uint a, b = blocks[0], i;
+ 
+             i = (uint)(0x9E3779B9 * (6 + 52 / block_count));
+@@ -61,7 +65,7 @@ namespace CodeWalker.GameFiles
+                 i -= 0x9E3779B9;
+             } while (i != 0);
+ 
+-            Buffer.BlockCopy(blocks, 0, data, 0, data.Length);
++            Buffer.BlockCopy(blocks, 0, data, 0, block_count * 4);
+         }
+ 
+         public static void Encrypt_RSXXTEA(byte[] data)
+@@ -75,10 +79,12 @@ namespace CodeWalker.GameFiles
+             //TODO: update the Decrypt method to use the "clarified" version without undefined behaviour?
+ 
+             var key = GTA5Keys.PC_AWC_KEY;
+-            uint[] blocks = new uint[data.Length / 4];
+-            Buffer.BlockCopy(data, 0, blocks, 0, data.Length);
++            // Meme regle qu'au dechiffrement : on ne traite que les mots complets.
++            int n = data.Length / 4;
++            if (n <= 0) return;
++            uint[] blocks = new uint[n];
++            Buffer.BlockCopy(data, 0, blocks, 0, n * 4);
+ 
+-            int n = blocks.Length;
+             int rounds = 6 + (52 / n);
+             uint sum = 0;
+             uint y, z = blocks[n - 1];
+@@ -93,7 +99,7 @@ namespace CodeWalker.GameFiles
+                 }
+             } while ((--rounds) != 0);
+ 
+-            Buffer.BlockCopy(blocks, 0, data, 0, data.Length);
++            Buffer.BlockCopy(blocks, 0, data, 0, n * 4);
+         }
+ 
+ 

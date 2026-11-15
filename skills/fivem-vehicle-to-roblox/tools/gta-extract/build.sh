@@ -20,7 +20,15 @@ if [ ! -d "$CACHE/.git" ]; then
   git clone --filter=blob:none "$CW_REPO" "$CACHE"
 fi
 git -C "$CACHE" fetch --quiet origin "$CW_REF" 2>/dev/null || true
-git -C "$CACHE" checkout --quiet "$CW_REF" 2>/dev/null || git -C "$CACHE" checkout --quiet FETCH_HEAD
+git -C "$CACHE" checkout --quiet --force "$CW_REF" 2>/dev/null || git -C "$CACHE" checkout --quiet --force FETCH_HEAD
+git -C "$CACHE" checkout --quiet -- .
+
+# Correctifs maison appliques au clone (voir patches/README.md).
+for p in "$HERE"/patches/*.patch; do
+  [ -e "$p" ] || continue
+  git -C "$CACHE" apply "$p" || { echo "correctif inapplicable : $p" >&2; exit 1; }
+  echo "correctif applique : $(basename "$p")"
+done
 
 dotnet build "$HERE/GtaExtract.csproj" -c Release -o "$HERE/bin" -nologo -v quiet
 echo "OK : $HERE/bin/gta-extract.dll"
