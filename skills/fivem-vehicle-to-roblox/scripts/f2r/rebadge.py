@@ -7,7 +7,10 @@ Ce que fait ``rebadge_parts`` sur les pièces construites (avant l'écriture du 
 2. Chaque îlot est classé d'après ce qu'il montre dans la texture (pixels sous ses triangles) et sa taille :
    - **uni** (texture sans motif sous l'îlot : baguette de bas de caisse, support) : gardé tel quel ;
    - **emblème** (presque aussi large que haut, au moins 3 cm : rond de calandre, de coffre, de volant) :
-     sorti en pièce ``<pièce>__emblem<n>`` avec une texture neuve = fond de l'emblème d'origine + logo du jeu ;
+     sorti en pièce ``<pièce>__emblem<n>`` avec une texture neuve = fond de l'emblème d'origine + logo du jeu,
+     **et une brillance unie** (``f2r_<pièce>_spec``, valeur médiane de la brillance d'origine sous l'îlot) :
+     ses UV sont recadrés sur la nouvelle texture, donc la brillance d'origine (SpecSampler) y étalerait
+     toute la planche de la marque réelle en relief de reflet (logo, lettres) ; aucune normal map non plus ;
    - **lettrage** (le reste : « M4 », « competition », logo d'étrier…) : supprimé.
 3. Les logos *peints* dans d'autres textures (cache-moyeu, flanc de pneu, écran) ne sont pas détectables
    automatiquement : ``--rebadge-spec`` (JSON d'opérations par texture, voir ``apply_texture_spec``) ou
@@ -114,6 +117,22 @@ def emblem_texture(dst: Path, background: np.ndarray, logo: Image.Image | None, 
     return dst
 
 
+def emblem_spec(dst: Path, spec: np.ndarray | None, tris: np.ndarray, uv: np.ndarray) -> Path:
+    """Brillance unie de l'emblème (4 x 4 px) : médiane de la carte spec d'origine sous l'îlot, sans le motif
+    qu'elle porte (le logo de la marque réelle y est aussi dessiné). Sans spec lisible : spec noire = mat."""
+    c = np.zeros(4, np.float32)
+    if spec is not None:
+        h, w = spec.shape[:2]
+        px = spec[_uv_mask(uv, tris, w, h)]
+        if len(px):
+            c = np.median(px, axis=0)
+    c[3] = 1.0
+    img = Image.new("RGBA", (4, 4), tuple(int(round(v * 255)) for v in np.clip(c, 0, 1)))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    img.save(dst, optimize=True)
+    return dst
+
+
 def rebadge_parts(parts: list, original_tex, logo_path: Path | None, out_dir: Path, report: Report) -> dict:
     """Modifie ``parts`` (liste de f2r.vehicle.Part) sur place. ``original_tex(name) -> Path`` donne la
     image **du pack** (avant --texture-overrides, ``PIL.Image`` ou None) pour lire ce que montre chaque îlot.
@@ -169,8 +188,19 @@ def rebadge_parts(parts: list, original_tex, logo_path: Path | None, out_dir: Pa
             k = sum(1 for q in new_parts if q.bone == p.bone) + 1
             name = f"{p.bone}__emblem{k if k > 1 else ''}"
             png = emblem_texture(out_dir / f"f2r_{name}.png", background, logo, fill_ratio)
+            # Shader propre à l'emblème : sa brillance d'origine est une planche de la marque réelle, que les
+            # UV recadrés étaleraient sur tout l'emblème (logo fantôme dans les reflets, 2026-11-15).
+            sh_tex = {k: v for k, v in p.shader.textures.items() if k not in ("SpecSampler", "BumpSampler")}
+            spec_name = p.shader.textures.get("SpecSampler")
+            if spec_name:
+                skey = spec_name.lower()
+                if skey not in cache:
+                    cache[skey] = _load_rgba(original_tex(spec_name))
+                emblem_spec(out_dir / f"f2r_{name}_spec.png", cache[skey], t, p.uv)
+                sh_tex["SpecSampler"] = f"f2r_{name}_spec"
             q = replace(p, name=name, pos=p.pos[verts].copy(), nrm=p.nrm[verts].copy(), uv=new_uv,
                         idx=new_idx, tex_diffuse=f"f2r_{name}", tex_normal=None,
+                        shader=replace(p.shader, textures=sh_tex),
                         kind="decal" if p.kind == "decal" else "mesh", paint=None, custom_color=None)
             new_parts.append(q)
             summary["emblems"].append({"part": name, "from": p.name, "tris": len(isl),

@@ -274,6 +274,9 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
     for p in vb.parts:
         if p.tex_diffuse and p.tex_diffuse.startswith("f2r_"):
             store.sources[p.tex_diffuse.lower()] = out / "_rebadge" / f"{p.tex_diffuse}.png"
+            spec = p.shader.textures.get("SpecSampler") if p.shader is not None else None
+            if spec and spec.startswith("f2r_"):  # brillance unie de l'emblème (rebadge.emblem_spec)
+                store.sources[spec.lower()] = out / "_rebadge" / f"{spec}.png"
     # logos peints dans les textures : spec explicite, sinon brands/vehicles/<nom>.json du skill
     spec_path = getattr(args, "rebadge_spec", None)
     if not spec_path:
