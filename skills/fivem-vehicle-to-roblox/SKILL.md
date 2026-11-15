@@ -49,12 +49,12 @@ textures du pack : retouches), `--brand`, `--model-name`, `--rebadge-spec` (§ 1
 **Sons moteur maison (pack Brolver)** : `--engine-pack <dossier|.rar>` (ou variable
 d'environnement `F2R_ENGINE_PACK`) remplace le son du mod par un son du pack
 `sounds/<categorie>/<son>/<son>_{moteur,echappement}_{acceleration,deceleration,ralenti}.wav`
-+ `sounds/klaxon/*.wav`. Catégorie d'après la classe GTA (VC_SUPER→super, VC_SPORT→sport,
++ `sounds/klaxon/*.wav`. Catégorie d'après la classe GTA **vérifiée** (§ 1c) (VC_SUPER→super, VC_SPORT→sport,
 VC_SEDAN→berline, VC_SPORT_CLASSIC→classique, VC_OFF_ROAD→toutterrain, « monster » dans le nom→monster,
 utilitaires→pickup…) ; le son est tiré du nom du modèle (stable d'une conversion à l'autre).
 Moteur → couche `engine` (capot), échappement → couche `exhaust` (pots), découpés en boucles comme un son de mod. `--engine-sound
 brolver_super_03` (ou une catégorie, ex. `muscle`) force le choix ; `--no-engine-pack` l'ignore.
-Sans chemin, le pack est **téléchargé automatiquement** depuis la release GitHub `brolver-motor-sounds-v1` (une URL est aussi acceptée) ; le .rar est téléchargé et décompressé une seule fois (7-Zip requis) dans `%LOCALAPPDATA%/f2r/engine_pack` (`~/.cache/f2r/engine_pack` hors Windows).
+Sans chemin, le pack est **téléchargé automatiquement** depuis la release GitHub `brolver-motor-sounds-v1` (une URL est aussi acceptée) ; le .rar est téléchargé et décompressé une seule fois (7-Zip, sinon `unrar`/`rar` du PATH) dans `%LOCALAPPDATA%/f2r/engine_pack` (`~/.cache/f2r/engine_pack` hors Windows).
 Code 2 = binaires sans extracteur : installer .NET 8 (ci-dessus) et relancer ; sinon export XML
 CodeWalker par l'utilisateur ; `dlc.rpf` chiffré → OpenIV.
 
@@ -87,6 +87,31 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
   opérations `fill_rect`, `fill_disc`, `fill_ring`, `fill_all`, `logo`), reconvertir : le fichier est lu
   automatiquement et la conversion suivante le refait seule. Pousser ce fichier avec le skill.
 - **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran) avant de rendre la main.
+
+## 1c. Classe du véhicule : vérifiée sur internet (obligatoire)
+
+La `vehicleClass` du `vehicles.meta` d'un mod est souvent fausse (la m422, BMW M4 Competition, y est
+`VC_MUSCLE`). Or elle choisit la **catégorie du son moteur** (pack Brolver) et le **rangement dans le menu
+du jeu** (`VehicleConfig.Class`). Avant chaque conversion d'un nouveau véhicule :
+1. Identifier le vrai modèle (nom du zip, `vehicleMakeName`/`gameName`, génération, année).
+2. **Chercher sur internet** sa carrosserie et son segment (fiche constructeur, Wikipédia « Body style »),
+   au moins une source, et choisir la classe d'après le **vrai véhicule**, pas d'après le mod :
+   | Vrai véhicule | Classe | Son |
+   |---|---|---|
+   | coupé 2 portes, même version sportive (M4, C63 coupé, RC F) | `VC_COUPE` | coupe |
+   | berline 4 portes, même version sportive (M3, M5, RS6 berline, E63) | `VC_SEDAN` | berline |
+   | citadine / compacte (Golf, Clio, Mini) | `VC_COMPACT` | compact |
+   | sportive pure, pensée comme telle (911, Supra, GT-R, Cayman, roadster) | `VC_SPORT` | sport |
+   | supercar / hypercar (moteur central, > 600 ch : Huracán, F8, 720S) | `VC_SUPER` | super |
+   | américaine V8 à propulsion (Mustang, Challenger, Camaro) | `VC_MUSCLE` | muscle |
+   | ancienne (avant ~1980) | `VC_SPORT_CLASSIC` | classique |
+   | SUV / 4x4 / pick-up / utilitaire | `VC_SUV` / `VC_OFF_ROAD` / `VC_VAN`… | suv / toutterrain / pickup |
+   Règle de l'utilisateur (2026-11-15) : une version « performance » d'un coupé ou d'une berline reste un
+   coupé ou une berline (la M4 Competition n'est ni une muscle ni une sport).
+3. L'écrire dans `classes/vehicle_classes.json` (`class`, `mod_class`, `real_model`, `body`, `sources`,
+   `checked`) et pousser ce fichier avec le skill : la conversion le lit seule (rapport : « Classe du
+   véhicule : … (mod) remplacée par … »). `--vehicle-class VC_COUPE` (ou `coupe`) force en dépannage.
+   Sans entrée, le rapport affiche « Classe du véhicule NON vérifiée » : ne pas livrer ainsi.
 
 ## 2. Uploader le modèle et les sons (assets privés)
 

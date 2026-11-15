@@ -1,0 +1,13 @@
+{
+ "about": "Classe GTA vérifiée sur internet pour chaque véhicule converti (la vehicleClass d'un mod est souvent fausse). Lue par convert_vehicle.py ; prioritaire sur vehicles.meta, --vehicle-class l'emporte. Voir SKILL.md § 1c.",
+ "vehicles": {
+  "m422": {
+   "class": "VC_COUPE",
+   "mod_class": "VC_MUSCLE",
+   "real_model": "BMW M4 Competition (G82, 2021+)",
+   "body": "coupé 2 portes (la berline 4 portes est la M3 G80)",
+   "sources": ["https://en.wikipedia.org/wiki/BMW_M4", "https://www.bmw-m.com/en/all-models/overview-m-and-m-performance/bmw-m4-coupe/2024/bmw-m4-coupe-and-m4-competition-coupe.html"],
+   "checked": "2026-11-15"
+  }
+ }
+}

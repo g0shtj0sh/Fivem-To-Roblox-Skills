@@ -296,9 +296,40 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
 
 # ------------------------------------------------------------------ conversion d'un véhicule
 
+CLASSES_FILE = HERE.parent / "classes" / "vehicle_classes.json"
+
+
+def apply_verified_class(name: str, vinfo: dict, args, report: Report) -> None:
+    """Classe GTA réelle : --vehicle-class, sinon classes/vehicle_classes.json, sinon celle du mod (à vérifier).
+
+    La vehicleClass d'un mod est souvent fausse (ex. M4 Competition rangée en VC_MUSCLE). Elle décide
+    de la catégorie du son moteur et du rangement dans le menu du jeu : voir SKILL.md § 1c.
+    """
+    mod_class = str(vinfo.get("class", "") or "").upper()
+    forced = (getattr(args, "vehicle_class", None) or "").strip().upper()
+    entry = {}
+    if CLASSES_FILE.exists():
+        entry = json.loads(CLASSES_FILE.read_text(encoding="utf-8")).get("vehicles", {}).get(name.lower(), {})
+    verified = forced or str(entry.get("class", "")).upper()
+    if verified:
+        if not verified.startswith("VC_"):
+            verified = "VC_" + verified
+        vinfo["class"] = verified
+        why = "--vehicle-class" if forced else f"vérifiée ({entry.get('real_model', name)} : {entry.get('body', '?')})"
+        if verified != mod_class:
+            report.info(f"Classe du véhicule : {mod_class or '?'} (mod) remplacée par {verified}, {why}.")
+        else:
+            report.info(f"Classe du véhicule : {verified}, {why}.")
+    else:
+        report.warn(f"Classe du véhicule NON vérifiée : {mod_class or '?'} (celle du mod). Vérifier sur internet "
+                    f"la carrosserie du vrai modèle, l'écrire dans classes/vehicle_classes.json puis reconvertir "
+                    f"(SKILL.md § 1c) : elle choisit le son moteur et le rangement dans le menu.")
+
+
 def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, args, report: Report,
                 game: "gamelib.GameAssets | None" = None) -> dict:
     vinfo = metas["vehicles"].get(name, {"modelName": name})
+    apply_verified_class(name, vinfo, args, report)
     variation = metas["carvariations"].get(name, {})
     carcols = metas["carcols"]
     handling_id = (vinfo.get("handlingId") or name).lower()
@@ -799,6 +830,9 @@ def main(argv=None) -> int:
     ap.add_argument("--engine-sound",
                     help="son du pack à utiliser (ex. brolver_super_03) ou catégorie (ex. muscle) ; "
                          "défaut : catégorie d'après la classe GTA, son tiré du nom du modèle")
+    ap.add_argument("--vehicle-class",
+                    help="classe GTA réelle (ex. VC_COUPE ou coupe) : remplace celle du mod et de "
+                         "classes/vehicle_classes.json")
     ap.add_argument("--no-engine-pack", action="store_true", help="ignorer le pack de sons moteur maison")
     ap.add_argument("--plate", default="F2R 000", help="texte de plaque par défaut")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
