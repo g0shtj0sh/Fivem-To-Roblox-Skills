@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from .icon_atlas import has_alpha_mask, refine_icon_atlas
 from .util import Report
 
 # Plafond de Roblox mesuré le 2026-11-15 (GLB importé) : 2048 gardé tel quel (rendu net en qualité 21),
@@ -145,6 +146,8 @@ class TextureStore:
         self.missing: set[str] = set()
         # retouches par texture (rebadge) : nom -> fonction(image, role) -> image, sur la taille d'origine
         self.edits: dict = {}
+        # planches d'icônes de l'habitacle (diffuse d'un shader vehicle_dash_emissive) : voir icon_atlas.py
+        self.icon_atlases: set[str] = set()
         out_dir.mkdir(parents=True, exist_ok=True)
 
     def find(self, name: str | None) -> Path | None:
@@ -176,9 +179,16 @@ class TextureStore:
             img = edit(img, role)
         self.avg.setdefault(name.lower(), average_color(img))
         self.flat.setdefault(name.lower(), float(np.asarray(img.convert("RGB"), np.float32).std()) / 255.0 < FLAT_STD)
+        if role in ("color", "opaque") and name.lower() in self.icon_atlases and has_alpha_mask(img):
+            img = refine_icon_atlas(img, self.max_size)
+            if role == "opaque":  # pièce opaque (bouton de porte, console) : symbole clair sur fond sombre, sans trou
+                img.putalpha(255)
+            else:
+                self.report.info(f"Planche d'icônes {name} : fond sombre, symboles clairs, agrandie à {img.size[0]} px.")
         img = resize_for_roblox(img, self.max_size)
         img = to_normal_png(img) if role == "normal" else to_color_png(img)
-        dst = self.out_dir / f"{name.lower()}{'_n' if role == 'normal' else ''}.png"
+        suffix = {"normal": "_n", "opaque": "_opaque"}.get(role, "")
+        dst = self.out_dir / f"{name.lower()}{suffix}.png"
         img.save(dst, optimize=True)
         self.cache[key] = dst
         return dst
@@ -214,6 +224,14 @@ class TextureStore:
         Image.fromarray(out, "RGB").save(dst, optimize=True)
         self.cache[key] = dst
         return dst
+
+    def is_icon_atlas(self, name: str | None) -> bool:
+        """Planche d'icônes dont l'alpha dessine les symboles (les pièces qui l'affichent doivent être transparentes)."""
+        if not name or name.lower() not in self.icon_atlases:
+            return False
+        src = self.find(name)
+        img = load_image(src, self.report) if src is not None else None
+        return img is not None and has_alpha_mask(img)
 
     def is_flat(self, name: str | None) -> bool:
         """True si la texture est uniforme (un aplat) : sur une pièce peinte elle n'apporte rien de plus que la

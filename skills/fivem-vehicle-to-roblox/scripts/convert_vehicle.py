@@ -440,6 +440,15 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     for p in vb.parts:
         if p.livery and p.tex_livery and not livery_names:
             livery_names = store.siblings(p.tex_livery[0])
+    # Planches d'icônes de l'habitacle (vehicle_dash_emissive) : symboles dessinés par l'alpha, fond blanc
+    # sans signification -> texture refaite (icon_atlas.py) et pièces dash_emissive transparentes comme des
+    # badges (sinon rectangles blancs dans Roblox, constaté sur la m422 le 2026-11-15).
+    for p in vb.parts:
+        if p.shader is not None and "dash_emissive" in p.shader.name and p.tex_diffuse:
+            store.icon_atlases.add(p.tex_diffuse.lower())
+    for p in vb.parts:
+        if p.kind == "emissive" and store.is_icon_atlas(p.tex_diffuse):
+            p.kind = "decal"
     for p in vb.parts:
         flip_if_inverted(p)
         mat, has_tex = make_material(p, store, paint_default, livery_names)
@@ -577,19 +586,25 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
         elif p.tex_diffuse and not store.is_flat(p.tex_diffuse):
             # une diffuse uniforme (ex. vehicle_generic_smallspecmap, blanche 4 x 4) n'apporte rien à la peinture :
             # sans texture, la pièce reste sans SurfaceAppearance et la custom peut changer sa finition (SetFinish)
-            color_png = store.get(p.tex_diffuse)
+            opaque_atlas = p.kind != "decal" and store.is_icon_atlas(p.tex_diffuse)
+            color_png = store.get(p.tex_diffuse, "opaque" if opaque_atlas else "color")
             has_tex = color_png is not None
     elif p.kind in ("glass", "light", "siren"):
         store.average(p.tex_diffuse)
         base = [0.3, 0.3, 0.32, 0.5 if p.kind == "glass" else 1.0]
         alpha = "BLEND" if p.kind == "glass" else "OPAQUE"
     else:
-        color_png = store.get(p.tex_diffuse)
+        # planche d'icônes sur une pièce opaque : version sans transparence (sinon Roblox montre Part.Color
+        # ou un fond blanc à la place du fond transparent)
+        opaque_atlas = p.kind != "decal" and store.is_icon_atlas(p.tex_diffuse)
+        color_png = store.get(p.tex_diffuse, "opaque" if opaque_atlas else "color")
         has_tex = color_png is not None
         if p.custom_color and color_png is None:
             base = [*p.custom_color, 1.0]
         if p.kind == "decal":
             alpha = "BLEND"
+    if p.kind == "decal" and color_png is not None and store.is_icon_atlas(p.tex_diffuse):
+        alpha = "BLEND"  # badges peints (branche peinture) qui affichent la planche d'icônes : transparents aussi
     mr_png = None
     if color_png is not None and p.kind not in ("glass", "light", "siren"):
         normal_png = store.get(p.tex_normal, "normal") if p.tex_normal else None
