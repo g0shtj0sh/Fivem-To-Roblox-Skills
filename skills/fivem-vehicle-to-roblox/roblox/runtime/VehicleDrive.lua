@@ -236,7 +236,8 @@ local function step(a, dt)
 	Runtime.SetTelemetry(car, {
 		Rpm = idle + (math.clamp(out.rpm, 0.2, 1) - 0.2) / 0.8 * (maxRpm - idle),
 		Gear = out.gear,
-		Throttle = inp.Throttle,
+		-- accélérateur EFFECTIF (en marche arrière, c'est S) : le son moteur en tire la charge enfoncé / relâché
+		Throttle = out.drive or inp.Throttle,
 		Brake = (inp.Brake or 0) > 0.1 and out.gear >= 1,
 		Reverse = out.reverse,
 		Speed = out.speed,

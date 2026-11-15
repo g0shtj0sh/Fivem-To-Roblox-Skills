@@ -53,3 +53,21 @@ voitures.
 Balayages (accélération / décélération / ralenti, moteur et échappement séparés) : le convertisseur fait tout.
 Packs à boucles déjà découpées (ex. Skril Studio : idle → very_high, `_on` / `_off`) : il reste à écrire
 l'import qui mesure le régime de chaque boucle (même suivi, entre boucles) — pas encore fait.
+
+## Correctif du 2026-11-15 (soir) — « le son s'emballe pour rien »
+Plainte de l'utilisateur (brolver-rp, m422) : le son « s'emballe pour rien ». Mesure en Play Studio PC (1 joueur,
+scénario `engine-audio-drive` du projet brolver-rp : ralenti 1 s, S 3 s, roue libre 1,5 s, W 4 s, roue libre 3 s ;
+journal par image du régime, de la charge, de la vitesse et du patinage des roues) :
+- **Marche arrière embrayée d'un coup** (`S.clutch = 1`) avec le gain de 1ʳᵉ (`FirstGearForce` ×1,5, mesuré en 1ʳᵉ
+  seulement) : roues arrière à ~23 m/s pour 2 m/s de caisse (×10), régime au rupteur en 0,3 s à 8 km/h.
+  En arrière le poids passe à l'avant et déleste les roues motrices arrière.
+  → départ en arrière (et retour en avant) avec le même embrayage patinant que la 1ʳᵉ (`LaunchClutch`,
+  `S.launch`), gain de 1ʳᵉ retiré de la marche arrière. Après : régime tenu à `LaunchRpm` pendant le départ,
+  puis montée avec la vitesse jusqu'au rupteur vers 46 km/h (plafond d'arrière) ; patinage ≤ ×2.
+  Accélération en arrière NON comparée à GTA (pas de trace FiveM en arrière).
+- **Charge du son fausse en arrière** : la télémétrie `Throttle` était la touche W ; en reculant (S) le son jouait
+  les boucles « relâché » au rupteur. → `Throttle` = accélérateur effectif (`out.drive` de `VehicleDynamics`,
+  aussi envoyé au serveur pour les autres joueurs). Après : boucles « enfoncé » en arrière.
+- **Non modifié** : rétrogradage 2→1 en roue libre vers 38 km/h (2 900 → 5 400 tr/min d'un coup) — comportement
+  de GTA mesuré (`DownshiftRpm`) ; à revoir seulement si l'utilisateur le juge gênant.
+- Non testé : roues délestées sur bosses / sauts, deuxième joueur, téléphone. L'agent n'entend pas le résultat.

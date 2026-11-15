@@ -285,6 +285,7 @@ RunService.Heartbeat:Connect(function(dt)
 		sendAcc = 0
 		local packed = r and TyreFx.Pack(tyrePeak, TyreFx.Bones(r.Config)) or 0
 		table.clear(tyrePeak)
-		telemetry:FireServer(m, st.Rpm or 0, c.Throttle, c.Steer, brake, reverse, st.Gear, packed)
+		-- accélérateur effectif (télémétrie : S en marche arrière), pour que les autres entendent la même charge
+		telemetry:FireServer(m, st.Rpm or 0, st.Throttle or c.Throttle, c.Steer, brake, reverse, st.Gear, packed)
 	end
 end)

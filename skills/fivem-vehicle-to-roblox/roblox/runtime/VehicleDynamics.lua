@@ -622,7 +622,11 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		if brake > 0.1 and throttle < 0.05 and vf < 0.8 then
 			S.reverseTimer += dt
 			if S.reverseTimer >= T.ReverseHold then
-				S.gear, S.clutch, S.reverseTimer = -1, 1, 0
+				-- départ en arrière comme en 1ʳᵉ : embrayage qui patine (LaunchClutch), poussée progressive.
+				-- Avant le 2026-11-15 : embrayé d'un coup (1) → toute la poussée à la première image, roues
+				-- arrière à ~23 m/s pour 2 m/s de caisse et régime au rupteur en 0,3 s (« le son s'emballe »).
+				S.gear, S.clutch, S.reverseTimer = -1, T.LaunchClutch or 0.1, 0
+				S.shiftDir, S.launch = 1, true
 			end
 		else
 			S.reverseTimer = 0
@@ -631,7 +635,9 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		if throttle > 0.1 and brake < 0.05 and vf > -0.8 then
 			S.reverseTimer += dt
 			if S.reverseTimer >= T.ReverseHold * 0.5 then
-				S.gear, S.clutch, S.reverseTimer = 1, 1, 0
+				-- retour en marche avant, même départ que la 1ʳᵉ (sinon même patinage qu'en arrière)
+				S.gear, S.clutch, S.reverseTimer = 1, T.LaunchClutch or 0.1, 0
+				S.shiftDir, S.launch = 1, true
 			end
 		else
 			S.reverseTimer = 0
@@ -733,7 +739,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 
 	-- départ arrêté façon GTA (MESURÉ, voir Dyn.Tuning) : à l'arrêt en 1ʳᵉ sans gaz, l'embrayage revient à
 	-- LaunchClutch ; sous les gaz il monte et la poussée passe pendant le patinage (S.launch)
-	if S.gear == 1 and math.abs(vf) < (T.LaunchSpeed or 0) and driveIn < 0.05 and (S.clutch >= 1 or S.launch) then
+	-- (aussi en marche arrière, arrêtée sans gaz : le prochain départ en arrière patine de même)
+	if (S.gear == 1 or S.gear < 0) and math.abs(vf) < (T.LaunchSpeed or 0) and driveIn < 0.05 and (S.clutch >= 1 or S.launch) then
 		S.clutch, S.shiftDir, S.launch = T.LaunchClutch or 0.1, 1, true
 	end
 	local launchHold = S.launch and driveIn < 0.05
@@ -823,8 +830,10 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			end
 		end
 		local dir = (S.gear < 0) and -1 or 1
-		-- la marche arriere emploie le rapport de 1re (3,333) : elle recoit donc le meme gain
-		local gearForce = (S.gear == 1 or S.gear < 0) and (T.FirstGearForce or 1) or 1
+		-- gain de 1re (MESURÉ en 1re seulement). La marche arrière emploie le même rapport (3,333) et recevait
+		-- le même gain jusqu'au 2026-11-15 (déduction, jamais mesurée) : en arrière le poids passe à l'avant et
+		-- déleste les roues arrière, qui patinaient ×8 à 2 m/s (régime au rupteur, traces) ; gain retiré.
+		local gearForce = (S.gear == 1) and (T.FirstGearForce or 1) or 1
 		local aDrive = P.driveForce * math.abs(ratio) * torqueCurve(S.rpm, S.gear, T) * thr * engage * cut * P.g * dir
 			* gearForce
 		-- en pente, GTA pousse plus fort : 54 % de la résistance de la pente récupérés (MESURÉ ; voir
@@ -996,6 +1005,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	local out = {
 		wheels = {}, omega = {}, travel = {}, rpm = S.rpm, gear = S.gear, clutch = S.clutch,
 		speed = vf, lock = lock, steerAngle = S.steerAngle, reverse = S.gear < 0, burnout = burnout,
+		drive = driveIn, -- accélérateur effectif (S en marche arrière) : charge du son moteur, retours de flamme
 	}
 	for i, w in ipairs(P.wheels) do
 		local x = S.x[i]
