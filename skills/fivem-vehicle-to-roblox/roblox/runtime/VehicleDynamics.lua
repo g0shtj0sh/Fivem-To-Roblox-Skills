@@ -503,13 +503,15 @@ function Dyn.new(cfg, comLocal, overrides)
 	local S = {
 		rpm = 0.2, gear = 1, clutch = 1, shiftDir = 0, lastShift = -1, time = 0,
 		reverseTimer = 0, steerAngle = 0, lock = P.steerLock,
-		omega = {}, x = {}, slip = {}, slipV = {}, stick = {}, burnout = false,
+		omega = {}, x = {}, slip = {}, slipV = {}, slipLong = {}, slipLat = {}, stick = {}, burnout = false,
 	}
 	for i, w in ipairs(wheels) do
 		S.omega[i] = 0
 		S.x[i] = w.x0
 		S.slip[i] = 0
 		S.slipV[i] = 0
+		S.slipLong[i] = 0
+		S.slipLat[i] = 0
 		S.stick[i] = 0
 	end
 	return { P = P, S = S, T = T }
@@ -527,6 +529,8 @@ function Dyn.reset(sim)
 		S.x[i] = w.x0
 		S.slip[i] = 0
 		S.slipV[i] = 0
+		S.slipLong[i] = 0
+		S.slipLat[i] = 0
 		S.stick[i] = 0
 	end
 end
@@ -872,6 +876,9 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				-- vitesse de glissement au contact (m/s) : ce qui fait la trace et la fumée (VehicleTyreFx)
 				local vSlipLong = omega * w.radius - vLong
 				S.slipV[i] = math.sqrt(vSlipLong * vSlipLong + vLat * vLat)
+				-- ses deux parts, séparées : patinage / blocage (le long de la roue) et glisse de côté (VehicleTyreFx)
+				S.slipLong[i] = vSlipLong
+				S.slipLat[i] = vLat
 				local grip = 1 - (1 - (c.grip or 1)) * P.lossMult
 				local fmax = (N[i] * muOf(P, sFall) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
 				if burnout and w.burnSpin then
@@ -961,6 +968,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				S.omega[i] = o
 				S.slip[i] = 0
 				S.slipV[i] = 0
+				S.slipLong[i] = 0
+				S.slipLat[i] = 0
 			end
 			-- burn : la roue garde toute la réaction du sol (elle patine), la caisse n'en reçoit qu'une part
 			sumFx[i] += (burnout and w.burnSpin) and Fx * T.BurnoutPush or Fx
@@ -1001,6 +1010,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			lateralPoint = Vector3.new(wheelCenter.X, contactY + w.rc, wheelCenter.Z), -- centre de roulis
 			slip = S.slip[i], -- glissement combiné (> 1 : au-delà du pic d'adhérence)
 			slipV = S.slipV[i], -- vitesse de glissement au contact (m/s)
+			slipLong = S.slipLong[i], -- part le long de la roue (m/s, + = la roue tourne plus vite que le sol)
+			slipLat = S.slipLat[i], -- part latérale, dans le repère de la roue (m/s)
 			grounded = contacts[i] ~= nil and contacts[i].grounded == true,
 		}
 		out.omega[i] = S.omega[i]

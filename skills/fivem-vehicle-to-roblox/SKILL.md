@@ -244,8 +244,12 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   posées à l'œil (celles de GTA ne sont pas documentées). `PovCamera = false` pour garder la caméra de Roblox.
 - **Traces de pneus, fumée et burn façon GTA** (`VehicleTyreFx`, chaque client ; `VehicleDynamics`) : par roue,
   trace noire au sol + fumée légère **ensemble**, dès que la roue glisse dans son propre repère au-delà du pic
-  d'adhérence (drift, frein à main, patinage, roue bloquée) ; une roue avant braquée dans le sens de la trajectoire ne
-  marque pas ; rien sur l'eau ; sols meubles : poussière et trace de la couleur du sol. **Burn** : W + S à l'arrêt, les
+  d'adhérence : patinage ou roue bloquée (burn, départ, frein à main) marquent seuls ; une glisse **de côté** ne marque
+  que si la **voiture dérive** (angle entre le cap et la trajectoire de l'**essieu arrière** ≥ `DriftStart` 12°, plein à
+  22° ; pas au centre de gravité, où la géométrie seule donne 5 à 14° à pleine butée) — braquer à fond dans un virage
+  tenu ne laisse rien (correctif du 2026-11-15 : avant, les roues avant qui ripent en sous-virage marquaient). Trace =
+  **ruban continu** par roue (Beams couchés qui se rejoignent point pour point, opacité lissée, fondu d'entrée et de
+  sortie, segments alignés fusionnés), discrète (opacité 0,42 au plus) ; rien sur l'eau ; sols meubles : poussière et trace de la couleur du sol. **Burn** : W + S à l'arrêt, les
   roues motrices patinent sur place (régime tenu sous le rupteur, tache noire qui fonce) ; avec A / D, **donut** autour
   de l'avant ; relâcher S lance la voiture. Couleur de fumée : attribut `TyreSmokeColor`. Seuils posés à l'œil contre
   des vidéos GTA, non mesurés dans FiveM ; pas encore de pneu qui éclate après un long burn ni de crissement.

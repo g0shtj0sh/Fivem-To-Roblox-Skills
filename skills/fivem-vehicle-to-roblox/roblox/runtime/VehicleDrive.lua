@@ -205,11 +205,33 @@ local function step(a, dt)
 	local audio = a.cfg.Audio or {}
 	local idle, maxRpm = audio.IdleRpm or 850, audio.MaxRpm or 7200
 	local spin, susp, tyre = {}, {}, {}
+	if not a.rearZ then
+		local z, n = 0, 0
+		for _, w in ipairs(P.wheels) do
+			if not w.front then
+				z += w.rest.Z
+				n += 1
+			end
+		end
+		a.rearZ = n > 0 and z / n or 0
+	end
+	-- traces : une glisse de côté ne marque que si la voiture dérive (essieu arrière)
+	local fzSum, fzN = 0, 0
+	for _, ow in ipairs(out.wheels) do
+		if ow.grounded then
+			fzSum += ow.Fz or 0
+			fzN += 1
+		end
+	end
+	local tyreCtx = {
+		drift = TyreFx.DriftAngle(ctx.vBody, ctx.wBody, a.rearZ),
+		fzMean = fzN > 0 and fzSum / fzN or 0,
+	}
 	for i, w in ipairs(P.wheels) do
 		spin[w.bone] = out.omega[i]
 		susp[w.bone] = out.travel[i]
 		local ow = out.wheels[i]
-		tyre[w.bone] = TyreFx.Intensity(ow.slip, ow.slipV, ow.grounded)
+		tyre[w.bone] = TyreFx.Intensity(ow, tyreCtx)
 	end
 	Runtime.SetTelemetry(car, {
 		Rpm = idle + (math.clamp(out.rpm, 0.2, 1) - 0.2) / 0.8 * (maxRpm - idle),

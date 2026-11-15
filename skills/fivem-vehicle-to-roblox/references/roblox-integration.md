@@ -313,10 +313,12 @@ Runtime.SetTelemetry(car, {
 	Steer = steer, WheelSteer = maxSteerRad,          -- angle des roues = -Steer × WheelSteer
 	WheelSpin = { wheel_lf = omega, ... },            -- rad/s, + = avant
 	Suspension = { wheel_lf = travel, ... },          -- m, + = vers le haut, relatif au repos
-	TyreFx = { wheel_lf = 0..1, ... },                -- traces + fumée : VehicleTyreFx.Intensity(slip, slipV, grounded)
+	TyreFx = { wheel_lf = 0..1, ... },                -- traces + fumée : VehicleTyreFx.Intensity(roue, dérive)
 })
 ```
-`TyreFx` vient du glissement de chaque roue (`slip` combiné, 1 = pic d'adhérence ; `slipV` en m/s au contact) ;
+`TyreFx` vient du glissement de chaque roue (`out.wheels[i]` : `slip` combiné, 1 = pic d'adhérence ; `slipLong` et
+`slipLat` en m/s au contact) et de l'angle de dérive de la voiture (`VehicleTyreFx.DriftAngle(vBody, wBody, rearZ)`, ° à l'essieu arrière) : le patinage
+ou le blocage marque seul, la glisse de côté seulement si la voiture dérive (`DriftStart` / `DriftFull`) ;
 `FiveMVehiclesClient` en envoie le maximum de chaque 0,1 s au serveur, qui le pose dans l'attribut `TyreFx`.
 Sans `SetTelemetry`, le rendu estime le régime et la rotation des roues depuis la vitesse de `VehicleRoot`.
 
