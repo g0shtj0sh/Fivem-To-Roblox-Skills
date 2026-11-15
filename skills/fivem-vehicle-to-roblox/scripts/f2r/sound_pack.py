@@ -25,6 +25,8 @@ from pathlib import Path
 from .util import Report, extract_archive
 
 ENV_VAR = "F2R_ENGINE_PACK"
+DEFAULT_URL = ("https://github.com/g0shtj0sh/Fivem-To-Roblox-Skills/releases/download/"
+               "brolver-motor-sounds-v1/brolver-motor-sounds.rar")
 
 CLASS_TO_CATEGORY = {
     "VC_COMPACT": "compact",
@@ -66,7 +68,36 @@ def _find_root(base: Path) -> Path | None:
     return None
 
 
+def _download(url: str, cache_dir: Path, report: Report) -> Path | None:
+    import urllib.request
+    dest = cache_dir / url.rstrip("/").rsplit("/", 1)[-1]
+    if dest.exists() and dest.stat().st_size > 0:
+        return dest
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    try:
+        report.info(f"Téléchargement du pack de sons moteur : {url}")
+        with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+        tmp.replace(dest)
+        return dest
+    except Exception as exc:  # noqa: BLE001
+        report.warn(f"Téléchargement du pack de sons impossible ({exc}) : son d'origine conservé.")
+        tmp.unlink(missing_ok=True)
+        return None
+
+
+def default_cache() -> Path:
+    base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".cache")
+    return Path(base) / "f2r" / "engine_pack"
+
+
 def open_pack(path: str | os.PathLike, cache_dir: Path, report: Report) -> Path | None:
+    if str(path).startswith(("http://", "https://")):
+        got = _download(str(path), cache_dir, report)
+        if got is None:
+            return None
+        path = got
     p = Path(path)
     if not p.exists():
         report.warn(f"Pack de sons moteur introuvable : {p}")
@@ -89,6 +120,9 @@ def open_pack(path: str | os.PathLike, cache_dir: Path, report: Report) -> Path 
                     return None
             else:
                 extract_archive(p, dest, report)
+            if _find_root(dest) is None:
+                report.warn(f"Pack de sons {p.name} : extraction vide (7-Zip installé ?).")
+                return None
             (dest / ".ok").write_text("ok", encoding="utf-8")
         p = dest
     root = _find_root(p)

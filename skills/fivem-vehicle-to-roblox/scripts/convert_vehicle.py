@@ -446,9 +446,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     # Son vanilla : le pack ne contient pas d'AWC, on va chercher le vrai son du
     # jeu désigné par audioNameHash (ex. ADDER) plutôt que de le synthétiser.
     audio_from_game = False
-    pack_path = args.engine_pack or os.environ.get(sound_pack.ENV_VAR)
+    pack_path = args.engine_pack or os.environ.get(sound_pack.ENV_VAR) or sound_pack.DEFAULT_URL
     if pack_path and not args.no_engine_pack:
-        root = sound_pack.open_pack(pack_path, Path(args.out).resolve() / "_engine_pack", report)
+        root = sound_pack.open_pack(pack_path, sound_pack.default_cache(), report)
         engine = sound_pack.choose(root, vinfo.get("class", ""), name, args.engine_sound) if root else None
         if engine is not None:
             got = sound_pack.prepare(engine, root, out / "_work_sounds", name, report)
@@ -794,7 +794,8 @@ def main(argv=None) -> int:
     ap.add_argument("--sound-ids", help="JSON {fichier: assetId} produit par roblox_upload.py")
     ap.add_argument("--engine-pack",
                     help="pack de sons moteur maison (dossier ou .rar/.zip : sounds/<categorie>/<son>/...) ; "
-                         f"défaut : variable d'environnement {sound_pack.ENV_VAR}. Remplace le son du mod.")
+                         f"défaut : variable d'environnement {sound_pack.ENV_VAR}, sinon téléchargé depuis la release GitHub "
+                         "(mis en cache). Remplace le son du mod.")
     ap.add_argument("--engine-sound",
                     help="son du pack à utiliser (ex. brolver_super_03) ou catégorie (ex. muscle) ; "
                          "défaut : catégorie d'après la classe GTA, son tiré du nom du modèle")
