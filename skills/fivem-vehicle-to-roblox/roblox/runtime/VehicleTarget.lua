@@ -164,7 +164,7 @@ end
 -- sans limite de portée (le capot et le coffre sont à plus de 2,5 m du siège) et sans viser les autres
 -- véhicules. ox_target ne cible rien à bord ; ici, comme les menus du jeu, l'occupant garde la main sur son
 -- véhicule (le serveur l'accepte : action `Door`, occupant du véhicule).
-local function pick()
+local function pick(at)
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local cam = workspace.CurrentCamera
@@ -172,7 +172,7 @@ local function pick()
 		return nil
 	end
 	local inside = seatedIn()
-	local mouse = UserInputService:GetMouseLocation()
+	local mouse = at or UserInputService:GetMouseLocation() -- `at` : point de l'écran (tests), sinon le curseur
 	local ray = cam:ViewportPointToRay(mouse.X, mouse.Y)
 	local best, bestT = nil, math.huge
 	for _, model in ipairs(inside and { inside } or CollectionService:GetTagged(TAG)) do
@@ -392,9 +392,11 @@ function Target.Start()
 	CollectionService:GetInstanceAddedSignal(TAG):Connect(watchVehicle)
 end
 
--- pour les tests : ce que viserait le curseur maintenant, sans la touche ; et si le ciblage est actif
-function Target.Pick()
-	return pick()
+-- pour les tests : ce que viserait le curseur maintenant (ou le point `at` de l'écran, Vector2 comme
+-- GetMouseLocation : les entrées simulées ne placent pas toujours la souris), sans la touche ; et si le ciblage
+-- est actif
+function Target.Pick(at)
+	return pick(typeof(at) == "Vector2" and at or nil)
 end
 
 function Target.IsActive()
