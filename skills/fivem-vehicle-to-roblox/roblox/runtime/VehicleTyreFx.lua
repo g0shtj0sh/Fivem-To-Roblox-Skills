@@ -24,6 +24,11 @@
 	même largeur, même opacité à la jonction), au lieu d'une suite de blocs ; opacité lissée dans le temps,
 	fondu d'entrée et de sortie, segments presque alignés fusionnés.
 
+	Fumée (corrigée le 2026-11-15, « trop séparée, plus dense comme GTA V mais légère ») : nappe continue —
+	bouffées émises à la main (Emit) à la distance parcourue par le contact, jamais par `Rate` (Roblox réduit
+	`Rate` selon le niveau graphique) ; bouffées larges dès la naissance et chacune plus transparente ; budget
+	global par client (SmokeBudget).
+
 	Réglages par véhicule : attribut `TyreSmokeColor` (Color3, comme la couleur de fumée de pneu de GTA) ;
 	`TyreFx = false` sur le véhicule pour couper l'effet.
 	Seuils, tailles et durées posés à l'œil contre les vidéos de référence : non mesurés dans GTA.
@@ -42,7 +47,18 @@ Fx.DriftFull = 24 -- ° : la glisse de côté marque pleinement (mesuré m422, 2
 Fx.LoadMin = 0.35 -- charge de la roue / charge moyenne : en dessous, un patinage ne marque pas
 Fx.LoadFull = 0.75
 Fx.DriftMinSpeed = 2.5 -- m/s : en dessous, l'angle de dérive n'a pas de sens (0)
-Fx.SmokeRate = 32 -- particules par seconde et par roue à intensité pleine
+-- Débit de fumée — corrigé le 2026-11-15 (« la fumée quand on drift doit être un peu plus dense, moins séparée
+-- entre chaque particule, comme dans GTA V, mais rester assez légère ») : un débit fixe dans le temps (32/s au
+-- plus, souvent 5 à 15/s à intensité partielle) posait une bouffée tous les 3 à 10 studs à 50 studs/s, d'où des
+-- boules séparées. GTA laisse une nappe continue : le débit suit la DISTANCE parcourue par le contact de la roue
+-- (écart visé < largeur d'une bouffée naissante), et l'intensité module peu l'écart (plancher SmokeFloor).
+Fx.SmokeRate = 18 -- particules/s par roue sans avancer (burn sur place), à intensité pleine
+Fx.SmokePerStud = 0.75 -- particules par stud parcouru par le contact de la roue, à intensité pleine
+Fx.SmokeRateMax = 64 -- particules/s par roue au plus (budget : ≈ 64 × 2,6 s ≈ 170 vivantes par roue)
+Fx.SmokeFloor = 0.55 -- part du débit dès que la fumée part (l'intensité épaissit, elle ne troue pas la nappe)
+Fx.SmokeBudget = 260 -- bouffées/s au plus pour TOUS les véhicules de ce client (Emit n'est pas réduit en qualité basse)
+Fx.SmokePerFrameMax = 6 -- bouffées au plus par roue et par image
+Fx.SmokeJitter = 0.45 -- studs de décalage de côté au hasard, par bouffée
 Fx.SmokeStart = 0.15 -- intensité sous laquelle la trace marque déjà mais sans fumée
 Fx.SmokeColor = Color3.fromRGB(228, 228, 228)
 Fx.MarkColor = Color3.fromRGB(28, 28, 28)
@@ -286,41 +302,92 @@ local function ageMarks()
 end
 
 -- ------------------------------------------------------------------ fumée
-local function makeEmitter(root, bone)
-	local att = Instance.new("Attachment")
-	att.Name = "F2R_TyreFx_" .. bone
-	att.Parent = root
+-- Une bouffée naît large (Size 1,1 → carré de 2,2 studs) pour que deux voisines se recouvrent dès le départ,
+-- part peu (vitesse et cône réduits : la nappe reste sur la ligne de la roue), monte lentement (fumée de
+-- gomme qui rase le sol) et s'étale en durant un peu plus. Chaque bouffée est PLUS transparente qu'avant
+-- (pic 0,72 au lieu de 0,55) : elles se superposent, l'ensemble reste léger au lieu de s'empiler en mur blanc.
+function Fx.MakeSmokeEmitter(parent)
 	local e = Instance.new("ParticleEmitter")
 	e.Name = "TyreSmoke"
 	e.Texture = Fx.SmokeTexture
 	e.Rate = 0
 	e.Enabled = true
-	e.Lifetime = NumberRange.new(1.6, 2.6)
-	e.Speed = NumberRange.new(1, 3)
-	e.SpreadAngle = Vector2.new(40, 40)
+	e.Lifetime = NumberRange.new(1.8, 3.0)
+	e.Speed = NumberRange.new(0.6, 2.4)
+	e.SpreadAngle = Vector2.new(32, 32)
 	e.EmissionDirection = Enum.NormalId.Top
-	e.Acceleration = Vector3.new(0, 1.2, 0)
-	e.Drag = 1.5
+	e.Acceleration = Vector3.new(0, 0.9, 0)
+	e.Drag = 1.2
 	e.Rotation = NumberRange.new(0, 360)
-	e.RotSpeed = NumberRange.new(-30, 30)
+	e.RotSpeed = NumberRange.new(-25, 25)
 	e.LightEmission = 0
 	e.LightInfluence = 1
 	e.VelocityInheritance = 0
 	e.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.8),
-		NumberSequenceKeypoint.new(0.3, 2.4),
-		NumberSequenceKeypoint.new(1, 5),
+		NumberSequenceKeypoint.new(0, 1.1),
+		NumberSequenceKeypoint.new(0.3, 2.8),
+		NumberSequenceKeypoint.new(1, 6),
 	})
 	-- entre en fondu, reste légère, finit transparente (une courbe qui ne finit pas à 1 fait sauter la particule)
 	e.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.08, 0.55),
-		NumberSequenceKeypoint.new(0.5, 0.75),
+		NumberSequenceKeypoint.new(0.07, 0.72),
+		NumberSequenceKeypoint.new(0.45, 0.82),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	e.Parent = att
-	return att, e
+	e.Parent = parent
+	return e
 end
+
+-- Débit (particules/s) d'une roue d'intensité k (0..1) dont le contact avance de `studsPerSecond`.
+function Fx.SmokeRateFor(k, studsPerSecond)
+	if k <= Fx.SmokeStart then
+		return 0
+	end
+	local kn = (k - Fx.SmokeStart) / (1 - Fx.SmokeStart)
+	local base = Fx.SmokeRate + Fx.SmokePerStud * math.max(studsPerSecond or 0, 0)
+	return math.min(base * (Fx.SmokeFloor + (1 - Fx.SmokeFloor) * kn), Fx.SmokeRateMax)
+end
+
+local function makeEmitter(root, bone)
+	local att = Instance.new("Attachment")
+	att.Name = "F2R_TyreFx_" .. bone
+	att.Parent = root
+	return att, Fx.MakeSmokeEmitter(att)
+end
+
+-- Émission À LA MAIN (Emit), jamais par `Rate` : Roblox réduit `Rate` selon le niveau graphique du joueur
+-- (≈ Rate × niveau / 10 ; mesuré 2026-11-15 en Play Studio, qualité Automatique : une bouffée tous les 5 à
+-- 8 studs au lieu de 1,2), ce qui rendait la fumée en boules séparées. `Emit` n'est pas réduit : le budget
+-- global SmokeBudget tient le coût à la place. Les bouffées d'une image sont réparties sur le trajet du
+-- contact depuis l'image précédente (pas de paquets à haute vitesse), avec un léger décalage aléatoire de
+-- côté (SmokeJitter) qui casse l'effet « chapelet de perles ».
+local smokeRng = Random.new()
+local smokeTokens, smokeClock = Fx.SmokeBudget, os.clock()
+
+local function emitSmoke(ws, p, rate, dt)
+	local now = os.clock()
+	smokeTokens = math.min(Fx.SmokeBudget * 0.25, smokeTokens + (now - smokeClock) * Fx.SmokeBudget)
+	smokeClock = now
+	ws.smokeAcc = (ws.smokeAcc or 0) + rate * math.max(dt, 0)
+	local n = math.min(math.floor(ws.smokeAcc), Fx.SmokePerFrameMax, math.floor(smokeTokens))
+	ws.smokeAcc -= math.floor(ws.smokeAcc)
+	local from = ws.smokeLast
+	if not from or (p - from).Magnitude > Fx.SegMax * 2 then
+		from = p
+	end
+	local j = Fx.SmokeJitter
+	for i = 1, n do
+		local q = from:Lerp(p, i / n) + Vector3.new(smokeRng:NextNumber(-j, j), 0, smokeRng:NextNumber(-j, j))
+		ws.att.WorldCFrame = CFrame.new(q)
+		ws.emitter:Emit(1)
+	end
+	smokeTokens -= math.max(n, 0)
+	ws.att.WorldCFrame = CFrame.new(p)
+	ws.smokeLast = p
+end
+-- banc d'essai (scripts du projet) : même chemin d'émission que le jeu ; ws = { att = Attachment, emitter = … }
+Fx.EmitSmoke = emitSmoke
 
 -- ------------------------------------------------------------------ par véhicule
 local rayParams = RaycastParams.new()
@@ -435,15 +502,17 @@ function Fx.Update(r, dt, s)
 			if not ws.emitter then
 				ws.att, ws.emitter = makeEmitter(root, bone)
 			end
-			ws.att.WorldCFrame = CFrame.new(hit.Position + hit.Normal * 0.3)
 			local color = soft and surfaceColor(hit.Material) or smokeColor
 			if ws.color ~= color then
 				ws.color = color
 				ws.emitter.Color = ColorSequence.new(color)
 			end
-			ws.emitter.Rate = Fx.SmokeRate * (k - Fx.SmokeStart) / (1 - Fx.SmokeStart)
+			-- vitesse du point de contact sur le sol (studs/s) : le débit suit la distance parcourue
+			local vContact = root:GetVelocityAtPosition(hit.Position)
+			local vGround = vContact - hit.Normal * vContact:Dot(hit.Normal)
+			emitSmoke(ws, hit.Position + hit.Normal * 0.3, Fx.SmokeRateFor(k, vGround.Magnitude), dt)
 		elseif ws.emitter then
-			ws.emitter.Rate = 0
+			ws.smokeLast, ws.smokeAcc = nil, 0
 		end
 		-- trace
 		if hit then
@@ -495,9 +564,7 @@ function Fx.Stop(r)
 		return
 	end
 	for _, ws in pairs(st.wheels) do
-		if ws.emitter then
-			ws.emitter.Rate = 0
-		end
+		ws.smokeLast, ws.smokeAcc = nil, 0
 		ws.last, ws.seg, ws.alpha = nil, nil, 0
 	end
 end

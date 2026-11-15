@@ -334,11 +334,16 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 - **Traces de pneus, fumée et burn façon GTA** (`VehicleTyreFx`, chaque client ; `VehicleDynamics`) : par roue,
   trace noire au sol + fumée légère **ensemble**, dès que la roue glisse dans son propre repère au-delà du pic
   d'adhérence : patinage ou roue bloquée (burn, départ, frein à main) marquent seuls ; une glisse **de côté** ne marque
-  que si la **voiture dérive** (angle entre le cap et la trajectoire de l'**essieu arrière** ≥ `DriftStart` 12°, plein à
-  22° ; pas au centre de gravité, où la géométrie seule donne 5 à 14° à pleine butée) — braquer à fond dans un virage
+  que si la **voiture dérive** (angle entre le cap et la trajectoire de l'**essieu arrière** ≥ `DriftStart` 14°, plein à
+  24° ; pas au centre de gravité, où la géométrie seule donne 5 à 14° à pleine butée) — braquer à fond dans un virage
   tenu ne laisse rien (correctif du 2026-11-15 : avant, les roues avant qui ripent en sous-virage marquaient). Trace =
   **ruban continu** par roue (Beams couchés qui se rejoignent point pour point, opacité lissée, fondu d'entrée et de
-  sortie, segments alignés fusionnés), discrète (opacité 0,42 au plus) ; rien sur l'eau ; sols meubles : poussière et trace de la couleur du sol. **Burn** : W + S à l'arrêt, les
+  sortie, segments alignés fusionnés), discrète (opacité 0,42 au plus) ; fumée = **nappe continue et légère** comme GTA
+  (correctif du 2026-11-15 : elle sortait en boules séparées) — bouffées émises **à la main (`Emit`) à la distance
+  parcourue** par le contact (≈ 0,75 par stud, plancher 55 % dès que la fumée part), réparties sur le trajet de
+  l'image et décalées au hasard de ±0,45 stud ; **jamais par `ParticleEmitter.Rate`**, que Roblox réduit selon le niveau
+  graphique du joueur (mesuré : une bouffée tous les 5 à 8 studs au lieu de 1,2) ; bouffées larges dès la naissance,
+  chacune transparente (pic 0,72) ; budget `SmokeBudget` 260 bouffées/s par client ; rien sur l'eau ; sols meubles : poussière et trace de la couleur du sol. **Burn** : W + S à l'arrêt, les
   roues motrices patinent sur place (régime tenu sous le rupteur, tache noire qui fonce) ; avec A / D, **donut** autour
   de l'avant ; relâcher S lance la voiture. Couleur de fumée : attribut `TyreSmokeColor`. Seuils posés à l'œil contre
   des vidéos GTA, non mesurés dans FiveM ; pas encore de pneu qui éclate après un long burn ni de crissement.
