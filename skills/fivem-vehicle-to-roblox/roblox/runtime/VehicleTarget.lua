@@ -13,7 +13,10 @@
 	Référence FiveM (ox_target, client/defaults.lua, consulté le 2026-11-15) : touche de ciblage `LMENU` (Alt
 	gauche) maintenue, sélection au clic gauche ; une portière est ciblée quand le point visé est à moins de
 	0,5 m de l'os `door_*` (ou 0,72 m de l'os `seat_*` du même côté), capot et coffre par un décalage ; distance
-	d'interaction 2 m ; rien quand le véhicule est verrouillé ou quand on est à bord. Ici on vise les pièces
+	d'interaction 2 m ; rien quand le véhicule est verrouillé ou quand on est à bord. Écart voulu (demande de
+	l'utilisateur, 2026-11-15) : ASSIS dans un véhicule, Alt + clic marche aussi, sur ce véhicule seulement, sans
+	limite de portée et même verrouillé ; en vue intérieure, VehicleCamera fige la vue pendant le maintien
+	(`Target.IsActive()`) pour que le curseur puisse viser. Ici on vise les pièces
 	visuelles de la portière elle-même (dossiers `Visual/<os>` de la charnière et de ses os enfants : vitre,
 	poignée, clignotant…) — plus précis que la distance à l'os, et identique pour le capot et le coffre.
 
@@ -157,21 +160,26 @@ local function seatedIn()
 	return nil
 end
 
+-- Assis dans un véhicule (demande de l'utilisateur, 2026-11-15) : on vise SES portières, son capot et son coffre,
+-- sans limite de portée (le capot et le coffre sont à plus de 2,5 m du siège) et sans viser les autres
+-- véhicules. ox_target ne cible rien à bord ; ici, comme les menus du jeu, l'occupant garde la main sur son
+-- véhicule (le serveur l'accepte : action `Door`, occupant du véhicule).
 local function pick()
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local cam = workspace.CurrentCamera
-	if not root or not cam or seatedIn() then
+	if not root or not cam then
 		return nil
 	end
+	local inside = seatedIn()
 	local mouse = UserInputService:GetMouseLocation()
 	local ray = cam:ViewportPointToRay(mouse.X, mouse.Y)
 	local best, bestT = nil, math.huge
-	for _, model in ipairs(CollectionService:GetTagged(TAG)) do
+	for _, model in ipairs(inside and { inside } or CollectionService:GetTagged(TAG)) do
 		local pp = model.PrimaryPart
 		local cfg = pp and configOf(model)
-		if cfg and (pp.Position - root.Position).Magnitude <= SCAN_METERS * (cfg.StudsPerMeter or 3.571) then
-			local reach = reachStuds(cfg)
+		if cfg and (inside or (pp.Position - root.Position).Magnitude <= SCAN_METERS * (cfg.StudsPerMeter or 3.571)) then
+			local reach = inside and math.huge or reachStuds(cfg)
 			for _, entry in ipairs(hingeParts(model)) do
 				local part = entry[1]
 				if part.Parent then
@@ -179,7 +187,7 @@ local function pick()
 					if t and t < bestT then
 						local hit = ray.Origin + ray.Direction * t
 						if (hit - root.Position).Magnitude <= reach then
-							best, bestT = { model = model, bone = entry[2] }, t
+							best, bestT = { model = model, bone = entry[2], inside = inside == model }, t
 						end
 					end
 				end
@@ -187,6 +195,11 @@ local function pick()
 		end
 	end
 	return best
+end
+
+-- verrou : il empêche d'ouvrir de l'extérieur, pas de l'intérieur (même règle que le serveur)
+local function lockedFor(target)
+	return target.model:GetAttribute("Locked") == true and not target.inside
 end
 
 -- ------------------------------------------------------------------ étiquette au curseur
@@ -242,7 +255,7 @@ local function refreshChip()
 	end
 	local model, bone = current.model, current.bone
 	objectLabel.Text = DOOR_LABELS[bone] or bone
-	if model:GetAttribute("Locked") == true then
+	if lockedFor(current) then
 		actionLabel.Text = "Verrouillé"
 		actionLabel.TextColor3 = Color3.fromRGB(235, 120, 110)
 	else
@@ -263,7 +276,7 @@ local function onClick(_, state)
 	if not (holding and current) then
 		return Enum.ContextActionResult.Pass
 	end
-	if current.model:GetAttribute("Locked") ~= true then
+	if not lockedFor(current) then
 		remote:FireServer(current.model, "Door", current.bone)
 	end
 	return Enum.ContextActionResult.Sink -- le clic ne part pas vers un outil tenu

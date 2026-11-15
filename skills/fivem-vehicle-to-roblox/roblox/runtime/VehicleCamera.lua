@@ -31,6 +31,19 @@ local Workspace = game:GetService("Workspace")
 
 local Pose = require(script.Parent:WaitForChild("VehiclePose"))
 
+-- VehicleTarget (facultatif) : vrai pendant qu'on maintient Alt pour viser une pièce du véhicule
+local targetModule = false
+local function targeting()
+	if targetModule == false then
+		local m = script.Parent:FindFirstChild("VehicleTarget")
+		local ok, mod = pcall(function()
+			return m and require(m)
+		end)
+		targetModule = (ok and type(mod) == "table" and mod.IsActive) and mod or nil
+	end
+	return targetModule ~= nil and targetModule.IsActive() == true
+end
+
 local Camera = {}
 Camera.Tag = "FiveMVehicle"
 Camera.YawMax = 110 -- degrés de part et d'autre de l'avant
@@ -286,11 +299,15 @@ function Camera.Start()
 		end
 
 		cam.CameraType = Enum.CameraType.Scriptable
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-		UserInputService.MouseIconEnabled = false
+		-- Alt maintenu (VehicleTarget : viser une portière, le capot, le coffre) : vue figée, curseur libre
+		local aiming = targeting()
+		if not aiming then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			UserInputService.MouseIconEnabled = false
+		end
 		-- souris (sensibilité de la caméra de Roblox : 0,002π / 0,0015π rad par pixel × réglage du joueur)
 		local sens = UserSettings():GetService("UserGameSettings").MouseSensitivity
-		local d = UserInputService:GetMouseDelta()
+		local d = aiming and Vector2.zero or UserInputService:GetMouseDelta()
 		if d.Magnitude > 0 then
 			look(-d.X * 0.002 * math.pi * sens, -d.Y * 0.0015 * math.pi * sens)
 		end
