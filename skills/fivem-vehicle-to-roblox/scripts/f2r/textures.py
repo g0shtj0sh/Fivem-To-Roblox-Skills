@@ -15,6 +15,8 @@ from .util import Report
 # Plafond de Roblox mesuré le 2026-11-15 (GLB importé) : 2048 gardé tel quel (rendu net en qualité 21),
 # 4096 réduit à 2048. Coût mémoire : une 2048 = 4 x une 1024 ; seules les sources > 1024 en profitent.
 MAX_SIZE = 2048
+# Écart type RVB (0..1) sous lequel une texture est un aplat sans détail.
+FLAT_STD = 0.02
 
 # --- Brillance GTA -> rugosité / métal Roblox (2026-11-15) ---------------------------------
 # Carte « spec » GTA V (SpecSampler) : R = intensité spéculaire, G = brillance (exposant),
@@ -138,6 +140,8 @@ class TextureStore:
         self.max_size = max_size
         self.cache: dict[tuple[str, str], Path | None] = {}
         self.avg: dict[str, list[float]] = {}
+        # texture uniforme (aucun détail : écart type RVB < FLAT_STD), ex. vehicle_generic_smallspecmap
+        self.flat: dict[str, bool] = {}
         self.missing: set[str] = set()
         # retouches par texture (rebadge) : nom -> fonction(image, role) -> image, sur la taille d'origine
         self.edits: dict = {}
@@ -171,6 +175,7 @@ class TextureStore:
         if edit is not None:
             img = edit(img, role)
         self.avg.setdefault(name.lower(), average_color(img))
+        self.flat.setdefault(name.lower(), float(np.asarray(img.convert("RGB"), np.float32).std()) / 255.0 < FLAT_STD)
         img = resize_for_roblox(img, self.max_size)
         img = to_normal_png(img) if role == "normal" else to_color_png(img)
         dst = self.out_dir / f"{name.lower()}{'_n' if role == 'normal' else ''}.png"
@@ -209,6 +214,15 @@ class TextureStore:
         Image.fromarray(out, "RGB").save(dst, optimize=True)
         self.cache[key] = dst
         return dst
+
+    def is_flat(self, name: str | None) -> bool:
+        """True si la texture est uniforme (un aplat) : sur une pièce peinte elle n'apporte rien de plus que la
+        couleur, et la garder poserait une SurfaceAppearance qui empêche les finitions de la custom."""
+        if not name:
+            return False
+        if name.lower() not in self.flat:
+            self.get(name)
+        return self.flat.get(name.lower(), False)
 
     def average(self, name: str | None) -> list[float] | None:
         if not name:

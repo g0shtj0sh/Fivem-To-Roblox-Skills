@@ -26,7 +26,30 @@ def test_every_paint_has_label_and_group():
     assert gta_colors.group(15) == "Utility" and gta_colors.group(21) == "Worn"
 
 
+def test_flat_diffuse_keeps_paint_without_texture():
+    """Une diffuse uniforme (vehicle_generic_smallspecmap) ne doit pas donner de SurfaceAppearance à la carrosserie."""
+    import tempfile
+
+    import numpy as np
+    from PIL import Image
+
+    from f2r.textures import TextureStore
+    from f2r.util import Report
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        Image.new("RGB", (4, 4), (255, 255, 255)).save(tmp / "vehicle_generic_smallspecmap.png")
+        grad = np.tile(np.linspace(0, 255, 64, dtype=np.uint8), (64, 1))
+        Image.fromarray(np.stack([grad] * 3, -1), "RGB").save(tmp / "decal.png")
+        store = TextureStore({"vehicle_generic_smallspecmap": tmp / "vehicle_generic_smallspecmap.png",
+                              "decal": tmp / "decal.png"}, tmp / "out", Report())
+        assert store.is_flat("vehicle_generic_smallspecmap")
+        assert not store.is_flat("decal")
+        assert not store.is_flat(None) and not store.is_flat("absente")
+
+
 if __name__ == "__main__":
     test_runtime_module_is_generated()
     test_every_paint_has_label_and_group()
+    test_flat_diffuse_keeps_paint_without_texture()
     print("ok")

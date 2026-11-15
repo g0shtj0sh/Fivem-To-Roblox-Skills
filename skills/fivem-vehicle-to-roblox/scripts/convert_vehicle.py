@@ -529,7 +529,9 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
         if p.livery and livery_names:
             color_png = store.get(livery_names[0])
             alpha = "BLEND"
-        elif p.tex_diffuse:
+        elif p.tex_diffuse and not store.is_flat(p.tex_diffuse):
+            # une diffuse uniforme (ex. vehicle_generic_smallspecmap, blanche 4 x 4) n'apporte rien à la peinture :
+            # sans texture, la pièce reste sans SurfaceAppearance et la custom peut changer sa finition (SetFinish)
             color_png = store.get(p.tex_diffuse)
             has_tex = color_png is not None
     elif p.kind in ("glass", "light", "siren"):
