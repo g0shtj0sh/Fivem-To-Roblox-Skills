@@ -187,4 +187,36 @@ function Collision.CarveWheelWells(model)
 	return { carved = #carved, parts = carved, failed = failed }
 end
 
+-- ------------------------------------------------------------------ matériau de choc
+-- POURQUOI (m422, 2026-11-15, mesuré en Play Studio) : la coque de collision était en Plastic par défaut,
+-- élasticité 0,5. Contre un mur de béton (0,2) Roblox combine (e1·w1 + e2·w2) / (w1 + w2) ≈ 0,35 : à 106 km/h
+-- la voiture repartait en arrière à 36 km/h en une image, « comme une balle ». Une voiture absorbe le choc
+-- (déformation) : on met l'élasticité de toute la coque à 0 avec un poids qui l'emporte sur celui de l'obstacle.
+-- Densité et frottement gardés (la masse vient du lest ; le frottement règle la glisse le long d'un mur).
+Collision.CrashElasticity = 0
+Collision.CrashElasticityWeight = 100
+
+function Collision.ApplyCrashMaterial(model)
+	local n = 0
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			local kind = p:GetAttribute("Kind")
+			if kind == "collision" or kind == "collision_wheel" or p.Name == "Hitbox" then
+				local cur = p.CurrentPhysicalProperties
+				if cur.Elasticity ~= Collision.CrashElasticity or cur.ElasticityWeight ~= Collision.CrashElasticityWeight then
+					p.CustomPhysicalProperties = PhysicalProperties.new(
+						cur.Density,
+						cur.Friction,
+						Collision.CrashElasticity,
+						cur.FrictionWeight,
+						Collision.CrashElasticityWeight
+					)
+				end
+				n += 1
+			end
+		end
+	end
+	return n
+end
+
 return Collision
