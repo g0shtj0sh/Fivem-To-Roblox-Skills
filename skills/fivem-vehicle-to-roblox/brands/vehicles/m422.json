@@ -1,5 +1,5 @@
 {
- "about": "m422 (2022 M4 Competition) -> Bavren N4 Competition. Logos peints dans les textures, relevés sur les textures d'origine (pixels, haut-gauche) le 2026-10-28. Badges 3D : traités automatiquement par le convertisseur.",
+ "about": "m422 (2022 M4 Competition) -> Bavren N4 Competition. Logos peints dans les textures, relevés sur les textures d'origine (pixels, haut-gauche) le 2026-10-28. Badges 3D : traités automatiquement par le convertisseur. Lettrages modélisés (clé geometry) : relevés sur la planche _rebadge/lettrages_modelises.png le 2026-11-15 (repère du véhicule au repos, mètres).",
  "textures": {
   "Wheel2B_diff": {"size": [512, 512], "ops": [
    {"op": "fill_rect", "rect": [5, 28, 148, 86], "why": "tuile « M »"},
@@ -26,5 +26,11 @@
    {"op": "fill_rect", "rect": [355, 465, 640, 615], "why": "photo de la vraie voiture"}]},
   "lightmodules": {"size": [512, 512], "ops": [
    {"op": "fill_rect", "rect": [270, 186, 480, 216], "why": "plaque « BMW Laser » des phares"}]}
- }
+ },
+ "geometry": [
+  {"op": "remove_islands", "part": "chassis__mesh_13", "box": [[-0.049, 0.21, -0.165], [-0.016, 0.22, -0.151]], "why": "///M du pommeau de vitesse"},
+  {"op": "remove_islands", "part": "chassis__mesh__1_3", "box": [[-0.606, -0.22, -0.69], [-0.569, -0.208, -0.676]], "why": "///M côté conducteur, bas"},
+  {"op": "remove_islands", "part": "chassis__mesh__2_2", "box": [[-0.393, 0.463, 0.51], [-0.336, 0.477, 0.517]], "why": "M4 appuie-tête gauche"},
+  {"op": "remove_islands", "part": "chassis__mesh__2_2", "box": [[0.339, 0.475, 0.471], [0.397, 0.49, 0.475]], "why": "M4 appuie-tête droit"}
+ ]
 }

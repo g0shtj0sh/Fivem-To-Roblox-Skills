@@ -271,17 +271,35 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
         return load_image(path, report) if path else None
 
     summary = rebadge.rebadge_parts(vb.parts, original, b.logo if b else None, out / "_rebadge", report)
+    # logos peints (textures) et lettrages modélisés (géométrie) : spec explicite, sinon brands/vehicles/<nom>.json
+    spec_path = getattr(args, "rebadge_spec", None)
+    if not spec_path:
+        cand = brands.DEFAULT_TABLE.parent / "vehicles" / f"{name}.json"
+        spec_path = cand if cand.exists() else None
+    geometry_ops = rebadge.load_geometry_spec(Path(spec_path)) if spec_path else []
+    if geometry_ops:
+        summary["geometry_removed_tris"] = rebadge.remove_geometry(vb.parts, geometry_ops, report)
+    letters = rebadge.lettering_candidates(vb.parts)
+    sheet = out / "_rebadge" / "lettrages_modelises.png"
+    rebadge.lettering_sheet(letters, sheet)
+    (out / "_rebadge" / "lettrages_modelises.json").write_text(json.dumps(
+        [{"n": k, "part": c["part"], "bone": c["bone"], "islands": len(c["islands"]), "box": c["box"]}
+         for k, c in enumerate(letters)], indent=1), encoding="utf-8")
+    msg = (f"Lettrages modélisés : {len(letters)} grappe(s) de petits îlots dessinée(s) dans "
+           f"`_rebadge/{sheet.name}` (boîtes dans `lettrages_modelises.json`).")
+    if geometry_ops:
+        report.info(msg + f" {len(geometry_ops)} lettrage(s) déjà supprimé(s) d'après la spec du véhicule.")
+    else:
+        report.manual(msg + " Regarder la planche : une lettre ou un logo lisible (///M, M4, AMG, RS…) est une "
+                      "vraie marque modélisée -> copier sa boîte en opération `remove_islands` de "
+                      f"`brands/vehicles/{name}.json` (clé `geometry`, SKILL.md § 1b) et reconvertir.")
     for p in vb.parts:
         if p.tex_diffuse and p.tex_diffuse.startswith("f2r_"):
             store.sources[p.tex_diffuse.lower()] = out / "_rebadge" / f"{p.tex_diffuse}.png"
             spec = p.shader.textures.get("SpecSampler") if p.shader is not None else None
             if spec and spec.startswith("f2r_"):  # brillance unie de l'emblème (rebadge.emblem_spec)
                 store.sources[spec.lower()] = out / "_rebadge" / f"{spec}.png"
-    # logos peints dans les textures : spec explicite, sinon brands/vehicles/<nom>.json du skill
-    spec_path = getattr(args, "rebadge_spec", None)
-    if not spec_path:
-        cand = brands.DEFAULT_TABLE.parent / "vehicles" / f"{name}.json"
-        spec_path = cand if cand.exists() else None
+    # logos peints dans les textures (même fichier de spec)
     if spec_path:
         spec = rebadge.load_spec(Path(spec_path))
         for tex, entry in spec.items():

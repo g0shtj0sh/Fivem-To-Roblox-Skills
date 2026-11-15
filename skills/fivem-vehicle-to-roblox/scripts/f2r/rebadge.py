@@ -15,6 +15,9 @@ Ce que fait ``rebadge_parts`` sur les pièces construites (avant l'écriture du 
 3. Les logos *peints* dans d'autres textures (cache-moyeu, flanc de pneu, écran) ne sont pas détectables
    automatiquement : ``--rebadge-spec`` (JSON d'opérations par texture, voir ``apply_texture_spec``) ou
    ``--texture-overrides``.
+4. Les lettrages *modélisés* (lettres en relief dans la géométrie d'une pièce ordinaire : pommeau, appuie-tête,
+   seuil) non plus : planche ``lettering_sheet`` à regarder, boîtes ``remove_islands`` dans le même JSON
+   (clé ``geometry``, voir ``remove_geometry``).
 """
 from __future__ import annotations
 
@@ -289,3 +292,131 @@ def load_spec(path: Path) -> dict:
     """{"textures": {"<nom de texture>": {"size": [w, h], "ops": [...]}, ...}}"""
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     return {k.lower(): v for k, v in doc.get("textures", {}).items()}
+
+
+def load_geometry_spec(path: Path) -> list[dict]:
+    """{"geometry": [{"op": "remove_islands", "box": [[x0,y0,z0],[x1,y1,z1]], "part"?: "...", "why": "..."}]}"""
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    return list(doc.get("geometry", []))
+
+
+# ------------------------------------------------------------------ lettrages modélisés (géométrie)
+#
+# Constat (m422, 2026-11-15, capture de l'utilisateur) : le « ///M » du pommeau de vitesse, le « ///M » du
+# repose-pied et les « M4 » des appuie-tête ne sont dans AUCUNE texture : ce sont des lettres modélisées,
+# petits îlots de triangles posés en relief sur la pièce, avec le matériau de la pièce (cuir noir, plastique).
+# Le rebadge par texture (îlots des pièces *badge*) ne les voit pas. Un détecteur purement géométrique ne sait
+# pas les distinguer des vis, grilles et boutons (131 grappes sur la m422, presque toutes des vis du moteur) :
+# on ne supprime donc rien d'office. La conversion dessine une planche des grappes de petits îlots
+# (``lettering_sheet``) ; l'agent la regarde, et les lettrages qu'il y lit sont supprimés par des boîtes
+# ``remove_islands`` dans ``brands/vehicles/<nom>.json`` (clé ``geometry``), relues à chaque conversion.
+
+LETTER_ISLAND_MAX_M = 0.02   # un îlot de lettre : 2 cm au plus dans sa plus grande dimension
+LETTER_GAP_M = 0.004         # deux îlots à moins de 4 mm l'un de l'autre font partie du même mot
+LETTER_MIN_ISLANDS = 5       # en dessous : bouton, vis isolée
+BOX_TOLERANCE_M = 0.001
+
+
+def lettering_candidates(parts: list) -> list[dict]:
+    """Grappes de petits îlots proches dans une même pièce (lettres modélisées possibles), les plus fournies
+    d'abord. Chaque grappe : part, bone, islands (indices de triangles), box [[min],[max]] en mètres."""
+    out = []
+    for p in parts:
+        if p.tri_count == 0:
+            continue
+        tris = p.idx.reshape(-1, 3)
+        small = []
+        for isl in _islands(p.idx, len(p.pos)):
+            pts = p.pos[np.unique(tris[isl])]
+            lo, hi = pts.min(axis=0), pts.max(axis=0)
+            if float((hi - lo).max()) <= LETTER_ISLAND_MAX_M:
+                small.append((isl, lo, hi))
+        n = len(small)
+        if n < LETTER_MIN_ISLANDS:
+            continue
+        par = list(range(n))
+
+        def find(a: int) -> int:
+            while par[a] != a:
+                par[a] = par[par[a]]
+                a = par[a]
+            return a
+        los = np.array([s[1] for s in small])
+        his = np.array([s[2] for s in small])
+        for a in range(n):
+            gap = np.maximum(0, np.maximum(los[a] - his, los - his[a])).max(axis=1)
+            for b in np.nonzero(gap <= LETTER_GAP_M)[0]:
+                if b > a:
+                    par[find(a)] = find(int(b))
+        groups: dict[int, list[int]] = {}
+        for a in range(n):
+            groups.setdefault(find(a), []).append(a)
+        for g in groups.values():
+            if len(g) < LETTER_MIN_ISLANDS:
+                continue
+            out.append({"part": p.name, "bone": p.bone, "islands": [small[a][0] for a in g],
+                        "box": [np.round(los[g].min(axis=0).astype(float), 4).tolist(),
+                                np.round(his[g].max(axis=0).astype(float), 4).tolist()],
+                        "_part": p})
+    out.sort(key=lambda c: -len(c["islands"]))
+    return out
+
+
+def lettering_sheet(cands: list[dict], png: Path, cols: int = 10, tile: int = 128) -> None:
+    """Planche contact : chaque grappe vue de face (plan principal de ses sommets), numérotée."""
+    rows = max(1, (len(cands) + cols - 1) // cols)
+    sheet = Image.new("RGB", (cols * tile, rows * (tile + 14)), "white")
+    dr = ImageDraw.Draw(sheet)
+    for k, c in enumerate(cands):
+        p = c["_part"]
+        tris = p.idx.reshape(-1, 3)
+        tri_pts = np.concatenate([p.pos[tris[isl]] for isl in c["islands"]])  # (m, 3, 3)
+        pts = tri_pts.reshape(-1, 3)
+        ctr = pts.mean(axis=0)
+        _, _, vt = np.linalg.svd(pts - ctr, full_matrices=False)
+        uv = (pts - ctr) @ vt[:2].T
+        lo, hi = uv.min(axis=0), uv.max(axis=0)
+        s = (tile - 10) / max(float((hi - lo).max()), 1e-6)
+        img = Image.new("RGB", (tile, tile), (235, 235, 235))
+        di = ImageDraw.Draw(img)
+        for t in ((uv - lo) * s + 5).reshape(-1, 3, 2):
+            di.polygon([tuple(map(float, xy)) for xy in t], fill=(30, 30, 30))
+        x, y = (k % cols) * tile, (k // cols) * (tile + 14)
+        sheet.paste(img, (x, y))
+        dr.text((x + 2, y + tile), f"{k} {p.name[:15]}", fill=(0, 0, 0))
+    png.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(png)
+
+
+def remove_geometry(parts: list, ops: list[dict], report: Report) -> int:
+    """Applique les opérations ``geometry`` d'un ``brands/vehicles/<nom>.json`` : ``remove_islands`` supprime
+    tout îlot dont TOUS les sommets sont dans ``box`` (mètres, repère du véhicule au repos, tolérance 1 mm),
+    limité aux pièces dont le nom commence par ``part`` si donné. Renvoie le nombre de triangles retirés."""
+    total = 0
+    for op in ops:
+        if op.get("op") != "remove_islands":
+            raise ValueError(f"rebadge-spec geometry : opération inconnue « {op.get('op')} »")
+        lo = np.array(op["box"][0], np.float32) - BOX_TOLERANCE_M
+        hi = np.array(op["box"][1], np.float32) + BOX_TOLERANCE_M
+        removed = 0
+        for p in parts:
+            if p.tri_count == 0 or (op.get("part") and not p.name.startswith(op["part"])):
+                continue
+            tris = p.idx.reshape(-1, 3)
+            keep = np.ones(len(tris), bool)
+            for isl in _islands(p.idx, len(p.pos)):
+                pts = p.pos[np.unique(tris[isl])]
+                if (pts >= lo).all() and (pts <= hi).all():
+                    keep[isl] = False
+            if not keep.all():
+                removed += int((~keep).sum())
+                p.idx = tris[keep].reshape(-1).astype(np.uint32)
+        why = op.get("why", "")
+        if removed:
+            report.info(f"Lettrage modélisé supprimé ({why}) : {removed} triangle(s).")
+        else:
+            report.warn(f"Lettrage modélisé « {why} » : aucun îlot dans la boîte {op['box']} "
+                        f"(géométrie du mod changée ? relever la boîte sur la planche lettrages_modelises).")
+        total += removed
+    parts[:] = [p for p in parts if p.tri_count > 0]
+    return total

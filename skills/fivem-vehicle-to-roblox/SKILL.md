@@ -86,7 +86,18 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
   zones en pixels de la texture d'origine, écrire `brands/vehicles/<nom>.json` (exemple : `m422.json` ;
   opérations `fill_rect`, `fill_disc`, `fill_ring`, `fill_all`, `logo`), reconvertir : le fichier est lu
   automatiquement et la conversion suivante le refait seule. Pousser ce fichier avec le skill.
-- **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran) avant de rendre la main.
+- **Lettrages modélisés** (lettres en relief dans la géométrie d'une pièce ordinaire, sans texture de badge :
+  « ///M » du pommeau de vitesse et du repose-pied, « M4 » des appuie-tête de la m422) : ni le rebadge des
+  badges ni les retouches de textures ne les voient, et un tri automatique ne les sépare pas des vis et des
+  grilles (93 grappes sur la m422). Chaque conversion dessine donc `_rebadge/lettrages_modelises.png` (grappes
+  de ≥ 5 îlots de 2 cm au plus, à 4 mm les uns des autres, numérotées) et `lettrages_modelises.json` (pièce,
+  boîte en mètres). **Toujours regarder la planche** : chaque lettre ou logo lisible → copier sa boîte dans
+  `brands/vehicles/<nom>.json`, clé `geometry` :
+  `{"op": "remove_islands", "part": "<pièce>", "box": [[x0,y0,z0],[x1,y1,z1]], "why": "///M du pommeau"}`
+  (marge de 2 mm ; un îlot n'est retiré que s'il est entièrement dans la boîte). Reconvertir : le rapport dit
+  « Lettrage modélisé supprimé (…) : N triangle(s) », ou avertit si une boîte ne trouve plus rien.
+- **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran, **pommeau, appuie-tête,
+  seuils**) avant de rendre la main.
 
 ## 1c. Classe du véhicule : vérifiée sur internet (obligatoire)
 
