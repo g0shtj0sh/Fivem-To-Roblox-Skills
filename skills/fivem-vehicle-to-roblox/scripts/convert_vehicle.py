@@ -33,7 +33,7 @@ from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
 from f2r import collision as collision_mod  # noqa: E402
 from f2r import sound_pack  # noqa: E402
-from f2r import brands, cabin, cwxml, gamelib, inventory, meta, rebadge  # noqa: E402
+from f2r import brands, cabin, cwxml, gamelib, icon_atlas, inventory, meta, rebadge  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
@@ -467,6 +467,17 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     for p in vb.parts:
         if p.kind == "emissive" and store.is_icon_atlas(p.tex_diffuse):
             p.kind = "decal"
+    _alpha_cache: dict = {}
+
+    def _atlas_alpha(name):
+        if not store.is_icon_atlas(name):
+            return None
+        if name.lower() not in _alpha_cache:
+            src = store.find(name)
+            img = load_image(src, report) if src is not None else None
+            _alpha_cache[name.lower()] = np.asarray(img.convert("RGBA"))[..., 3] if img is not None else None
+        return _alpha_cache[name.lower()]
+    icon_atlas.split_icon_overlays(vb.parts, _atlas_alpha, report)
     for p in vb.parts:
         flip_if_inverted(p)
         mat, has_tex = make_material(p, store, paint_default, livery_names)

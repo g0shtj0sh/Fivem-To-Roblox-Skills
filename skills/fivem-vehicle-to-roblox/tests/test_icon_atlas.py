@@ -45,6 +45,38 @@ def test_icon_atlas():
     assert np.asarray(opaque)[..., 3].min() == 255
 
 
+def test_split_icon_overlays():
+    from dataclasses import dataclass
+
+    import numpy as np  # noqa: F811
+    from f2r.icon_atlas import split_icon_overlays
+
+    @dataclass
+    class P:
+        name: str
+        kind: str
+        tex_diffuse: str
+        pos: np.ndarray
+        nrm: np.ndarray
+        uv: np.ndarray
+        idx: np.ndarray
+        paint: object = None
+        custom_color: object = None
+
+    A = np.full((64, 64), 255, np.uint8)
+    A[:32, :32] = 0  # coin transparent (zone d'icônes)
+    pos = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [2, 0, 0], [3, 0, 0], [2, 1, 0]], np.float32)
+    nrm = np.tile(np.array([0, 0, 1], np.float32), (6, 1))
+    uv = np.array([[0.1, 0.1], [0.2, 0.1], [0.1, 0.2], [0.7, 0.7], [0.9, 0.7], [0.7, 0.9]], np.float32)
+    parts = [P("knob", "mesh", "atlas", pos, nrm, uv, np.array([0, 1, 2, 3, 4, 5], np.uint32))]
+    made = split_icon_overlays(parts, lambda n: A, type("R", (), {"info": lambda self, m: None})())
+    assert made == ["knob__icons"]
+    base, ic = parts
+    assert len(base.idx) == 3 and len(ic.idx) == 3 and ic.kind == "decal"
+    assert abs(float(ic.pos[:, 2].max()) - 0.0004) < 1e-6  # décollée le long de la normale
+
+
 if __name__ == "__main__":
     test_icon_atlas()
+    test_split_icon_overlays()
     print("ok")

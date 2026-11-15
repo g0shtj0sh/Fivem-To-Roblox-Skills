@@ -131,7 +131,7 @@ Les symboles des boutons (volant, portes, console, clim) sont dans la planche du
 traitement, Roblox montre des rectangles blancs et des symboles flous (m422, 2026-11-15). La conversion
 (`f2r/icon_atlas.py`) : fond -> plastique sombre de la planche, corps clair des symboles neutres -> gris clair
 (couleurs gardées), aplats blancs pleins au contact des icônes (fonds de rétroéclairage) -> plastique sombre, agrandie ×4 (plafond 2048) avec des bords nets ; les pièces `dash_emissive` deviennent des
-`decal` (transparentes) ; les pièces opaques qui échantillonnent la planche reçoivent `<nom>_opaque.png` (sans
+`decal` (transparentes) ; les triangles des pièces opaques qui lisent une zone transparente (autocollants : « VOL » sur la molette, symboles des boutons de porte, que GTA découpe par l'alpha) partent dans une pièce `<pièce>__icons` transparente décollée de 0,4 mm ; le reste de ces pièces reçoit `<nom>_opaque.png` (sans
 trou, sinon `Part.Color` ou du blanc apparaît en mode Overlay). Rapport : « Planche d'icônes … agrandie à N px ».
 Un véhicule déjà installé et retouché : ne pas le réinstaller, remplacer la ColorMap/TextureID de l'ancienne
 planche par les deux nouvelles (decal : `AlphaMode.Transparency`), puis `sync_catalog`. Contrôle : gros plans

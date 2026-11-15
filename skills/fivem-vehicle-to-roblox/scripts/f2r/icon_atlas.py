@@ -132,3 +132,53 @@ def refine_icon_atlas(img: Image.Image, max_size: int) -> Image.Image:
     out[..., :3] = np.where(zone_hi[..., None], mix, base_hi[..., :3])
     out[..., 3] = np.where(zone_hi, a_hi * 255, base_hi[..., 3])
     return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), "RGBA")
+
+
+ICON_TRI_ALPHA = 128   # un triangle qui lit un pixel plus transparent que ça est un « autocollant » d'icône
+OVERLAY_LIFT_M = 0.0004  # m : décollement de l'autocollant le long de sa normale (pas de scintillement)
+
+
+def split_icon_overlays(parts: list, alpha_of, report) -> list[str]:
+    """Pièces OPAQUES qui affichent la planche d'icônes : leurs triangles qui lisent une zone transparente sont des
+    autocollants (le « VOL » posé sur la molette, les symboles des boutons de porte de la m422) que GTA découpe par
+    l'alpha. Roblox ne découpe pas une pièce opaque (fond blanc ou rectangle sombre) : ils partent dans une pièce
+    `<pièce>__icons` de type decal (transparente), décollée de OVERLAY_LIFT_M. ``alpha_of(nom)`` -> alpha (H, W)
+    de la planche d'origine ou None."""
+    from dataclasses import replace
+
+    created = []
+    for p in list(parts):
+        if p.kind == "decal" or not p.tex_diffuse:
+            continue
+        A = alpha_of(p.tex_diffuse)
+        if A is None:
+            continue
+        h, w = A.shape
+        tris = np.asarray(p.idx).reshape(-1, 3)
+        uv = np.asarray(p.uv)[tris]  # n, 3, 2
+        pts = [uv[:, 0], uv[:, 1], uv[:, 2], (uv[:, 0] + uv[:, 1]) / 2, (uv[:, 1] + uv[:, 2]) / 2,
+               (uv[:, 0] + uv[:, 2]) / 2, uv.mean(1)]
+        lowest = np.full(len(tris), 255)
+        for q in pts:
+            x = np.clip((np.mod(q[:, 0], 1.0) * w).astype(int), 0, w - 1)
+            y = np.clip((np.mod(q[:, 1], 1.0) * h).astype(int), 0, h - 1)
+            lowest = np.minimum(lowest, A[y, x])
+        icon = lowest < ICON_TRI_ALPHA
+        if not icon.any():
+            continue
+        if icon.all():  # la pièce n'est faite que d'autocollants
+            p.kind = "decal"
+            created.append(p.name)
+            continue
+        verts = np.unique(tris[icon])
+        remap = np.full(len(p.pos), -1, np.int64)
+        remap[verts] = np.arange(len(verts))
+        nrm = np.asarray(p.nrm)[verts]
+        q = replace(p, name=f"{p.name}__icons", pos=np.asarray(p.pos)[verts] + nrm * OVERLAY_LIFT_M, nrm=nrm.copy(),
+                    uv=np.asarray(p.uv)[verts].copy(), idx=remap[tris[icon]].reshape(-1).astype(np.uint32),
+                    kind="decal", paint=None, custom_color=None)
+        p.idx = tris[~icon].reshape(-1).astype(np.uint32)
+        parts.append(q)
+        created.append(q.name)
+        report.info(f"Icônes : {int(icon.sum())} triangle(s) autocollant(s) de {p.name} -> {q.name} (transparente).")
+    return created
