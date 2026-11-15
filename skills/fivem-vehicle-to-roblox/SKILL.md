@@ -23,8 +23,8 @@ Mesures, choix et pièges : [`docs/studio-import-tests.md`](../../docs/studio-im
 - Ne publier sur Roblox que les assets **privés** du véhicule (GLB, sons) nécessaires ; rien d'autre sans accord.
 - Ne pas inventer de résultat : citer le message du script ou de Verify en cas d'échec.
 - **Aucune vraie marque dans le véhicule** (règle du jeu) : le rebadge est automatique à la conversion (§ 1b) ;
-  ne jamais le désactiver (`--no-rebadge`) sans demande explicite. Rappeler une fois de vérifier la licence du mod
-  et que les noms inventés n'existent pas déjà (registres de marques) avant de publier le jeu.
+  ne jamais le désactiver (`--no-rebadge`) sans demande explicite. Les noms inventés de `brands/brands.json` ont
+  été vérifiés dans les registres de marques ; une marque ou un modèle ajouté doit l'être aussi avant publication.
 
 ## 0. Prérequis (en parallèle, au début)
 

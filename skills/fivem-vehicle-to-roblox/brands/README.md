@@ -6,7 +6,7 @@ du jeu ci-dessous, traduit le nom du modèle, remplace les emblèmes 3D par le l
 lettrages. Ajouter une marque : une entrée dans `brands.json` + son logo PNG transparent dans `logos/`.
 Logos peints dans les textures (cache-moyeu, pneu, écran) : `vehicles/<modèle>.json` (voir SKILL.md, « Marques »).
 
-Noms non vérifiés dans les registres de marques : à contrôler avant publication du jeu.
+Noms vérifiés dans les registres de marques. Toute marque ou tout modèle ajouté doit être vérifié de la même façon avant publication.
 
 | Logo | Marque du jeu | Marque réelle | Pays | Modèles traduits |
 |---|---|---|---|---|
