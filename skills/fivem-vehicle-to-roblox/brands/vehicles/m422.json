@@ -1,0 +1,30 @@
+{
+ "about": "m422 (2022 M4 Competition) -> Bavren N4 Competition. Logos peints dans les textures, relevés sur les textures d'origine (pixels, haut-gauche) le 2026-10-28. Badges 3D : traités automatiquement par le convertisseur.",
+ "textures": {
+  "Wheel2B_diff": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [5, 28, 148, 86], "why": "tuile « M »"},
+   {"op": "fill_ring", "c": [255.5, 255.5], "r": [150, 202], "why": "lettrage du pneu (Michelin)"},
+   {"op": "fill_disc", "c": [67.5, 441.5], "r": 63, "ring": [65, 69], "why": "rond du cache-moyeu"},
+   {"op": "logo", "c": [67.5, 441.5], "size": 100, "why": "notre logo sur le cache-moyeu"}]},
+  "Wheel2A_nrml": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [5, 28, 148, 86]},
+   {"op": "fill_ring", "c": [255.5, 255.5], "r": [150, 202]},
+   {"op": "fill_disc", "c": [67.5, 441.5], "r": 63}]},
+  "Engine_diff": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [0, 285, 228, 378], "why": "bandes M"},
+   {"op": "fill_rect", "rect": [0, 378, 512, 512], "why": "M Power"}]},
+  "Engine_nrml": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [0, 285, 228, 378]}, {"op": "fill_rect", "rect": [0, 378, 512, 512]}]},
+  "Int_emis": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [416, 334, 512, 364], "why": "M4 competition (volant)"},
+   {"op": "fill_rect", "rect": [60, 302, 190, 322], "why": "Bowers & Wilkins"}]},
+  "Interior_nrml": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [416, 334, 512, 364]}, {"op": "fill_rect", "rect": [60, 302, 190, 322]}]},
+  "Interior_emissive": {"size": [1024, 1024], "ops": [
+   {"op": "fill_rect", "rect": [462, 80, 548, 110], "why": "logo M4 de l'écran"},
+   {"op": "fill_rect", "rect": [26, 466, 64, 488], "why": "icône M"},
+   {"op": "fill_rect", "rect": [355, 465, 640, 615], "why": "photo de la vraie voiture"}]},
+  "lightmodules": {"size": [512, 512], "ops": [
+   {"op": "fill_rect", "rect": [270, 186, 480, 216], "why": "plaque « BMW Laser » des phares"}]}
+ }
+}

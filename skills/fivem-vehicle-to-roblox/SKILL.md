@@ -22,7 +22,9 @@ Mesures, choix et pièges : [`docs/studio-import-tests.md`](../../docs/studio-im
   le dire dans le rapport.
 - Ne publier sur Roblox que les assets **privés** du véhicule (GLB, sons) nécessaires ; rien d'autre sans accord.
 - Ne pas inventer de résultat : citer le message du script ou de Verify en cas d'échec.
-- Rappeler une fois de vérifier la licence du mod et les marques réelles avant toute publication du jeu.
+- **Aucune vraie marque dans le véhicule** (règle du jeu) : le rebadge est automatique à la conversion (§ 1b) ;
+  ne jamais le désactiver (`--no-rebadge`) sans demande explicite. Rappeler une fois de vérifier la licence du mod
+  et que les noms inventés n'existent pas déjà (registres de marques) avant de publier le jeu.
 
 ## 0. Prérequis (en parallèle, au début)
 
@@ -43,7 +45,7 @@ python scripts/convert_vehicle.py "<zip>" -o "<sortie>" [--plate "TEXTE"] [--tex
 Options : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (> 300 000 triangles),
 `--no-collision` (hitbox = simple boîte), `--wheel-collision` (cylindres de roues solides),
 `--studs-per-meter`, `--texture-overrides <dossier>` (PNG/DDS de même nom qui remplacent les
-textures du pack : rebadge, retouches), `--sound-ids <json>`, `--retry-gamefiles`, `--no-game-server`.
+textures du pack : retouches), `--brand`, `--model-name`, `--rebadge-spec` (§ 1b), `--sound-ids <json>`, `--retry-gamefiles`, `--no-game-server`.
 Code 2 = binaires sans extracteur : installer .NET 8 (ci-dessus) et relancer ; sinon export XML
 CodeWalker par l'utilisateur ; `dlc.rpf` chiffré → OpenIV.
 
@@ -51,6 +53,31 @@ Lire `<sortie>/<nom>/report.md` : « Hitbox : collision officielle du véhicule 
 englobante : le .yft n'avait pas de `Physics/Bounds`, le signaler), « texture(s) reprises du jeu de base », « vrai son du jeu »,
 ligne « Transfert depuis le serveur d'assets » (fichiers, Mo, secondes). Une texture
 `vehshare`/`vehicle_generic_*` manquante ou un son synthétisé = serveur d'assets injoignable.
+
+## 1b. Marques : renommage et rebadge (automatique)
+
+À chaque conversion, `f2r/brands.py` + `f2r/rebadge.py`, table `brands/brands.json` (102 marques, logos
+PNG dans `brands/logos/`, galerie `brands/README.md`) :
+- **Marque** : `vehicleMakeName` de vehicles.meta, sinon le nom de l'archive / des dossiers
+  (« bmw_2022_bmw_m4_competition ») → marque du jeu (BMW → **Bavren**). `--brand` force la marque.
+- **Modèle** : mots du nom de dossier ou de `gameName`, sans marque ni année ; table de la marque
+  (`models`, `labels` : M4 → N4, AMG → MRG), mots génériques gardés (Competition, GT, Turbo…), désignation
+  lettres+chiffres décalée d'une lettre (C63 → D63), nombre + 30 (911 → 941). Un mot qui ne se traduit pas
+  (Mustang, Supra…) donne « ??? » et une étape manuelle du rapport : **choisir un nom** qui n'existe pas chez
+  la marque d'origine, l'ajouter aux `models` de la marque dans `brands.json`, reconvertir (`--model-name` en dépannage).
+- Le Roblox ne contient que les noms du jeu : `CONFIG.Make/Brand/ModelName/DisplayName`, attributs
+  `Brand` et `ModelName` posés par le Setup. La marque réelle reste dans `vehicle_config.json` (local).
+- **Logos 3D** : toute pièce dont la texture s'appelle *badge / logo / emblem* est découpée en îlots ; îlot
+  uni (baguette) gardé ; îlot presque rond ou carré de 3 à 40 cm → pièce `<os>__emblem` (fond du médaillon
+  d'origine + logo du jeu, suit son os : coffre, volant) ; le reste (lettrages « M4 », logo d'étrier) supprimé.
+  Rapport : « Rebadge : N emblème(s)… ». Marque absente de la table : avertissement, emblèmes sans logo →
+  ajouter la marque (ligne + logo, règles de la note « Marques de véhicules » du jeu) puis reconvertir.
+- **Logos peints dans les textures** (cache-moyeu, flanc de pneu, écran, volant, plaque de phare) : non
+  détectables automatiquement. Ouvrir les PNG de `textures/` (une planche contact suffit), relever les
+  zones en pixels de la texture d'origine, écrire `brands/vehicles/<nom>.json` (exemple : `m422.json` ;
+  opérations `fill_rect`, `fill_disc`, `fill_ring`, `fill_all`, `logo`), reconvertir : le fichier est lu
+  automatiquement et la conversion suivante le refait seule. Pousser ce fichier avec le skill.
+- **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran) avant de rendre la main.
 
 ## 2. Uploader le modèle et les sons (assets privés)
 

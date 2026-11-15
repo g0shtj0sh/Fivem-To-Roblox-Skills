@@ -95,6 +95,8 @@ class TextureStore:
         self.cache: dict[tuple[str, str], Path | None] = {}
         self.avg: dict[str, list[float]] = {}
         self.missing: set[str] = set()
+        # retouches par texture (rebadge) : nom -> fonction(image, role) -> image, sur la taille d'origine
+        self.edits: dict = {}
         out_dir.mkdir(parents=True, exist_ok=True)
 
     def find(self, name: str | None) -> Path | None:
@@ -121,6 +123,9 @@ class TextureStore:
         if img is None:
             self.cache[key] = None
             return None
+        edit = self.edits.get(name.lower()) or self.edits.get(name.lower().replace("+hi", ""))
+        if edit is not None:
+            img = edit(img, role)
         self.avg.setdefault(name.lower(), average_color(img))
         img = resize_for_roblox(img, self.max_size)
         img = to_normal_png(img) if role == "normal" else to_color_png(img)

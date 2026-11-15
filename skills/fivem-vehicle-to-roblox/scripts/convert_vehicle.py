@@ -32,12 +32,12 @@ sys.path.insert(0, str(HERE))
 from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
 from f2r import collision as collision_mod  # noqa: E402
-from f2r import cabin, cwxml, gamelib, inventory, meta  # noqa: E402
+from f2r import brands, cabin, cwxml, gamelib, inventory, meta, rebadge  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
                         runtime_version, split_for_execute_luau)
-from f2r.textures import TextureStore  # noqa: E402
+from f2r.textures import TextureStore, load_image  # noqa: E402
 from f2r.util import Report, extract_archive, register_names, write_json  # noqa: E402
 from f2r.vehicle import (LIGHT_IDS, SEAT_BONES, STEERING_BONES,  # noqa: E402
                          Part, VehicleBuilder)
@@ -222,6 +222,77 @@ def find_fragment(inv: inventory.Inventory, name: str):
     return None
 
 
+# ------------------------------------------------------------------ marques (rebadge)
+
+SKIP_HINT_DIRS = {"stream", "data", "common", "src", "xml", "_work", "audio", "sfx", "dlc_data"}
+
+
+def collect_hints(src: Path, root: Path) -> list[str]:
+    """Noms qui portent souvent la marque et le modèle : archive, dossiers de la ressource."""
+    hints = [src.stem if src.is_file() else src.name]
+    for d in sorted(root.rglob("*")):
+        if d.is_dir() and len(d.relative_to(root).parts) <= 3 and d.name.lower() not in SKIP_HINT_DIRS:
+            hints.append(d.name)
+    seen, out = set(), []
+    for h in hints:
+        if h.lower() not in seen:
+            seen.add(h.lower())
+            out.append(h)
+    return out
+
+
+def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureStore, pack_sources: dict,
+                    out: Path, args, report: Report):
+    """Renomme marque et modèle (table brands.json) et retire les logos de la marque réelle."""
+    if getattr(args, "no_rebadge", False):
+        report.warn("Rebadge désactivé (--no-rebadge) : logos et nom de la marque réelle conservés.")
+        return None
+    table = brands.BrandTable(getattr(args, "brands", None))
+    naming = brands.resolve(table, vinfo, getattr(args, "hints", []) or [name],
+                            getattr(args, "brand", None), getattr(args, "model_name", None))
+    b = naming.brand
+    if b is None:
+        report.warn(f"Marque non reconnue (vehicleMakeName « {vinfo.get('make', '')} ») : logos retirés sans "
+                    "logo de remplacement. Si c'est une vraie marque, l'ajouter à brands/brands.json (+ logo) "
+                    "et reconvertir, ou passer --brand <marque du jeu>.")
+    else:
+        report.info(f"Marque : « {naming.real_make} » ({naming.found_in}) -> **{b.brolver}** ; modèle "
+                    f"« {naming.real_model or '?'} » -> **{naming.model}**.")
+    if naming.model_provisional:
+        report.manual(f"Nom de modèle à choisir : « {naming.real_model} » ne se traduit pas automatiquement "
+                      f"(provisoire : « {naming.model} »). Choisir un nom qui n'existe pas chez la marque d'origine "
+                      "et reconvertir avec --model-name \"…\" (règle 2 de la table des marques).")
+    logo_img = load_image(b.logo, report) if (b and b.logo) else None
+
+    def original(tex: str):
+        n = tex.lower()
+        path = pack_sources.get(n) or pack_sources.get(n + "+hi") or pack_sources.get(n.replace("+hi", ""))
+        return load_image(path, report) if path else None
+
+    summary = rebadge.rebadge_parts(vb.parts, original, b.logo if b else None, out / "_rebadge", report)
+    for p in vb.parts:
+        if p.tex_diffuse and p.tex_diffuse.startswith("f2r_"):
+            store.sources[p.tex_diffuse.lower()] = out / "_rebadge" / f"{p.tex_diffuse}.png"
+    # logos peints dans les textures : spec explicite, sinon brands/vehicles/<nom>.json du skill
+    spec_path = getattr(args, "rebadge_spec", None)
+    if not spec_path:
+        cand = brands.DEFAULT_TABLE.parent / "vehicles" / f"{name}.json"
+        spec_path = cand if cand.exists() else None
+    if spec_path:
+        spec = rebadge.load_spec(Path(spec_path))
+        for tex, entry in spec.items():
+            ops, size = entry.get("ops", []), entry.get("size")
+            store.edits[tex] = (lambda img, role, ops=ops, size=size:
+                                rebadge.apply_texture_spec(img, ops, logo_img, size, role))
+        report.info(f"Rebadge des textures : {len(spec)} texture(s) retouchée(s) d'après {Path(spec_path).name}.")
+    else:
+        report.manual("Logos peints dans les textures (cache-moyeu, flanc de pneu, étrier, écran, volant) : non "
+                      "détectables automatiquement. Contrôler la planche `textures/` et, s'il en reste, écrire "
+                      f"`brands/vehicles/{name}.json` (voir SKILL.md, « Marques ») puis reconvertir.")
+    naming.summary = summary
+    return naming
+
+
 # ------------------------------------------------------------------ conversion d'un véhicule
 
 def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, args, report: Report,
@@ -290,6 +361,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     # ---- textures + GLB
     sources = dict(inv.dds)
     sources.update({k: v for k, v in inv.images.items() if k not in sources})
+    pack_sources = {k.lower(): v for k, v in sources.items()}
     if getattr(args, "texture_overrides", None):
         # Textures de remplacement (rebadge, retouches) : même nom que la texture du pack.
         n_over = 0
@@ -299,6 +371,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                 n_over += 1
         report.info(f"{n_over} texture(s) remplacée(s) depuis {args.texture_overrides}.")
     store = TextureStore(sources, out / "textures", report, args.max_texture)
+
+    # ---- marques : nom du jeu + rebadge (aucune marque réelle dans le véhicule converti)
+    naming = rebadge_vehicle(name, vinfo, vb, store, pack_sources, out, args, report)
 
     # Textures réutilisées du jeu de base (vehshare, txdRelationships…) : on les
     # récupère dans l'installation GTA V du PC avant de construire les matériaux,
@@ -396,6 +471,11 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     # ---- configuration Roblox
     config = build_config(name, vinfo, variation, carcols, handling, vb, parts_cfg, mods_cfg, stat_cfg,
                           mod_count, carriers, livery_names, audio, is_emergency, args)
+    if naming is not None:
+        config["Make"] = naming.brand.brolver if naming.brand else ""
+        config["Brand"] = config["Make"]
+        config["ModelName"] = naming.model
+        config["DisplayName"] = f"{config['Make']} {naming.model}".strip()
     config["Collision"] = collision_cfg
     sound_ids = load_sound_ids(args.sound_ids, out / "sounds")
     setup = build_setup(config, parts_cfg, sound_ids)
@@ -415,6 +495,12 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
              "game_transfer": game.transfer_summary() if game is not None else "",
              "collision": collision_cfg,
              "horn_source": audio.get("HornSource", "synthese"),
+             "naming": None if naming is None else {
+                 "real_make": naming.real_make, "found_in": naming.found_in,
+                 "brand": naming.brand.brolver if naming.brand else None,
+                 "real_model": naming.real_model, "model": naming.model,
+                 "provisional": naming.model_provisional},
+             "rebadge": getattr(naming, "summary", None),
              "siren_source": audio.get("SirenSource")}
     if tris > 300_000:
         report.warn(f"{tris} triangles : lourd pour Roblox. Essayez --lod med pour un modèle plus léger.")
@@ -681,6 +767,12 @@ def main(argv=None) -> int:
                     help="cylindres de roues non solides (moteur physique à roues propres) ; par défaut ils portent le véhicule")
     ap.add_argument("--texture-overrides",
                     help="dossier d'images qui remplacent les textures du pack de même nom (rebadge, retouches)")
+    ap.add_argument("--brand", help="marque du jeu à utiliser (sinon reconnue d'après vehicles.meta / noms de dossier)")
+    ap.add_argument("--model-name", help="nom de modèle du jeu (sinon traduit automatiquement du modèle réel)")
+    ap.add_argument("--brands", help="table des marques (défaut : brands/brands.json du skill)")
+    ap.add_argument("--rebadge-spec", help="JSON de retouches des logos peints dans les textures "
+                    "(défaut : brands/vehicles/<nom>.json s'il existe)")
+    ap.add_argument("--no-rebadge", action="store_true", help="garder marque et logos d'origine (déconseillé)")
     ap.add_argument("--sound-ids", help="JSON {fichier: assetId} produit par roblox_upload.py")
     ap.add_argument("--plate", default="F2R 000", help="texte de plaque par défaut")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
@@ -713,6 +805,7 @@ def main(argv=None) -> int:
     register_names(s + ".sps" for s in list(line.strip() for line in (EXTRACTOR_DIR / "extra_strings.txt")
                                             .read_text(encoding="utf-8").splitlines() if line.startswith("vehicle_")))
 
+    args.hints = collect_hints(src, root)
     inv = inventory.scan(root)
     if inventory.needs_conversion(inv):
         cmd = args.extractor.split() if args.extractor else find_extractor()

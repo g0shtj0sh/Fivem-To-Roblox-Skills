@@ -1,0 +1,1728 @@
+{
+ "about": "Table de renommage des marques réelles (jeu Brolver). Aucune vraie marque dans un véhicule converti : marque et modèle renommés, logos 3D remplacés par le logo ci-dessous, marquages effacés. Source humaine : coffre Obsidian « Marques de véhicules ». Ajouter une marque = une ligne ici + son logo.",
+ "generic_words": [
+  "competition",
+  "sport",
+  "gt",
+  "turbo",
+  "touring",
+  "coupe",
+  "cabrio",
+  "convertible",
+  "sedan",
+  "wagon",
+  "estate",
+  "limited",
+  "plus",
+  "performance",
+  "edition",
+  "hybrid",
+  "electric",
+  "pickup",
+  "van",
+  "classic",
+  "custom",
+  "police",
+  "sheriff",
+  "ambulance",
+  "taxi"
+ ],
+ "brands": [
+  {
+   "brolver": "Quatri",
+   "slug": "quatri",
+   "real": [
+    "Audi"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "4 anneaux entrelacés, argent chromé",
+   "logo": "logos/quatri.png",
+   "aliases": [
+    "audi"
+   ],
+   "models": {
+    "RS6": "QS6"
+   },
+   "labels": {
+    "RS": "QS"
+   }
+  },
+  {
+   "brolver": "Bavren",
+   "slug": "bavren",
+   "real": [
+    "BMW"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "rond coupé en 4 bleu/blanc, anneau noir",
+   "logo": "logos/bavren.png",
+   "aliases": [
+    "bayerische motoren werke",
+    "bmw"
+   ],
+   "models": {
+    "M4": "N4"
+   },
+   "labels": {
+    "M": "BV"
+   }
+  },
+  {
+   "brolver": "Mercura",
+   "slug": "mercura",
+   "real": [
+    "Mercedes-Benz"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "étoile à 3 branches dans un cercle",
+   "logo": "logos/mercura.png",
+   "aliases": [
+    "benz",
+    "mb",
+    "merc",
+    "mercedes",
+    "mercedes-benz"
+   ],
+   "models": {
+    "G63": "K63"
+   },
+   "labels": {
+    "AMG": "MRG"
+   }
+  },
+  {
+   "brolver": "Mayvar",
+   "slug": "mayvar",
+   "real": [
+    "Mercedes-Maybach",
+    "Maybach"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "double M dans un triangle arrondi",
+   "logo": "logos/mayvar.png",
+   "aliases": [
+    "maybach",
+    "mercedes-maybach"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Porvel",
+   "slug": "porvel",
+   "real": [
+    "Porsche"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "écusson avec cheval, bois de cerf, rouge/noir/or",
+   "logo": "logos/porvel.png",
+   "aliases": [
+    "porsche"
+   ],
+   "models": {
+    "911": "941",
+    "GT3": "GT"
+   },
+   "labels": {}
+  },
+  {
+   "brolver": "Volkara",
+   "slug": "volkara",
+   "real": [
+    "Volkswagen"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "V au-dessus d'un W dans un cercle, bleu",
+   "logo": "logos/volkara.png",
+   "aliases": [
+    "volkswagen",
+    "vw"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Opyra",
+   "slug": "opyra",
+   "real": [
+    "Opel"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "éclair horizontal dans un cercle, jaune",
+   "logo": "logos/opyra.png",
+   "aliases": [
+    "opel"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Kompakt",
+   "slug": "kompakt",
+   "real": [
+    "Smart"
+   ],
+   "country": "Allemagne",
+   "kind": "auto",
+   "avoid": "C + flèche jaune",
+   "logo": "logos/kompakt.png",
+   "aliases": [
+    "smart"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Mannhorst",
+   "slug": "mannhorst",
+   "real": [
+    "MAN"
+   ],
+   "country": "Allemagne",
+   "kind": "camions",
+   "avoid": "lion",
+   "logo": "logos/mannhorst.png",
+   "aliases": [
+    "man"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Revaud",
+   "slug": "revaud",
+   "real": [
+    "Renault"
+   ],
+   "country": "France",
+   "kind": "auto",
+   "avoid": "losange",
+   "logo": "logos/revaud.png",
+   "aliases": [
+    "renault"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Pujaud",
+   "slug": "pujaud",
+   "real": [
+    "Peugeot"
+   ],
+   "country": "France",
+   "kind": "auto",
+   "avoid": "lion dressé, écusson",
+   "logo": "logos/pujaud.png",
+   "aliases": [
+    "peugeot"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Citrane",
+   "slug": "citrane",
+   "real": [
+    "Citroën"
+   ],
+   "country": "France",
+   "kind": "auto",
+   "avoid": "double chevron",
+   "logo": "logos/citrane.png",
+   "aliases": [
+    "citroen",
+    "citroën"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Distiq",
+   "slug": "distiq",
+   "real": [
+    "DS Automobiles"
+   ],
+   "country": "France",
+   "kind": "auto",
+   "avoid": "D et S imbriqués",
+   "logo": "logos/distiq.png",
+   "aliases": [
+    "ds automobiles"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Alpana",
+   "slug": "alpana",
+   "real": [
+    "Alpine"
+   ],
+   "country": "France",
+   "kind": "auto",
+   "avoid": "A en flèche, bleu",
+   "logo": "logos/alpana.png",
+   "aliases": [
+    "alpine"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Bugano",
+   "slug": "bugano",
+   "real": [
+    "Bugatti"
+   ],
+   "country": "France",
+   "kind": "auto",
+   "avoid": "ovale rouge avec EB, perles",
+   "logo": "logos/bugano.png",
+   "aliases": [
+    "bugatti"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Ferrano",
+   "slug": "ferrano",
+   "real": [
+    "Ferrari"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "cheval cabré, écusson jaune, bandes vert/blanc/rouge",
+   "logo": "logos/ferrano.png",
+   "aliases": [
+    "ferrari"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Lambrino",
+   "slug": "lambrino",
+   "real": [
+    "Lamborghini"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "taureau, écusson noir et or",
+   "logo": "logos/lambrino.png",
+   "aliases": [
+    "lambo",
+    "lamborghini"
+   ],
+   "models": {
+    "Urus": "Uros"
+   },
+   "labels": {}
+  },
+  {
+   "brolver": "Maserano",
+   "slug": "maserano",
+   "real": [
+    "Maserati"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "trident",
+   "logo": "logos/maserano.png",
+   "aliases": [
+    "maserati"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Alva Remo",
+   "slug": "alva-remo",
+   "real": [
+    "Alfa Romeo"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "cercle avec croix rouge et serpent",
+   "logo": "logos/alva-remo.png",
+   "aliases": [
+    "alfa",
+    "alfa romeo",
+    "alfaromeo"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Fiora",
+   "slug": "fiora",
+   "real": [
+    "Fiat"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "lettres FIAT en écusson rouge",
+   "logo": "logos/fiora.png",
+   "aliases": [
+    "fiat"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Lanzo",
+   "slug": "lanzo",
+   "real": [
+    "Lancia"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "drapeau sur volant, écusson bleu",
+   "logo": "logos/lanzo.png",
+   "aliases": [
+    "lancia"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Abarco",
+   "slug": "abarco",
+   "real": [
+    "Abarth"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "scorpion, écusson rouge/jaune",
+   "logo": "logos/abarco.png",
+   "aliases": [
+    "abarth"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Pagano",
+   "slug": "pagano",
+   "real": [
+    "Pagani"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "ovale à lettres",
+   "logo": "logos/pagano.png",
+   "aliases": [
+    "pagani"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "De Tomari",
+   "slug": "de-tomari",
+   "real": [
+    "De Tomaso"
+   ],
+   "country": "Italie",
+   "kind": "auto",
+   "avoid": "trident/T stylisé",
+   "logo": "logos/de-tomari.png",
+   "aliases": [
+    "de tomaso",
+    "detomaso"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Ivaro",
+   "slug": "ivaro",
+   "real": [
+    "Iveco"
+   ],
+   "country": "Italie",
+   "kind": "camions",
+   "avoid": "lettres bleues",
+   "logo": "logos/ivaro.png",
+   "aliases": [
+    "iveco"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Ducara",
+   "slug": "ducara",
+   "real": [
+    "Ducati"
+   ],
+   "country": "Italie",
+   "kind": "moto",
+   "avoid": "écusson à bande rouge",
+   "logo": "logos/ducara.png",
+   "aliases": [
+    "ducati"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Aprella",
+   "slug": "aprella",
+   "real": [
+    "Aprilia"
+   ],
+   "country": "Italie",
+   "kind": "moto",
+   "avoid": "lettres rouges en italique",
+   "logo": "logos/aprella.png",
+   "aliases": [
+    "aprilia"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Agosta",
+   "slug": "agosta",
+   "real": [
+    "MV Agusta"
+   ],
+   "country": "Italie",
+   "kind": "moto",
+   "avoid": "cercle à engrenage",
+   "logo": "logos/agosta.png",
+   "aliases": [
+    "agusta",
+    "mv agusta",
+    "mvagusta"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Vespra",
+   "slug": "vespra",
+   "real": [
+    "Vespa",
+    "Piaggio"
+   ],
+   "country": "Italie",
+   "kind": "scooter",
+   "avoid": "écriture cursive, guêpe",
+   "logo": "logos/vespra.png",
+   "aliases": [
+    "piaggio",
+    "vespa"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Easton Martel",
+   "slug": "easton-martel",
+   "real": [
+    "Aston Martin"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "ailes déployées, vert/noir",
+   "logo": "logos/easton-martel.png",
+   "aliases": [
+    "aston",
+    "aston martin",
+    "astonmartin"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Bentham",
+   "slug": "bentham",
+   "real": [
+    "Bentley"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "B ailé",
+   "logo": "logos/bentham.png",
+   "aliases": [
+    "bentley"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Royden",
+   "slug": "royden",
+   "real": [
+    "Rolls-Royce"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "double R, statuette ailée",
+   "logo": "logos/royden.png",
+   "aliases": [
+    "rolls",
+    "rolls royce",
+    "rolls-royce",
+    "rollsroyce",
+    "rr"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Jagara",
+   "slug": "jagara",
+   "real": [
+    "Jaguar"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "félin bondissant, tête de félin rugissant",
+   "logo": "logos/jagara.png",
+   "aliases": [
+    "jaguar"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Landrova",
+   "slug": "landrova",
+   "real": [
+    "Land Rover",
+    "Range Rover"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "ovale vert",
+   "logo": "logos/landrova.png",
+   "aliases": [
+    "land rover",
+    "landrover",
+    "range rover",
+    "rangerover"
+   ],
+   "models": {
+    "Range Rover": "Ranga"
+   },
+   "labels": {}
+  },
+  {
+   "brolver": "McLarkin",
+   "slug": "mclarkin",
+   "real": [
+    "McLaren"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "virgule « speedmark » orange",
+   "logo": "logos/mclarkin.png",
+   "aliases": [
+    "mclaren"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Lotra",
+   "slug": "lotra",
+   "real": [
+    "Lotus"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "triangle arrondi vert/jaune",
+   "logo": "logos/lotra.png",
+   "aliases": [
+    "lotus"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Mino",
+   "slug": "mino",
+   "real": [
+    "Mini"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "ailes autour d'un cercle",
+   "logo": "logos/mino.png",
+   "aliases": [
+    "mini"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Vaxwell",
+   "slug": "vaxwell",
+   "real": [
+    "Vauxhall"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "griffon",
+   "logo": "logos/vaxwell.png",
+   "aliases": [
+    "vauxhall"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Morvan",
+   "slug": "morvan",
+   "real": [
+    "Morgan"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "auto",
+   "avoid": "ailes avec croix",
+   "logo": "logos/morvan.png",
+   "aliases": [
+    "morgan"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Trionfa",
+   "slug": "trionfa",
+   "real": [
+    "Triumph"
+   ],
+   "country": "Royaume-Uni",
+   "kind": "moto",
+   "avoid": "lettrage arqué",
+   "logo": "logos/trionfa.png",
+   "aliases": [
+    "triumph"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Fortan",
+   "slug": "fortan",
+   "real": [
+    "Ford"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "ovale bleu, écriture cursive",
+   "logo": "logos/fortan.png",
+   "aliases": [
+    "ford"
+   ],
+   "models": {
+    "Mustang": "Stallion"
+   },
+   "labels": {}
+  },
+  {
+   "brolver": "Chevalon",
+   "slug": "chevalon",
+   "real": [
+    "Chevrolet"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "nœud papillon doré",
+   "logo": "logos/chevalon.png",
+   "aliases": [
+    "chevrolet",
+    "chevy"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Dorge",
+   "slug": "dorge",
+   "real": [
+    "Dodge"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "deux bandes rouges obliques, tête de bélier",
+   "logo": "logos/dorge.png",
+   "aliases": [
+    "dodge"
+   ],
+   "models": {
+    "Charger": "Striker"
+   },
+   "labels": {}
+  },
+  {
+   "brolver": "Ramor",
+   "slug": "ramor",
+   "real": [
+    "Ram"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "tête de bélier",
+   "logo": "logos/ramor.png",
+   "aliases": [
+    "ram"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Chrysal",
+   "slug": "chrysal",
+   "real": [
+    "Chrysler"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "ailes argent",
+   "logo": "logos/chrysal.png",
+   "aliases": [
+    "chrysler"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Jepco",
+   "slug": "jepco",
+   "real": [
+    "Jeep"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "calandre 7 fentes, lettrage",
+   "logo": "logos/jepco.png",
+   "aliases": [
+    "jeep"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Cadilon",
+   "slug": "cadilon",
+   "real": [
+    "Cadillac"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "écusson en blason",
+   "logo": "logos/cadilon.png",
+   "aliases": [
+    "cadillac"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Genmotor",
+   "slug": "genmotor",
+   "real": [
+    "GMC"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "lettres rouges",
+   "logo": "logos/genmotor.png",
+   "aliases": [
+    "gmc"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Bewick",
+   "slug": "bewick",
+   "real": [
+    "Buick"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "3 boucliers",
+   "logo": "logos/bewick.png",
+   "aliases": [
+    "buick"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Linden",
+   "slug": "linden",
+   "real": [
+    "Lincoln"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "étoile à 4 branches dans un cadre",
+   "logo": "logos/linden.png",
+   "aliases": [
+    "lincoln"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Mercorio",
+   "slug": "mercorio",
+   "real": [
+    "Mercury"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "profil de dieu ailé, ovale",
+   "logo": "logos/mercorio.png",
+   "aliases": [
+    "mercury"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Oldsmont",
+   "slug": "oldsmont",
+   "real": [
+    "Oldsmobile"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "fusée",
+   "logo": "logos/oldsmont.png",
+   "aliases": [
+    "oldsmobile"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Pontarc",
+   "slug": "pontarc",
+   "real": [
+    "Pontiac"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "flèche rouge pointe en bas",
+   "logo": "logos/pontarc.png",
+   "aliases": [
+    "pontiac"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Plymont",
+   "slug": "plymont",
+   "real": [
+    "Plymouth"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "voilier",
+   "logo": "logos/plymont.png",
+   "aliases": [
+    "plymouth"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Tezar",
+   "slug": "tezar",
+   "real": [
+    "Tesla"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "T en forme de rotor",
+   "logo": "logos/tezar.png",
+   "aliases": [
+    "tesla"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Brummer",
+   "slug": "brummer",
+   "real": [
+    "Hummer"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "lettrage pochoir",
+   "logo": "logos/brummer.png",
+   "aliases": [
+    "hummer"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Shelvy",
+   "slug": "shelvy",
+   "real": [
+    "Shelby"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "cobra",
+   "logo": "logos/shelvy.png",
+   "aliases": [
+    "shelby"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Saleno",
+   "slug": "saleno",
+   "real": [
+    "Saleen"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "S stylisé",
+   "logo": "logos/saleno.png",
+   "aliases": [
+    "saleen"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Rivaro",
+   "slug": "rivaro",
+   "real": [
+    "Rivian"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "deux flèches face à face",
+   "logo": "logos/rivaro.png",
+   "aliases": [
+    "rivian"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Lucen",
+   "slug": "lucen",
+   "real": [
+    "Lucid"
+   ],
+   "country": "États-Unis",
+   "kind": "auto",
+   "avoid": "lettrage fin",
+   "logo": "logos/lucen.png",
+   "aliases": [
+    "lucid"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Harlan-Davis",
+   "slug": "harlan-davis",
+   "real": [
+    "Harley-Davidson"
+   ],
+   "country": "États-Unis",
+   "kind": "moto",
+   "avoid": "bouclier et barre orange/noir",
+   "logo": "logos/harlan-davis.png",
+   "aliases": [
+    "harley",
+    "harley davidson",
+    "harley-davidson"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Freightway",
+   "slug": "freightway",
+   "real": [
+    "Freightliner"
+   ],
+   "country": "États-Unis",
+   "kind": "camions",
+   "avoid": "aile stylisée",
+   "logo": "logos/freightway.png",
+   "aliases": [
+    "freightliner"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Peterbolt",
+   "slug": "peterbolt",
+   "real": [
+    "Peterbilt"
+   ],
+   "country": "États-Unis",
+   "kind": "camions",
+   "avoid": "ovale rouge",
+   "logo": "logos/peterbolt.png",
+   "aliases": [
+    "peterbilt"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Kenward",
+   "slug": "kenward",
+   "real": [
+    "Kenworth"
+   ],
+   "country": "États-Unis",
+   "kind": "camions",
+   "avoid": "lettrage en écusson",
+   "logo": "logos/kenward.png",
+   "aliases": [
+    "kenworth"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Mako",
+   "slug": "mako",
+   "real": [
+    "Mack"
+   ],
+   "country": "États-Unis",
+   "kind": "camions",
+   "avoid": "bouledogue",
+   "logo": "logos/mako.png",
+   "aliases": [
+    "mack"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Toyara",
+   "slug": "toyara",
+   "real": [
+    "Toyota"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "3 ovales imbriqués",
+   "logo": "logos/toyara.png",
+   "aliases": [
+    "toyota"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Lexor",
+   "slug": "lexor",
+   "real": [
+    "Lexus"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "L dans une ellipse",
+   "logo": "logos/lexor.png",
+   "aliases": [
+    "lexus"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Honzo",
+   "slug": "honzo",
+   "real": [
+    "Honda"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "H large, aile (moto)",
+   "logo": "logos/honzo.png",
+   "aliases": [
+    "honda"
+   ],
+   "models": {},
+   "labels": {
+    "Type R": "Type X"
+   }
+  },
+  {
+   "brolver": "Acuro",
+   "slug": "acuro",
+   "real": [
+    "Acura"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "compas/pince en A",
+   "logo": "logos/acuro.png",
+   "aliases": [
+    "acura"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Nisora",
+   "slug": "nisora",
+   "real": [
+    "Nissan"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "barre traversant un cercle",
+   "logo": "logos/nisora.png",
+   "aliases": [
+    "nissan"
+   ],
+   "models": {
+    "GT-R": "GT-X",
+    "GTR": "GT-X"
+   },
+   "labels": {
+    "Nismo": "Nisport"
+   }
+  },
+  {
+   "brolver": "Infinel",
+   "slug": "infinel",
+   "real": [
+    "Infiniti"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "route qui file vers l'horizon dans un ovale",
+   "logo": "logos/infinel.png",
+   "aliases": [
+    "infiniti"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Datsura",
+   "slug": "datsura",
+   "real": [
+    "Datsun"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "soleil levant + barre",
+   "logo": "logos/datsura.png",
+   "aliases": [
+    "datsun"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Mazora",
+   "slug": "mazora",
+   "real": [
+    "Mazda"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "M en ailes dans un ovale",
+   "logo": "logos/mazora.png",
+   "aliases": [
+    "mazda"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Subira",
+   "slug": "subira",
+   "real": [
+    "Subaru"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "6 étoiles (Pléiades) sur ovale bleu",
+   "logo": "logos/subira.png",
+   "aliases": [
+    "subaru"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Mitsuro",
+   "slug": "mitsuro",
+   "real": [
+    "Mitsubishi"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "3 losanges rouges",
+   "logo": "logos/mitsuro.png",
+   "aliases": [
+    "mitsu",
+    "mitsubishi"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Suzumi",
+   "slug": "suzumi",
+   "real": [
+    "Suzuki"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "S rouge anguleux",
+   "logo": "logos/suzumi.png",
+   "aliases": [
+    "suzuki"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Daihara",
+   "slug": "daihara",
+   "real": [
+    "Daihatsu"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "D arrondi",
+   "logo": "logos/daihara.png",
+   "aliases": [
+    "daihatsu"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Isaru",
+   "slug": "isaru",
+   "real": [
+    "Isuzu"
+   ],
+   "country": "Japon",
+   "kind": "auto",
+   "avoid": "lettrage rouge",
+   "logo": "logos/isaru.png",
+   "aliases": [
+    "isuzu"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Hinoka",
+   "slug": "hinoka",
+   "real": [
+    "Hino"
+   ],
+   "country": "Japon",
+   "kind": "camions",
+   "avoid": "H dans un cercle",
+   "logo": "logos/hinoka.png",
+   "aliases": [
+    "hino"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Kawara",
+   "slug": "kawara",
+   "real": [
+    "Kawasaki"
+   ],
+   "country": "Japon",
+   "kind": "moto",
+   "avoid": "lettrage vert, « river mark »",
+   "logo": "logos/kawara.png",
+   "aliases": [
+    "kawasaki"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Yamara",
+   "slug": "yamara",
+   "real": [
+    "Yamaha"
+   ],
+   "country": "Japon",
+   "kind": "moto",
+   "avoid": "3 diapasons croisés",
+   "logo": "logos/yamara.png",
+   "aliases": [
+    "yamaha"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Hyunra",
+   "slug": "hyunra",
+   "real": [
+    "Hyundai"
+   ],
+   "country": "Corée",
+   "kind": "auto",
+   "avoid": "H penché dans un ovale",
+   "logo": "logos/hyunra.png",
+   "aliases": [
+    "hyundai"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Kiro",
+   "slug": "kiro",
+   "real": [
+    "Kia"
+   ],
+   "country": "Corée",
+   "kind": "auto",
+   "avoid": "lettrage KIA d'un trait",
+   "logo": "logos/kiro.png",
+   "aliases": [
+    "kia"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Genessa",
+   "slug": "genessa",
+   "real": [
+    "Genesis"
+   ],
+   "country": "Corée",
+   "kind": "auto",
+   "avoid": "ailes avec écusson",
+   "logo": "logos/genessa.png",
+   "aliases": [
+    "genesis"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Sanyon",
+   "slug": "sanyon",
+   "real": [
+    "SsangYong",
+    "KGM"
+   ],
+   "country": "Corée",
+   "kind": "auto",
+   "avoid": "ailes stylisées",
+   "logo": "logos/sanyon.png",
+   "aliases": [
+    "kgm",
+    "ssangyong"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Volvar",
+   "slug": "volvar",
+   "real": [
+    "Volvo"
+   ],
+   "country": "Suède",
+   "kind": "auto",
+   "avoid": "cercle avec flèche (symbole du fer)",
+   "logo": "logos/volvar.png",
+   "aliases": [
+    "volvo"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Saav",
+   "slug": "saav",
+   "real": [
+    "Saab"
+   ],
+   "country": "Suède",
+   "kind": "auto",
+   "avoid": "griffon couronné",
+   "logo": "logos/saav.png",
+   "aliases": [
+    "saab"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Kongsved",
+   "slug": "kongsved",
+   "real": [
+    "Koenigsegg"
+   ],
+   "country": "Suède",
+   "kind": "auto",
+   "avoid": "blason à losanges",
+   "logo": "logos/kongsved.png",
+   "aliases": [
+    "koenigsegg"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Polvane",
+   "slug": "polvane",
+   "real": [
+    "Polestar"
+   ],
+   "country": "Suède",
+   "kind": "auto",
+   "avoid": "deux chevrons formant une étoile",
+   "logo": "logos/polvane.png",
+   "aliases": [
+    "polestar"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Scanor",
+   "slug": "scanor",
+   "real": [
+    "Scania"
+   ],
+   "country": "Suède",
+   "kind": "camions",
+   "avoid": "griffon",
+   "logo": "logos/scanor.png",
+   "aliases": [
+    "scania"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Skova",
+   "slug": "skova",
+   "real": [
+    "Škoda"
+   ],
+   "country": "Tchéquie",
+   "kind": "auto",
+   "avoid": "flèche ailée",
+   "logo": "logos/skova.png",
+   "aliases": [
+    "skoda",
+    "škoda"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Seto",
+   "slug": "seto",
+   "real": [
+    "SEAT"
+   ],
+   "country": "Espagne",
+   "kind": "auto",
+   "avoid": "S en deux bandes",
+   "logo": "logos/seto.png",
+   "aliases": [
+    "seat"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Cupro",
+   "slug": "cupro",
+   "real": [
+    "Cupra"
+   ],
+   "country": "Espagne",
+   "kind": "auto",
+   "avoid": "triangles tribaux cuivrés",
+   "logo": "logos/cupro.png",
+   "aliases": [
+    "cupra"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Dacora",
+   "slug": "dacora",
+   "real": [
+    "Dacia"
+   ],
+   "country": "Roumanie",
+   "kind": "auto",
+   "avoid": "lettrage DC en chaîne",
+   "logo": "logos/dacora.png",
+   "aliases": [
+    "dacia"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Lado",
+   "slug": "lado",
+   "real": [
+    "Lada"
+   ],
+   "country": "Russie",
+   "kind": "auto",
+   "avoid": "voilier dans un ovale",
+   "logo": "logos/lado.png",
+   "aliases": [
+    "lada"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Morley",
+   "slug": "morley",
+   "real": [
+    "MG"
+   ],
+   "country": "Royaume-Uni / Chine",
+   "kind": "auto",
+   "avoid": "octogone",
+   "logo": "logos/morley.png",
+   "aliases": [
+    "mg"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Bydor",
+   "slug": "bydor",
+   "real": [
+    "BYD"
+   ],
+   "country": "Chine",
+   "kind": "auto",
+   "avoid": "lettrage dans un ovale",
+   "logo": "logos/bydor.png",
+   "aliases": [
+    "byd"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Gelin",
+   "slug": "gelin",
+   "real": [
+    "Geely"
+   ],
+   "country": "Chine",
+   "kind": "auto",
+   "avoid": "écusson bleu",
+   "logo": "logos/gelin.png",
+   "aliases": [
+    "geely"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Nivo",
+   "slug": "nivo",
+   "real": [
+    "NIO"
+   ],
+   "country": "Chine",
+   "kind": "auto",
+   "avoid": "ciel + route stylisés",
+   "logo": "logos/nivo.png",
+   "aliases": [
+    "nio"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Rimar",
+   "slug": "rimar",
+   "real": [
+    "Rimac"
+   ],
+   "country": "Croatie",
+   "kind": "auto",
+   "avoid": "lettrage",
+   "logo": "logos/rimar.png",
+   "aliases": [
+    "rimac"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Kator",
+   "slug": "kator",
+   "real": [
+    "KTM"
+   ],
+   "country": "Autriche",
+   "kind": "moto",
+   "avoid": "lettrage orange",
+   "logo": "logos/kator.png",
+   "aliases": [
+    "ktm"
+   ],
+   "models": {},
+   "labels": {}
+  },
+  {
+   "brolver": "Davo",
+   "slug": "davo",
+   "real": [
+    "DAF"
+   ],
+   "country": "Pays-Bas",
+   "kind": "camions",
+   "avoid": "lettrage bleu",
+   "logo": "logos/davo.png",
+   "aliases": [
+    "daf"
+   ],
+   "models": {},
+   "labels": {}
+  }
+ ]
+}

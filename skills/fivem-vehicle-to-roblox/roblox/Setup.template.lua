@@ -92,6 +92,12 @@ for name in pairs(PARTS) do
 	end
 end
 table.sort(missingNames)
+if CONFIG.Brand and CONFIG.Brand ~= "" then
+	model:SetAttribute("Brand", CONFIG.Brand) -- marque du jeu (jamais la marque réelle)
+end
+if CONFIG.ModelName and CONFIG.ModelName ~= "" then
+	model:SetAttribute("ModelName", CONFIG.ModelName)
+end
 model:SetAttribute("F2RExpectedParts", expected)
 model:SetAttribute("F2RMissingParts", table.concat(missingNames, ","))
 if missing > 0 then
