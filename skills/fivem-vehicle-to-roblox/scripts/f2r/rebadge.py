@@ -388,6 +388,59 @@ def lettering_sheet(cands: list[dict], png: Path, cols: int = 10, tile: int = 12
     sheet.save(png)
 
 
+def restyle_geometry(parts: list, ops: list[dict], out_dir: Path, report: Report) -> list[str]:
+    """Opérations ``restyle_islands`` de la clé ``geometry`` : les îlots entièrement dans ``box`` (mêmes règles que
+    ``remove_islands``) quittent leur pièce pour une pièce neuve ``<pièce>__<name>`` au matériau imposé :
+    ``color`` [r, g, b] 0-255 (sRVB, texture unie ``f2r_<pièce>__<name>.png`` écrite dans ``out_dir``),
+    ``roughness`` 0-1 et ``metal`` (bool) -> ``Part.mr_override``. Même os, même rattachement : la pièce suit la
+    sienne. Usage : une pièce du mod qui partage son matériau avec d'autres mais doit en changer seule
+    (m422 : le silencieux d'échappement, métal poli gris clair comme les manchons des sorties, 2026-11-15).
+    Renvoie les noms des pièces créées."""
+    created = []
+    for op in ops:
+        lo = np.array(op["box"][0], np.float32) - BOX_TOLERANCE_M
+        hi = np.array(op["box"][1], np.float32) + BOX_TOLERANCE_M
+        label = re.sub(r"[^A-Za-z0-9_]", "_", str(op.get("name") or "restyle"))
+        moved = 0
+        for p in list(parts):
+            if p.tri_count == 0 or (op.get("part") and not p.name.startswith(op["part"])):
+                continue
+            tris = p.idx.reshape(-1, 3)
+            take = np.zeros(len(tris), bool)
+            for isl in _islands(p.idx, len(p.pos)):
+                pts = p.pos[np.unique(tris[isl])]
+                if (pts >= lo).all() and (pts <= hi).all():
+                    take[isl] = True
+            if not take.any():
+                continue
+            sel = tris[take]
+            verts = np.unique(sel)
+            remap = np.full(len(p.pos), -1, np.int64)
+            remap[verts] = np.arange(len(verts))
+            name = f"{p.name}__{label}"
+            tex = f"f2r_{name}"
+            rgb = [int(max(0, min(255, c))) for c in op.get("color", [60, 58, 56])]
+            out_dir.mkdir(parents=True, exist_ok=True)
+            Image.new("RGBA", (4, 4), (*rgb, 255)).save(out_dir / f"{tex}.png")
+            sh_tex = {k: v for k, v in p.shader.textures.items() if k != "SpecSampler"} if p.shader else {}
+            q = replace(p, name=name, pos=p.pos[verts].copy(), nrm=p.nrm[verts].copy(), uv=p.uv[verts].copy(),
+                        idx=remap[sel].astype(np.uint32).reshape(-1), tex_diffuse=tex,
+                        shader=replace(p.shader, textures=sh_tex) if p.shader else None,
+                        paint=None, custom_color=None,
+                        mr_override=(float(op.get("roughness", 0.6)), bool(op.get("metal", True))))
+            p.idx = tris[~take].reshape(-1).astype(np.uint32)
+            parts.append(q)
+            created.append(name)
+            moved += int(take.sum())
+        why = op.get("why", "")
+        if moved:
+            report.info(f"Pièce restylée ({why}) : {moved} triangle(s) -> {', '.join(c for c in created if c.endswith('__' + label))}.")
+        else:
+            report.warn(f"Retouche « {why} » : aucun îlot dans la boîte {op['box']} (géométrie du mod changée ?).")
+    parts[:] = [p for p in parts if p.tri_count > 0]
+    return created
+
+
 def remove_geometry(parts: list, ops: list[dict], report: Report) -> int:
     """Applique les opérations ``geometry`` d'un ``brands/vehicles/<nom>.json`` : ``remove_islands`` supprime
     tout îlot dont TOUS les sommets sont dans ``box`` (mètres, repère du véhicule au repos, tolérance 1 mm),

@@ -225,6 +225,19 @@ class TextureStore:
         self.cache[key] = dst
         return dst
 
+    def flat_metal_rough(self, roughness: float, metal: bool) -> Path:
+        """Carte metallicRoughness unie 4 x 4 (G = rugosité, B = métal) pour une valeur imposée."""
+        r = int(round(min(max(float(roughness), 0.0), 1.0) * 255))
+        key = (f"flat|{r}|{bool(metal)}", "mr")
+        if key not in self.cache:
+            out = np.zeros((4, 4, 3), np.uint8)
+            out[..., 1] = r
+            out[..., 2] = 255 if metal else 0
+            dst = self.out_dir / f"f2r_flat_mr_{r}_{'m' if metal else 'd'}.png"
+            Image.fromarray(out, "RGB").save(dst, optimize=True)
+            self.cache[key] = dst
+        return self.cache[key]
+
     def is_icon_atlas(self, name: str | None) -> bool:
         """Planche d'icônes dont l'alpha dessine les symboles (les pièces qui l'affichent doivent être transparentes)."""
         if not name or name.lower() not in self.icon_atlases:

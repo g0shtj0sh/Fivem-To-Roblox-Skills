@@ -96,6 +96,13 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
   `{"op": "remove_islands", "part": "<pièce>", "box": [[x0,y0,z0],[x1,y1,z1]], "why": "///M du pommeau"}`
   (marge de 2 mm ; un îlot n'est retiré que s'il est entièrement dans la boîte). Reconvertir : le rapport dit
   « Lettrage modélisé supprimé (…) : N triangle(s) », ou avertit si une boîte ne trouve plus rien.
+- **Pièce à restyler seule** (même fichier, clé `geometry`) : `{"op": "restyle_islands", "part": "<pièce>", "box": …,
+  "name": "silencer", "color": [r, g, b], "roughness": 0.55, "metal": true, "why": "…"}` sort les îlots de la boîte
+  dans une pièce neuve `<pièce>__<name>` (même os) au matériau imposé (texture unie + carte métal / rugosité unie,
+  `Part.mr_override`). Pour une pièce du mod qui partage son matériau avec d'autres mais doit en changer seule.
+  m422 : le silencieux d'échappement, métal poli gris clair comme les manchons des sorties, lu comme un « bloc
+  gris » sous l'arrière (il reflète le sol) → acier sombre et terni. Attention en greffe sur un véhicule installé :
+  Roblox mesure un maillage sur ses sommets **utilisés**, la pièce d'origine rétrécit (reposer `Size` et `CFrame`).
 - **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran, **pommeau, appuie-tête,
   seuils**) avant de rendre la main.
 

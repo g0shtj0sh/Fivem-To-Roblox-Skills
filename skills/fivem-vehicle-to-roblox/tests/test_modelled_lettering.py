@@ -76,3 +76,20 @@ except ValueError:
     pass
 
 print("ok")
+
+# 5) restyle_islands : les lettres partent dans une pièce neuve au matériau imposé, la pièce d'origine garde le reste
+with tempfile.TemporaryDirectory() as d:
+    parts = [make_part()]
+    ops = [{"op": "restyle_islands", "part": "chassis__mesh_13", "box": c["box"], "name": "silencer",
+            "color": [62, 60, 58], "roughness": 0.55, "metal": True, "why": "test"}]
+    created = rebadge.restyle_geometry(parts, ops, Path(d), Report())
+    assert created == ["chassis__mesh_13__silencer"], created
+    base = [q for q in parts if q.name == "chassis__mesh_13"][0]
+    new = [q for q in parts if q.name == "chassis__mesh_13__silencer"][0]
+    assert base.tri_count == 4 and new.tri_count == 12, (base.tri_count, new.tri_count)
+    assert new.mr_override == (0.55, True) and new.tex_diffuse == "f2r_chassis__mesh_13__silencer"
+    assert "SpecSampler" not in new.shader.textures and base.mr_override is None
+    assert new.idx.max() < len(new.pos) and len(new.pos) == 24          # sommets compactés (6 quads)
+    px = np.asarray(Image.open(Path(d) / "f2r_chassis__mesh_13__silencer.png").convert("RGB"))
+    assert (px == [62, 60, 58]).all()
+print("ok restyle")

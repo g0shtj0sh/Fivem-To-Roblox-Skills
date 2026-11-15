@@ -278,7 +278,13 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
         spec_path = cand if cand.exists() else None
     geometry_ops = rebadge.load_geometry_spec(Path(spec_path)) if spec_path else []
     if geometry_ops:
-        summary["geometry_removed_tris"] = rebadge.remove_geometry(vb.parts, geometry_ops, report)
+        summary["geometry_removed_tris"] = rebadge.remove_geometry(
+            vb.parts, [o for o in geometry_ops if o.get("op") == "remove_islands"], report)
+        summary["restyled_parts"] = rebadge.restyle_geometry(
+            vb.parts, [o for o in geometry_ops if o.get("op") == "restyle_islands"], out / "_rebadge", report)
+        unknown = [o.get("op") for o in geometry_ops if o.get("op") not in ("remove_islands", "restyle_islands")]
+        if unknown:
+            raise ValueError(f"spec du véhicule, clé geometry : opération(s) inconnue(s) {unknown}")
     letters = rebadge.lettering_candidates(vb.parts)
     sheet = out / "_rebadge" / "lettrages_modelises.png"
     rebadge.lettering_sheet(letters, sheet)
@@ -288,7 +294,8 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
     msg = (f"Lettrages modélisés : {len(letters)} grappe(s) de petits îlots dessinée(s) dans "
            f"`_rebadge/{sheet.name}` (boîtes dans `lettrages_modelises.json`).")
     if geometry_ops:
-        report.info(msg + f" {len(geometry_ops)} lettrage(s) déjà supprimé(s) d'après la spec du véhicule.")
+        n_rm = sum(1 for o in geometry_ops if o.get("op") == "remove_islands")
+        report.info(msg + f" {n_rm} lettrage(s) déjà supprimé(s) d'après la spec du véhicule.")
     else:
         report.manual(msg + " Regarder la planche : une lettre ou un logo lisible (///M, M4, AMG, RS…) est une "
                       "vraie marque modélisée -> copier sa boîte en opération `remove_islands` de "
@@ -637,8 +644,10 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
     mr_png = None
     if color_png is not None and p.kind not in ("glass", "light", "siren"):
         normal_png = store.get(p.tex_normal, "normal") if p.tex_normal else None
-        # brillance GTA (SpecSampler) -> RoughnessMap / MetalnessMap de la SurfaceAppearance
-        mr_png = store.metal_rough(p.shader, p.tex_diffuse)
+        # brillance GTA (SpecSampler) -> RoughnessMap / MetalnessMap de la SurfaceAppearance ; valeur imposée par une
+        # retouche du véhicule (restyle_islands) si la spec du véhicule en donne une
+        mr = getattr(p, "mr_override", None)
+        mr_png = store.flat_metal_rough(*mr) if mr else store.metal_rough(p.shader, p.tex_diffuse)
     mat = GMaterial(name=f"{p.shader.name}_{p.name}"[:60], base_color=base, color_png=color_png,
                     normal_png=normal_png, mr_png=mr_png, alpha=alpha,
                     double_sided=p.kind in ("decal", "glass"))

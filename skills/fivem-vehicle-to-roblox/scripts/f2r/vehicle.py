@@ -81,6 +81,8 @@ class Part:
     tex_diffuse: str | None = None
     tex_normal: str | None = None
     tex_livery: list[str] = field(default_factory=list)
+    # (rugosité 0..1, métal) imposés par une retouche du véhicule (rebadge.restyle_islands), sinon tirés du SpecSampler
+    mr_override: tuple | None = None
 
     @property
     def tri_count(self) -> int:
