@@ -431,7 +431,7 @@ personnalisée → op `"Color"` ; Combinaison d'usine → op `"Factory"`. Camél
 ## Limites Roblox prises en compte
 
 - ≤ 20 000 triangles par MeshPart : découpage automatique à 19 000 (`--max-tris`).
-- Textures ≤ 1024 px (Roblox réduit au-delà) : redimensionnées, puissances de 2.
+- Textures ≤ 2048 px (`--max-texture`, défaut 2048) : Roblox garde 2048 et réduit 4096 à 2048 (mesuré le 2026-11-15, GLB importé, rendu net en qualité 21) ; redimensionnées, puissances de 2. Brillance GTA (`SpecSampler`) → `RoughnessMap`/`MetalnessMap` par la `metallicRoughnessTexture` du GLB (voir « Textures et brillance »).
 - Une seule coordonnée UV par mesh : les pièces à livrée utilisent l'UV de la livrée.
 - `SurfaceAppearance` ne se modifie pas en jeu : les livrées sont des SurfaceAppearance pré-créées que
   l'on échange ; la teinte de peinture texturée passe par `SurfaceAppearance.Color` (si dispo) sinon `Part.Color`.

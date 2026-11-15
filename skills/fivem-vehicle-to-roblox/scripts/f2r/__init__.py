@@ -6,7 +6,7 @@ Modules :
     meta       lecture de vehicles.meta, carcols.meta, carvariations.meta, handling.meta
     cwxml      lecture du XML CodeWalker (.yft.xml/.ydr.xml/.ytd.xml/.awc.xml)
     vehicle    assemblage : squelette, pièces, roues, lumières, mods, extras
-    textures   DDS -> PNG (<= 1024 px), cartes normales / rugosité
+    textures   DDS -> PNG (<= 2048 px), cartes normales / rugosité
     gltf       écriture GLB (glTF 2.0 binaire) sans dépendance externe
     audio      sons moteur (découpe AWC ou synthèse), klaxon, sirène, clignotant
     roblox     génération du script d'installation Luau + modules runtime

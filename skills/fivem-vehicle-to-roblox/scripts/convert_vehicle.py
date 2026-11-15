@@ -7,7 +7,7 @@ Exemple :
     python convert_vehicle.py ./ma_ressource --vehicle adder --studs-per-meter 3.2 -o ./out
 
 Sortie (par véhicule) :  out/<nom>/
-    <nom>.glb            modèle 3D (1 MeshPart par pièce, textures PNG <= 1024 px intégrées)
+    <nom>.glb            modèle 3D (1 MeshPart par pièce, textures PNG <= 2048 px intégrées (--max-texture))
     <nom>_Setup.lua      script à exécuter dans Studio après l'import du .glb
     textures/            PNG convertis (référence / ré-upload manuel)
     sounds/              sons moteur, démarreur, klaxon, clignotant, sirènes (.wav/.ogg)
@@ -489,7 +489,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
 
     tris = sum(p.tri_count for p in vb.parts)
     stats = {"name": name, "parts": len(vb.parts), "triangles": tris, "mods": mod_count,
-             "liveries": len(carriers), "textures": len([v for v in store.cache.values() if v]),
+             "liveries": len(carriers), "textures": len([v for v in store.cache.values() if v]), "max_texture": store.max_size,
              "missing_textures": len(store.missing), "glb": str(glb_path), "glb_mb": round(glb_path.stat().st_size / 1e6, 2),
              "game_textures": len(game_tex), "audio_from_game": audio_from_game,
              "game_transfer": game.transfer_summary() if game is not None else "",
@@ -763,7 +763,8 @@ def main(argv=None) -> int:
     ap.add_argument("--studs-per-meter", type=float, default=3.571,
                     help="échelle (1 m = 3.571 studs par défaut, convention physique Roblox 1 stud = 0.28 m)")
     ap.add_argument("--max-tris", type=int, default=19000, help="triangles max par MeshPart (limite Roblox 20k)")
-    ap.add_argument("--max-texture", type=int, default=1024, help="taille max des textures (px)")
+    ap.add_argument("--max-texture", type=int, default=2048,
+                    help="taille max des textures (px) ; Roblox garde 2048 et réduit 4096 à 2048 (mesuré le 2026-11-15)")
     ap.add_argument("--livery-uv", default="auto", choices=["auto", "uv0", "uv1"])
     ap.add_argument("--no-collision", action="store_true",
                     help="ne pas reprendre la collision du .yft (hitbox = boîte englobante)")
@@ -893,7 +894,7 @@ def write_report(out: Path, name: str, stats: dict | None, report: Report) -> No
         lines += ["## Résultat", "",
                   f"- Pièces (MeshParts) : **{stats['parts']}** — triangles : **{stats['triangles']}**",
                   f"- Mods de custom : **{stats['mods']}** — livrées : **{stats['liveries']}**",
-                  f"- Textures converties (≤ 1024 px) : **{stats['textures']}** — manquantes : {stats['missing_textures']}",
+                  f"- Textures converties (≤ {stats.get('max_texture', 2048)} px) : **{stats['textures']}** — manquantes : {stats['missing_textures']}",
                   f"- Fichier 3D : `{Path(stats['glb']).name}` ({stats['glb_mb']} Mo)"]
         if stats.get("game_textures"):
             lines.append(f"- Dont **{stats['game_textures']}** texture(s) reprises du jeu de base "

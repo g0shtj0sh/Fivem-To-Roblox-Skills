@@ -1,4 +1,4 @@
-"""Conversion des textures GTA (DDS BC1-BC7 / RGBA) en PNG compatibles Roblox (<= 1024 px)."""
+"""Conversion des textures GTA (DDS BC1-BC7 / RGBA) en PNG compatibles Roblox (<= 2048 px)."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,9 @@ from PIL import Image
 
 from .util import Report
 
-MAX_SIZE = 1024
+# Plafond de Roblox mesuré le 2026-11-15 (GLB importé) : 2048 gardé tel quel (rendu net en qualité 21),
+# 4096 réduit à 2048. Coût mémoire : une 2048 = 4 x une 1024 ; seules les sources > 1024 en profitent.
+MAX_SIZE = 2048
 
 # --- Brillance GTA -> rugosité / métal Roblox (2026-11-15) ---------------------------------
 # Carte « spec » GTA V (SpecSampler) : R = intensité spéculaire, G = brillance (exposant),
