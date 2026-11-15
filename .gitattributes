@@ -1,0 +1,3 @@
+# Les correctifs sont appliques tels quels par git apply : pas de conversion de fins de ligne,
+# sinon ils deviennent inapplicables sur la plateforme qui ne correspond pas.
+*.patch -text
