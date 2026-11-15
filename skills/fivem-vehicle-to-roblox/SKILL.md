@@ -46,6 +46,15 @@ Options : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (> 300 000 tria
 `--no-collision` (hitbox = simple boîte), `--wheel-collision` (cylindres de roues solides),
 `--studs-per-meter`, `--texture-overrides <dossier>` (PNG/DDS de même nom qui remplacent les
 textures du pack : retouches), `--brand`, `--model-name`, `--rebadge-spec` (§ 1b), `--sound-ids <json>`, `--retry-gamefiles`, `--no-game-server`.
+**Sons moteur maison (pack Brolver)** : `--engine-pack <dossier|.rar>` (ou variable
+d'environnement `F2R_ENGINE_PACK`) remplace le son du mod par un son du pack
+`sounds/<categorie>/<son>/<son>_{moteur,echappement}_{acceleration,deceleration,ralenti}.wav`
++ `sounds/klaxon/*.wav`. Catégorie d'après la classe GTA (VC_SUPER→super, VC_SPORT→sport,
+VC_SEDAN→berline, VC_SPORT_CLASSIC→classique, VC_OFF_ROAD→toutterrain, « monster » dans le nom→monster,
+utilitaires→pickup…) ; le son est tiré du nom du modèle (stable d'une conversion à l'autre).
+Moteur → couche `engine` (capot), échappement → couche `exhaust` (pots), découpés en boucles comme un son de mod. `--engine-sound
+brolver_super_03` (ou une catégorie, ex. `muscle`) force le choix ; `--no-engine-pack` l'ignore.
+Un .rar est décompressé une fois (7-Zip) dans `<sortie>/_engine_pack/`.
 Code 2 = binaires sans extracteur : installer .NET 8 (ci-dessus) et relancer ; sinon export XML
 CodeWalker par l'utilisateur ; `dlc.rpf` chiffré → OpenIV.
 

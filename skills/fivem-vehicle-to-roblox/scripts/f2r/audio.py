@@ -370,7 +370,7 @@ def build_audio(out_dir: Path, *, wavs: dict[str, Path], audio_name: str, vclass
     if horn_loop is not None:
         write_wav(out_dir / "horn.wav", horn_loop[0], horn_loop[1])
         manifest["HornSource"] = f"jeu:{horn_src.stem}"
-        report.info(f"Klaxon : vrai son du jeu ({horn_src.name}).")
+        report.info(f"Klaxon : vrai son ({horn_src.name}).")
     else:
         write_wav(out_dir / "horn.wav", synth_horn())
         manifest["HornSource"] = "synthese"

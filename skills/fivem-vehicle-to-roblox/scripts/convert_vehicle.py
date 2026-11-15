@@ -32,6 +32,7 @@ sys.path.insert(0, str(HERE))
 from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
 from f2r import collision as collision_mod  # noqa: E402
+from f2r import sound_pack  # noqa: E402
 from f2r import brands, cabin, cwxml, gamelib, inventory, meta, rebadge  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
@@ -445,6 +446,16 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     # Son vanilla : le pack ne contient pas d'AWC, on va chercher le vrai son du
     # jeu désigné par audioNameHash (ex. ADDER) plutôt que de le synthétiser.
     audio_from_game = False
+    pack_path = args.engine_pack or os.environ.get(sound_pack.ENV_VAR)
+    if pack_path and not args.no_engine_pack:
+        root = sound_pack.open_pack(pack_path, Path(args.out).resolve() / "_engine_pack", report)
+        engine = sound_pack.choose(root, vinfo.get("class", ""), name, args.engine_sound) if root else None
+        if engine is not None:
+            got = sound_pack.prepare(engine, root, out / "_work_sounds", name, report)
+            if got:
+                wavs = got
+        elif root is not None:
+            report.warn(f"Pack de sons : « {args.engine_sound} » introuvable, son d'origine conservé.")
     if not wavs and game is not None:
         an = vinfo.get("audioNameHash") or name
         got = game.fetch_audio(an, retry=args.retry_gamefiles)
@@ -781,6 +792,13 @@ def main(argv=None) -> int:
                     "(défaut : brands/vehicles/<nom>.json s'il existe)")
     ap.add_argument("--no-rebadge", action="store_true", help="garder marque et logos d'origine (déconseillé)")
     ap.add_argument("--sound-ids", help="JSON {fichier: assetId} produit par roblox_upload.py")
+    ap.add_argument("--engine-pack",
+                    help="pack de sons moteur maison (dossier ou .rar/.zip : sounds/<categorie>/<son>/...) ; "
+                         f"défaut : variable d'environnement {sound_pack.ENV_VAR}. Remplace le son du mod.")
+    ap.add_argument("--engine-sound",
+                    help="son du pack à utiliser (ex. brolver_super_03) ou catégorie (ex. muscle) ; "
+                         "défaut : catégorie d'après la classe GTA, son tiré du nom du modèle")
+    ap.add_argument("--no-engine-pack", action="store_true", help="ignorer le pack de sons moteur maison")
     ap.add_argument("--plate", default="F2R 000", help="texte de plaque par défaut")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
     ap.add_argument("--no-door-prompts", action="store_true")
