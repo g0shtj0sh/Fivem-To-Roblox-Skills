@@ -543,10 +543,14 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
             base = [*p.custom_color, 1.0]
         if p.kind == "decal":
             alpha = "BLEND"
+    mr_png = None
     if color_png is not None and p.kind not in ("glass", "light", "siren"):
         normal_png = store.get(p.tex_normal, "normal") if p.tex_normal else None
+        # brillance GTA (SpecSampler) -> RoughnessMap / MetalnessMap de la SurfaceAppearance
+        mr_png = store.metal_rough(p.shader, p.tex_diffuse)
     mat = GMaterial(name=f"{p.shader.name}_{p.name}"[:60], base_color=base, color_png=color_png,
-                    normal_png=normal_png, alpha=alpha, double_sided=p.kind in ("decal", "glass"))
+                    normal_png=normal_png, mr_png=mr_png, alpha=alpha,
+                    double_sided=p.kind in ("decal", "glass"))
     return mat, has_tex
 
 

@@ -25,6 +25,8 @@ class GMaterial:
     base_color: list[float] = field(default_factory=lambda: [1, 1, 1, 1])
     color_png: Path | None = None
     normal_png: Path | None = None
+    # glTF metallicRoughnessTexture : G = rugosité, B = métal (facteurs mis à 1 quand elle est présente)
+    mr_png: Path | None = None
     alpha: str = "OPAQUE"      # OPAQUE / BLEND / MASK
     metallic: float = 0.0
     roughness: float = 0.6
@@ -33,7 +35,7 @@ class GMaterial:
 
     def key(self):
         return (tuple(round(c, 4) for c in self.base_color), str(self.color_png), str(self.normal_png),
-                self.alpha, self.metallic, self.roughness, tuple(self.emissive or ()), self.double_sided)
+                str(self.mr_png), self.alpha, self.metallic, self.roughness, tuple(self.emissive or ()), self.double_sided)
 
 
 class GlbWriter:
@@ -86,6 +88,9 @@ class GlbWriter:
                      "metallicFactor": m.metallic, "roughnessFactor": m.roughness}
         if m.color_png:
             pbr["baseColorTexture"] = {"index": self._image(m.color_png)}
+        if m.mr_png:
+            pbr["metallicRoughnessTexture"] = {"index": self._image(m.mr_png)}
+            pbr["metallicFactor"], pbr["roughnessFactor"] = 1.0, 1.0
         mat: dict = {"name": m.name, "pbrMetallicRoughness": pbr, "alphaMode": m.alpha,
                      "doubleSided": m.double_sided}
         if m.normal_png:
