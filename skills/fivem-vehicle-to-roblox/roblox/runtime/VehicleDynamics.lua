@@ -150,6 +150,8 @@ Dyn.Tuning = {
 	-- après une montée 1→2 le régime tombe à 0,93 × 1,949 / 3,333 ≈ 0,54, mesuré)
 	ReverseHold = 0.25, -- s à l'arrêt, frein maintenu, avant de passer la marche arrière
 	ShiftLockout = 0.35, -- s minimum entre deux passages automatiques
+	ShiftRpmRate = 10, -- 1/s : au passage, le régime rejoint celui du nouveau rapport à ce taux x embrayage (lissé)
+	RpmDisplayTau = 0.06, -- s : lissage du régime montré (son, compte-tours, télémétrie)
 	EngineBrakeG = 0.9, -- frein moteur (en g) au rupteur, gaz relâchés (proportionnel au régime). MESURÉ :
 	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
 	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
@@ -800,7 +802,17 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		end
 		local free = math.clamp(S.rpm + (2 * thr - 1) * 2 * P.driveInertia * h, 0.2, 1)
 		local wheelRpm = drivenSpeed / gearTop
-		S.rpm = math.clamp(math.max(0.2, wheelRpm * S.clutch + free * (1 - S.clutch)), 0.2, 1.05)
+		if S.clutch < 1 and not S.launch then
+			-- passage de rapport : le régime rejoint celui du nouveau rapport à une vitesse qui suit l'embrayage
+			-- (ShiftRpmRate x embrayage, par seconde), puis on remonte dans les tours. Le mélange
+			-- « roues x embrayage + libre x (1 - embrayage) » que GTA fait une fois par image, appliqué ici à chaque
+			-- sous-pas, faisait tomber le régime de 5 700 à 2 900 tr/min en deux images (mesuré 2026-11-15, m422) :
+			-- coupure nette au son et au compte-tours.
+			local k = (T.ShiftRpmRate or 10) * S.clutch
+			S.rpm = math.clamp(S.rpm + (math.min(wheelRpm, 1.05) - S.rpm) * math.clamp(k * h, 0, 1), 0.2, 1.05)
+		else
+			S.rpm = math.clamp(math.max(0.2, wheelRpm * S.clutch + free * (1 - S.clutch)), 0.2, 1.05)
+		end
 		if S.launch and thr > 0.05 then
 			local lr = T.LaunchRpm or 0.42
 			local up = math.clamp((S.clutch - (T.LaunchClutch or 0.1)) / 0.4, 0, 1)
@@ -1016,8 +1028,12 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	end
 
 	-- sorties
+	-- régime montré (son, compte-tours, télémétrie) : lissé sur RpmDisplayTau pour qu'aucun palier d'un pas de
+	-- simulation (passage de rapport, rupteur) ne s'entende comme une coupure
+	local tau = T.RpmDisplayTau or 0.06
+	S.rpmShown = S.rpmShown and (S.rpmShown + (S.rpm - S.rpmShown) * math.clamp(dt / tau, 0, 1)) or S.rpm
 	local out = {
-		wheels = {}, omega = {}, travel = {}, rpm = S.rpm, gear = S.gear, clutch = S.clutch,
+		wheels = {}, omega = {}, travel = {}, rpm = S.rpmShown, rpmRaw = S.rpm, gear = S.gear, clutch = S.clutch,
 		speed = vf, lock = lock, steerAngle = S.steerAngle, reverse = S.gear < 0, burnout = burnout,
 		drive = driveIn, -- accélérateur effectif (S en marche arrière) : charge du son moteur, retours de flamme
 	}

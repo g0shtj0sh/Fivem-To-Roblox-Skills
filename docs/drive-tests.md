@@ -198,3 +198,23 @@ lançait plus le burn → passage en 1ʳᵉ et burn, comme GTA.
 
 **Non fait** : son (génération indisponible sur le compte ; le son de GTA n'est pas repris, il appartient à Rockstar),
 rendu chez un 2ᵉ joueur, téléphone.
+
+## Passage de rapport sans coupure (2026-11-15)
+
+Signalé par l'utilisateur sur la m422 : au changement de vitesse, le son moteur et le compte-tours « coupent net »
+au lieu de redescendre progressivement puis de remonter.
+
+- **Cause démontrée (mesure image par image en Play, plein gaz, m422)** : pendant que l'embrayage patine, le
+  régime était `roues x embrayage + libre x (1 - embrayage)`, la formule que GTA applique **une fois par image**,
+  mais ici à **chaque sous-pas** de la simulation : elle convergeait en deux images. Régime réel 1→2 :
+  5 685 → 3 460 → 2 861 tr/min en 0,03 s ; régime affiché : saut max 884 tr/min d'une image à l'autre.
+  (L'attribut `Rpm` répliqué, lu par les AUTRES joueurs, avance lui par paliers d'environ 0,1 s : ce n'est pas
+  ce que le conducteur entend, sa télémétrie est locale et à chaque image.)
+- **Correction** (`VehicleDynamics.lua`) : pendant le passage, le régime rejoint celui du nouveau rapport à
+  `ShiftRpmRate` (10/s) x embrayage, en fonction du temps ; régime montré lissé sur `RpmDisplayTau` (0,06 s),
+  régime brut gardé dans `out.rpmRaw`. La traction n'est pas touchée (gaz déjà coupés pendant le passage).
+- **Mesure après** (même protocole, runtime `19180864d780`) : 1→2 à 38 km/h, 5 540 → 3 040 tr/min en 0,53 s
+  (embrayage 1,8/s), saut max 121 tr/min par image ; 2→3 à 78 km/h, 6 760 → 4 620 en 0,53 s, saut max 96.
+  Passages aux mêmes vitesses qu'avant (37,6 / 77,6 km/h). Rendu sonore jugé seulement par la mesure : à
+  confirmer à l'oreille par l'utilisateur.
+- Reste possible : l'attribut `Rpm` répliqué pourrait être interpolé côté autres joueurs (non fait).
