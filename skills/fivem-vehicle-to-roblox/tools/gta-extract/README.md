@@ -80,6 +80,20 @@ Inutile de traiter les `.rpf` du pack en plus : ils contiennent les mêmes `.awc
 l'ordre de grandeur **1 Go de `.wav` pour 1 Go de `.awc`** — le son est déjà du PCM, le
 déchiffrement ne le décompresse pas.
 
+Certains packs ne livrent **que** des `.rpf`, sans les `.awc` à côté. Les passer alors un par un :
+l'archive est parcourue, archives imbriquées comprises, et chacune donne un
+`<NOM>.rpf_extrait/` dans la sortie.
+
+```bash
+for f in "$SRC"/*.rpf; do "$EXE" export "$f" -o "$OUT"; done
+```
+
+```powershell
+Get-ChildItem "<dossier du pack>" -Filter *.rpf | ForEach-Object {
+    & $exe export $_.FullName -o "<dossier de sortie>"
+}
+```
+
 ### Les noms de flux sortent souvent en `0x…`
 
 Dans un `.awc`, chaque flux est désigné par un **hash Jenkins** ; le nom en clair n'est stocké ni
@@ -90,10 +104,28 @@ réapparaît que si la chaîne exacte est connue d'avance.
 `gta-extract` en retrouve une partie : beaucoup de conteneurs nomment leurs flux
 `<nom du conteneur>_<rôle>` (`4_cylinder_saloon_1_start`, `4x4_engine_idle`), alors avant de lire
 un `.awc` l'outil sème l'index avec cette combinaison pour tous les rôles listés dans
-`extra_strings.txt`. Le rendement dépend du conteneur : mesuré sur un pack complet, **environ la
-moitié des flux de `STREAMED_VEHICLES`** y répondent, contre quasiment rien dans les conteneurs de
-bruitages (`RESIDENT`, `WEAPONS_PLAYER`), qui emploient d'autres conventions. Le reste garde son
-hash.
+`extra_strings.txt`.
+
+Le rendement dépend entièrement du conteneur. Mesuré sur un pack de 1 323 conteneurs
+(36 837 flux), part des flux sortis avec un nom en clair :
+
+| Conteneur | Flux nommés |
+|---|---|
+| `STREAMED_VEHICLES_GRANULAR_NPC` | 100 % |
+| `STREAMED_VEHICLES_GRANULAR` | 76 % |
+| `STREAMED_VEHICLES` | 55 % |
+| `STREAMED_VEHICLES_LOW_LATENCY` | 0 % |
+| `PAIN`, `RESIDENT`, `WEAPONS_PLAYER` | ~0 % |
+| voix (`S_MISC`, `S_FULL_SER`) | ~100 % |
+
+Les voix sortent nommées sans rien faire : leurs noms de ligne sont standards et déjà dans l'index
+de CodeWalker. Les bruitages et `LOW_LATENCY` emploient des conventions que le préfixe
+`<conteneur>_<rôle>` ne couvre pas.
+
+Sur les flux de véhicules restés anonymes du pack mesuré, 255 des 292 hash n'apparaissaient que
+dans **un seul** conteneur : des noms propres au pack, hors de portée. Les deux hash partagés par
+la moitié des conteneurs ont résisté à une recherche de 16 millions de combinaisons de vocabulaire
+audio. Autrement dit : ce qui reste en `0x…` y reste.
 
 Pour reconnaître un son resté anonyme, lire son en-tête dans le `.xml` : codec, fréquence,
 nombre d'échantillons, points de boucle. Deux flux de même durée dans un conteneur de véhicule

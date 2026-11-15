@@ -255,7 +255,9 @@ internal static class Program
                     if (string.IsNullOrEmpty(xml)) throw new Exception("conversion XML vide");
                     var xmlPath = Path.Combine(outDir, fe.Name + ".xml");
                     File.WriteAllText(xmlPath, xml, new UTF8Encoding(false));
-                    Console.WriteLine(Json(("status", "ok"), ("input", path + "!" + relPath), ("xml", xmlPath), ("assets", "")));
+                    var assetDir = Path.Combine(outDir, fe.GetShortName());
+                    Console.WriteLine(Json(("status", "ok"), ("input", path + "!" + relPath), ("xml", xmlPath),
+                        ("assets", Directory.Exists(assetDir) ? assetDir : "")));
                     ok++;
                 }
                 catch (Exception ex)
