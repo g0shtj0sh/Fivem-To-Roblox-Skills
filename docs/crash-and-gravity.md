@@ -29,3 +29,9 @@ brolver-rp : **1,5** (choisi parmi ×1 / ×1,5 / ×2). Mesuré : chute libre 14,
 
 ## Non fait / ouvert
 - Pas de tangage au choc (arrêt « rigide », caisse à plat) : non comparé à GTA (aucune trace de choc).
+
+## Retour en arrière sur les chocs (2026-11-15, même soir) — décision de l'utilisateur
+« Reviens à ce qu'on avait avant… je veux retrouver les rebonds et tout d'avant, juste avec une gravité un peu plus
+lourde. » → `ApplyCrashMaterial` retiré du runtime, du Setup et du serveur ; pièces de collision remises sans
+`CustomPhysicalProperties` (Plastic, élasticité 0,5). Vérifié : 106 km/h → −37,1 km/h (identique à l'état
+initial). Gravité en vol ×1,5 gardée (14,55 m/s²). Les mesures ci-dessus restent valables comme historique.

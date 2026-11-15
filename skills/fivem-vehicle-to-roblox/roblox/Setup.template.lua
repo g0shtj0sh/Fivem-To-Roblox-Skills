@@ -944,11 +944,6 @@ if okColl then
 	elseif carve.failed and #carve.failed > 0 then
 		warnf("Passages de roues non creusés : %s", table.concat(carve.failed, " ; "))
 	end
-	-- coque sans rebond (après le creusement, qui remplace des pièces)
-	local okMat, matErr = pcall(CollisionMod.ApplyCrashMaterial, model)
-	if not okMat then
-		warnf("VehicleCollision.ApplyCrashMaterial : %s", tostring(matErr))
-	end
 else
 	warnf("Impossible de charger VehicleCollision dans Studio : %s", tostring(CollisionMod))
 end

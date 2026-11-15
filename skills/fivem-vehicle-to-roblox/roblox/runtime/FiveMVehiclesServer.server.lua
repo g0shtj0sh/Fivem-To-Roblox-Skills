@@ -13,7 +13,6 @@ local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Custom = require(folder:WaitForChild("VehicleCustomization"))
 local Access = require(folder:WaitForChild("VehicleAccess"))
 local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
-local CollisionMod = require(folder:WaitForChild("VehicleCollision"))
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -172,7 +171,6 @@ end
 
 local function setupVehicle(model)
 	Access.TagCollision(model)
-	CollisionMod.ApplyCrashMaterial(model) -- véhicules installés avant le correctif compris (idempotent)
 	Access.Watch(model)
 	noTouchSeats(model)
 	local root = model.PrimaryPart
