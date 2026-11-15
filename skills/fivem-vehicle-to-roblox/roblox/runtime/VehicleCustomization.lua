@@ -12,10 +12,23 @@
 --   Custom.SetLivery(car, 1)                  -- 0 = aucune
 --   Custom.SetExtra(car, 1, false)
 --   local save = Custom.Serialize(car) ; Custom.Apply(otherCar, save)
+--   Custom.SetPaint(car, "Primary", 28, "Metallic")   -- peinture GTA n° 28 (VehiclePaints), finition
+--
+-- Menu de custom côté client (vMenu ou autre) : il envoie VehicleEvent « Custom » (voir
+-- Custom.HandleRemote) ; le serveur refuse tout tant que le jeu n'a pas posé sa règle
+-- d'autorisation par Custom.SetRemotePolicy(function(player, model, op) ... end).
 
 local Custom = {}
 
 local PAINT_LAYERS = { "Primary", "Secondary", "Pearlescent", "Wheel", "InteriorTrim", "Dashboard" }
+Custom.PaintLayers = PAINT_LAYERS
+
+-- Palette GTA (module VehiclePaints, voisin de celui-ci), chargée à la première peinture.
+local paintsModule
+local function paints()
+	paintsModule = paintsModule or require(script.Parent:WaitForChild("VehiclePaints"))
+	return paintsModule
+end
 
 local function getConfig(model)
 	local cfg = model:FindFirstChild("VehicleConfig")
@@ -131,6 +144,141 @@ function Custom.SetPaintMaterial(model, layer, material, reflectance)
 			end
 		end
 	end
+end
+
+-- ------------------------------------------------------------------ peintures GTA et finitions
+-- Finition -> aspect Roblox des pièces peintes SANS SurfaceAppearance (une SurfaceAppearance
+-- impose son propre rendu : seule la couleur s'y applique). Les pièces visuelles du convertisseur
+-- sont Massless et sans collision : changer leur matériau ne touche pas la conduite.
+Custom.FinishLooks = {
+	Classic = { Material = Enum.Material.SmoothPlastic, Reflectance = 0.04 },
+	Metallic = { Material = Enum.Material.SmoothPlastic, Reflectance = 0.12 },
+	Pearl = { Material = Enum.Material.SmoothPlastic, Reflectance = 0.2 },
+	Matte = { Material = Enum.Material.SmoothPlastic, Reflectance = 0 },
+	Metal = { Material = Enum.Material.Metal, Reflectance = 0.08 },
+	Chrome = { Material = Enum.Material.SmoothPlastic, Reflectance = 0.6 },
+	Worn = { Material = Enum.Material.Plastic, Reflectance = 0 },
+}
+
+function Custom.SetFinish(model, layer, finish)
+	assert(table.find(PAINT_LAYERS, layer), "Couche de peinture inconnue : " .. tostring(layer))
+	local look = Custom.FinishLooks[finish]
+	assert(look, "Finition inconnue : " .. tostring(finish))
+	model:SetAttribute("Finish_" .. layer, finish)
+	for _, part in ipairs(visualParts(model)) do
+		if part:GetAttribute("PaintLayer") == layer and not part:FindFirstChildOfClass("SurfaceAppearance") then
+			part.Material = look.Material
+			part.Reflectance = look.Reflectance
+		end
+	end
+end
+
+-- Peinture n° index de la palette GTA (VehiclePaints) sur une couche ; finish = finition voulue
+-- (sinon celle de la peinture : Metallic, Matte, Metal, Chrome, Worn...).
+function Custom.SetPaint(model, layer, index, finish)
+	local p = paints().Get(index)
+	assert(p, "Peinture inconnue : " .. tostring(index))
+	Custom.SetColor(model, layer, p.Color)
+	model:SetAttribute("Paint_" .. layer, index)
+	Custom.SetFinish(model, layer, finish or p.Finish)
+end
+
+-- Couleur libre (hors palette) : la couche n'a plus de numéro de peinture GTA.
+function Custom.SetCustomColor(model, layer, color)
+	Custom.SetColor(model, layer, color)
+	model:SetAttribute("Paint_" .. layer, nil)
+end
+
+-- Combinaison de couleurs d'usine n° n (1..#VehicleConfig.Colors.Variations, carvariations.meta) :
+-- { principale, secondaire, nacré, jantes } en index de palette.
+function Custom.SetFactoryColors(model, n)
+	local combos = (getConfig(model).Colors or {}).Variations or {}
+	local combo = combos[n]
+	assert(combo, "Combinaison d'usine inconnue : " .. tostring(n))
+	for i, layer in ipairs({ "Primary", "Secondary", "Pearlescent", "Wheel" }) do
+		local index = combo[i]
+		if index and paints().Get(index) then
+			Custom.SetPaint(model, layer, index)
+		end
+	end
+	model:SetAttribute("FactoryColors", n)
+end
+
+-- Couches de peinture qui ont au moins une pièce sur ce véhicule (un menu grise les autres).
+function Custom.LayersPresent(model)
+	local out = {}
+	for _, part in ipairs(visualParts(model)) do
+		local layer = part:GetAttribute("PaintLayer")
+		if layer then
+			out[layer] = true
+		end
+	end
+	return out
+end
+
+-- ------------------------------------------------------------------ remote « Custom » (menus client)
+-- Appel client : VehicleEvent:FireServer(model, "Custom", op, ...). Le skill ne sait pas qui a le
+-- droit de modifier un véhicule (admin, propriétaire, garage payant...) : sans règle posée par le jeu,
+-- tout est refusé. La règle reçoit (player, model, op) et renvoie true pour autoriser.
+local remotePolicy = nil
+
+function Custom.SetRemotePolicy(fn)
+	assert(fn == nil or type(fn) == "function", "SetRemotePolicy attend une fonction ou nil")
+	remotePolicy = fn
+end
+
+function Custom.GetRemotePolicy()
+	return remotePolicy
+end
+
+local function validLayer(layer)
+	return type(layer) == "string" and table.find(PAINT_LAYERS, layer) ~= nil
+end
+
+local function validIndex(n)
+	return type(n) == "number" and n == n and n % 1 == 0 and paints().Get(n) ~= nil
+end
+
+local function finite(x)
+	return type(x) == "number" and x == x and x > -math.huge and x < math.huge
+end
+
+-- Opérations acceptées et contrôle de leurs arguments (types, bornes, existence sur ce véhicule).
+-- Renvoie true si l'opération a été appliquée.
+function Custom.HandleRemote(model, op, a, b, c)
+	if op == "Paint" then
+		-- (layer, index, finish?)
+		if not validLayer(a) or not validIndex(b) then
+			return false
+		end
+		if c ~= nil and (type(c) ~= "string" or Custom.FinishLooks[c] == nil) then
+			return false
+		end
+		if not Custom.LayersPresent(model)[a] then
+			return false
+		end
+		Custom.SetPaint(model, a, b, c)
+		return true
+	elseif op == "Color" then
+		-- (layer, Color3) : couleur libre
+		if not validLayer(a) or typeof(b) ~= "Color3" then
+			return false
+		end
+		if not (finite(b.R) and finite(b.G) and finite(b.B)) or not Custom.LayersPresent(model)[a] then
+			return false
+		end
+		Custom.SetCustomColor(model, a, Color3.new(math.clamp(b.R, 0, 1), math.clamp(b.G, 0, 1), math.clamp(b.B, 0, 1)))
+		return true
+	elseif op == "Factory" then
+		-- (n) : combinaison d'usine
+		local combos = (getConfig(model).Colors or {}).Variations or {}
+		if type(a) ~= "number" or a ~= a or a % 1 ~= 0 or combos[a] == nil then
+			return false
+		end
+		Custom.SetFactoryColors(model, a)
+		return true
+	end
+	return false
 end
 
 -- ------------------------------------------------------------------ livrées
@@ -264,11 +412,13 @@ function Custom.GetOptions(model)
 		LiveryCount = store and #store:GetChildren() or 0,
 		Extras = cfg.Extras or {},
 		PaintLayers = PAINT_LAYERS,
+		LayersPresent = Custom.LayersPresent(model),
+		FactoryColors = #((cfg.Colors or {}).Variations or {}),
 		Performance = cfg.StatMods or {},
 	}
 end
 
-local SAVE_PREFIXES = { "Mod_", "Color_", "Extra_", "Perf_", "WindowDown_" }
+local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_" }
 local SAVE_KEYS = { "Livery", "WindowTint", "Neon", "NeonColor", "XenonColor", "PlateText" }
 
 function Custom.Serialize(model)
@@ -323,6 +473,12 @@ function Custom.Apply(model, data)
 		local c = model:GetAttribute("Color_" .. layer)
 		if c then
 			Custom.SetColor(model, layer, c)
+		end
+	end
+	for _, layer in ipairs(PAINT_LAYERS) do
+		local finish = model:GetAttribute("Finish_" .. layer)
+		if Custom.FinishLooks[finish] then
+			Custom.SetFinish(model, layer, finish)
 		end
 	end
 	Custom.SetLivery(model, model:GetAttribute("Livery") or 0)

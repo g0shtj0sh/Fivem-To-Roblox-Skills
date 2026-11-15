@@ -31,6 +31,30 @@ local VALID = {
 	SirenSound = { off = true, wail = true, yelp = true, priority = true },
 }
 
+-- Limite des demandes de custom par joueur (menus) : jeton par jeton, CUSTOM_RATE par seconde.
+local CUSTOM_RATE, CUSTOM_BURST = 8, 12
+local customBuckets = {}
+
+local function customAllowed(player)
+	local now = os.clock()
+	local b = customBuckets[player]
+	if not b then
+		b = { tokens = CUSTOM_BURST, t = now }
+		customBuckets[player] = b
+	end
+	b.tokens = math.min(CUSTOM_BURST, b.tokens + (now - b.t) * CUSTOM_RATE)
+	b.t = now
+	if b.tokens < 1 then
+		return false
+	end
+	b.tokens -= 1
+	return true
+end
+
+Players.PlayerRemoving:Connect(function(player)
+	customBuckets[player] = nil
+end)
+
 local function humanoidOf(player)
 	local char = player.Character
 	return char and char:FindFirstChildOfClass("Humanoid")
@@ -90,6 +114,21 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		Access.Exit(player)
 	elseif action == "Recover" then
 		Access.Recover(player, model)
+	elseif action == "Custom" then
+		-- custom depuis un menu client (VehicleCustomization.HandleRemote) : refusé tant que le jeu
+		-- n'a pas posé sa règle (Custom.SetRemotePolicy) ; débit limité ; arguments contrôlés.
+		local policy = Custom.GetRemotePolicy()
+		if not policy or type(key) ~= "string" or not customAllowed(player) then
+			return
+		end
+		local okPolicy, allowed = pcall(policy, player, model, key)
+		if not okPolicy or allowed ~= true then
+			return
+		end
+		local ok, err = pcall(Custom.HandleRemote, model, key, value, ...)
+		if not ok then
+			warn("[FiveMVehicles] custom refusée :", err)
+		end
 	elseif action == "Window" then
 		if type(key) ~= "string" or not isOccupantOrNear(player, model, 6) then
 			return

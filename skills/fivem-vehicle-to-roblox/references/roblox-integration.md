@@ -372,6 +372,62 @@ Custom.Apply(newCar, save)
 Les portes / capot / coffre s'ouvrent via ProximityPrompt (touche G) ou
 `car:SetAttribute("Door_door_dside_f", 1)` côté serveur.
 
+### Peintures GTA et finitions
+
+`ReplicatedStorage.FiveMVehicles.VehiclePaints` (module **généré** par `scripts/f2r/gta_colors.py`, partagé
+client / serveur) : les 160 peintures de véhicule GTA V par index carvariations (`Name` d'origine, `Label`
+français, `Color`, `Group`, `Finish` par défaut). `Paints.Group("Classic" | "Matte" | "Metals" | "Chrome" |
+"Utility" | "Worn" | "Alloy")` donne la liste d'un menu, `Paints.Nearest(color)` la peinture la plus proche.
+
+```lua
+Custom.SetPaint(car, "Primary", 28)              -- peinture n° 28 (Rouge Torino), finition par défaut (Metallic)
+Custom.SetPaint(car, "Primary", 28, "Classic")   -- même teinte, vernis classique
+Custom.SetCustomColor(car, "Primary", Color3.fromRGB(10, 200, 90))  -- hors palette (Paint_Primary effacé)
+Custom.SetFactoryColors(car, 2)                  -- combinaison d'usine n° 2 (VehicleConfig.Colors.Variations)
+Custom.LayersPresent(car)                        -- { Primary = true, ... } couches qui ont des pièces
+```
+
+Attributs posés (répliqués, sauvés par `Serialize`) : `Color_<couche>`, `Paint_<couche>` (index, absent pour
+une couleur libre), `Finish_<couche>`, `FactoryColors`. Finitions (`Custom.FinishLooks`) : Classic, Metallic,
+Pearl, Matte, Metal, Chrome, Worn → matériau + `Reflectance` des pièces peintes **sans** SurfaceAppearance (une
+SurfaceAppearance impose son rendu : seule la couleur s'y applique). Les pièces visuelles sont `Massless` sans
+collision : la finition ne change pas la conduite. Le nacré (`Pearlescent`) n'a de pièce que si le modèle en a.
+
+## Brancher un menu de custom (vMenu ou autre)
+
+Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a accès) appartient au jeu.
+
+1. **Côté serveur, le jeu pose sa règle d'autorisation** — sans elle, toute demande est refusée :
+   ```lua
+   local Custom = require(game.ReplicatedStorage.FiveMVehicles.VehicleCustomization)
+   Custom.SetRemotePolicy(function(player, model, op)
+   	return isAdmin(player) and estAssisDans(player, model) -- règle du jeu (admin, propriétaire, garage...)
+   end)
+   ```
+   Le module est le même pour tous les scripts serveur : l'ordre de chargement ne compte pas.
+2. **Côté client, le menu envoie** `FiveMVehicles.VehicleEvent:FireServer(model, "Custom", op, ...)` :
+
+   | op | arguments | effet |
+   |---|---|---|
+   | `"Paint"` | couche, index de palette, finition ou nil | `SetPaint` |
+   | `"Color"` | couche, `Color3` | `SetCustomColor` |
+   | `"Factory"` | n | `SetFactoryColors` |
+
+   Le serveur (`FiveMVehiclesServer`) limite le débit (8 par seconde, rafale 12, par joueur), appelle la règle,
+   puis `Custom.HandleRemote` contrôle chaque argument (couche connue **et présente** sur ce véhicule, index
+   entier de la palette, finition connue, couleur finie, combinaison existante). Rien n'est renvoyé : le menu
+   relit les attributs du modèle (`Paint_…`, `Color_…`, `Finish_…`) pour afficher l'état.
+3. **Ce que le menu affiche** : il `require` `VehiclePaints` (listes et libellés) et lit
+   `Custom.LayersPresent(model)` pour griser les couches absentes, `VehicleConfig.Colors.Variations` pour les
+   combinaisons d'usine.
+
+Correspondance avec vMenu (Options du véhicule › Couleurs) : Couleur principale / secondaire → `Primary` /
+`Secondary`, groupes Chrome / Classique / Mat / Métallisé / Métaux / Utilitaires / Usées → `Paints.Group` avec
+la finition Chrome / Classic / Matte / Metallic / Metal / Classic / Worn ; Nacré → couche `Pearlescent` ;
+Jantes → `Wheel` (`Alloy` + `Classic`) ; Intérieur / Tableau de bord → `InteriorTrim` / `Dashboard` ; Couleur
+personnalisée → op `"Color"` ; Combinaison d'usine → op `"Factory"`. Caméléon : pas de peinture dans la palette
+(DLC), rien à brancher.
+
 ## Limites Roblox prises en compte
 
 - ≤ 20 000 triangles par MeshPart : découpage automatique à 19 000 (`--max-tris`).

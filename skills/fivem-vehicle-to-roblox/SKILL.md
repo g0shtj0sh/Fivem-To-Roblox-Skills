@@ -225,7 +225,9 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   propriétaire), `Joints/` (Motor6D : roues, portes, capot, coffre, volant, gyrophares), `Seats/`
   (`DriverSeat`…), `Liveries/`, `Neons/`, sons, lumières, `VehicleConfig` (ModuleScript), tag `FiveMVehicle`.
 - `ReplicatedStorage.FiveMVehicles` : `VehicleInput` (contrôles), `VehicleRuntime` (rendu client),
-  `VehicleCustomization` (API custom serveur), remotes ; `FiveMVehiclesServer` ; `FiveMVehiclesClient`.
+  `VehicleCustomization` (API custom serveur), `VehiclePaints` (palette GTA), remotes ; `FiveMVehiclesServer` ;
+  `FiveMVehiclesClient`. Un menu de custom du jeu (vMenu…) se branche par l'action `Custom` de `VehicleEvent`
+  après `Custom.SetRemotePolicy` : `references/roblox-integration.md`, « Brancher un menu de custom ».
 - Contrôles par défaut (GTA-like) : **F monter / descendre** (invite par siège, côté portière ; manette Y ;
   bouton à l'écran sur mobile), W/S/A/D, Espace frein à main (un passager qui saute descend aussi), E klaxon,
   H phares (off/codes/pleins), ←/→ clignotants, ↓ warnings, Q sirène, R tonalité, Z moteur, G portes,

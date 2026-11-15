@@ -171,3 +171,131 @@ def rgb(index: int, default=(0.8, 0.8, 0.8)) -> list[float]:
     h = entry[1].lstrip("#")
     return [round(int(h[i:i + 2], 16) / 255.0, 4) for i in (0, 2, 4)]
 
+
+
+# ------------------------------------------------------------------ module runtime VehiclePaints
+# Libellés français (affichés par un menu de custom, ex. vMenu) : le groupe donne déjà la finition,
+# le libellé ne la répète pas (« Metallic Torino Red » -> « Rouge Torino » dans le groupe Métallisé).
+LABELS_FR = {
+    0: "Noir", 1: "Noir graphite", 2: "Noir acier", 3: "Argent foncé", 4: "Argent", 5: "Argent bleuté",
+    6: "Gris acier", 7: "Argent ombré", 8: "Argent pierre", 9: "Argent nuit", 10: "Gris canon",
+    11: "Gris anthracite", 12: "Noir", 13: "Gris", 14: "Gris clair", 15: "Noir", 16: "Noir poly",
+    17: "Argent foncé", 18: "Argent", 19: "Gris canon", 20: "Argent ombré", 21: "Noir", 22: "Graphite",
+    23: "Gris argent", 24: "Argent", 25: "Argent bleuté", 26: "Argent ombré", 27: "Rouge", 28: "Rouge Torino",
+    29: "Rouge Formula", 30: "Rouge flamme", 31: "Rouge gracieux", 32: "Rouge grenat", 33: "Rouge désert",
+    34: "Rouge cabernet", 35: "Rouge bonbon", 36: "Orange aurore", 37: "Or classique", 38: "Orange",
+    39: "Rouge", 40: "Rouge foncé", 41: "Orange", 42: "Jaune", 43: "Rouge", 44: "Rouge vif",
+    45: "Rouge grenat", 46: "Rouge", 47: "Rouge doré", 48: "Rouge foncé", 49: "Vert foncé", 50: "Vert course",
+    51: "Vert océan", 52: "Vert olive", 53: "Vert", 54: "Bleu-vert essence", 55: "Vert citron",
+    56: "Vert foncé", 57: "Vert", 58: "Vert foncé", 59: "Vert", 60: "Vert d'eau", 61: "Bleu nuit",
+    62: "Bleu foncé", 63: "Bleu saxe", 64: "Bleu", 65: "Bleu marin", 66: "Bleu port", 67: "Bleu diamant",
+    68: "Bleu surf", 69: "Bleu nautique", 70: "Bleu vif", 71: "Bleu violet", 72: "Bleu spinnaker",
+    73: "Bleu ultra", 74: "Bleu ciel vif", 75: "Bleu foncé", 76: "Bleu nuit", 77: "Bleu", 78: "Bleu écume",
+    79: "Bleu éclair", 80: "Bleu Maui", 81: "Bleu vif", 82: "Bleu foncé", 83: "Bleu", 84: "Bleu nuit",
+    85: "Bleu foncé", 86: "Bleu", 87: "Bleu clair", 88: "Jaune taxi", 89: "Jaune course", 90: "Bronze",
+    91: "Jaune canari", 92: "Citron vert", 93: "Champagne", 94: "Beige Pueblo", 95: "Ivoire foncé",
+    96: "Brun chocolat", 97: "Brun doré", 98: "Brun clair", 99: "Beige paille", 100: "Brun mousse",
+    101: "Brun bistre", 102: "Hêtre", 103: "Hêtre foncé", 104: "Orange chocolat", 105: "Sable",
+    106: "Sable délavé", 107: "Crème", 108: "Brun", 109: "Brun moyen", 110: "Brun clair", 111: "Blanc",
+    112: "Blanc givré", 113: "Beige miel", 114: "Brun", 115: "Brun foncé", 116: "Beige paille",
+    117: "Acier brossé", 118: "Acier noir brossé", 119: "Aluminium brossé", 120: "Chrome",
+    121: "Blanc cassé", 122: "Blanc cassé", 123: "Orange", 124: "Orange clair", 125: "Vert Securicor",
+    126: "Jaune taxi", 127: "Bleu police", 128: "Vert", 129: "Brun", 130: "Orange pâle", 131: "Blanc",
+    132: "Blanc", 133: "Vert armée", 134: "Blanc pur", 135: "Rose vif", 136: "Rose saumon",
+    137: "Rose vermillon", 138: "Orange vif", 139: "Vert pomme", 140: "Bleu cyan", 141: "Noir bleuté",
+    142: "Noir violacé", 143: "Noir rougeâtre", 144: "Vert chasseur", 145: "Violet", 146: "Bleu très foncé",
+    147: "Noir atelier", 148: "Violet", 149: "Violet foncé", 150: "Rouge lave", 151: "Vert forêt",
+    152: "Vert olive", 153: "Brun désert", 154: "Beige désert", 155: "Vert feuillage",
+    156: "Alliage d'origine", 157: "Bleu Epsilon", 158: "Or pur", 159: "Or brossé",
+}
+
+METALS = (117, 118, 119, 158, 159)
+CHROME = (120,)
+ALLOY = (156,)
+
+
+def group(index: int) -> str:
+    """Groupe de teintes (comme les menus de custom GTA / vMenu) déduit du nom de la palette :
+    Classic (vernis classiques et métallisés : même liste, finition différente), Matte, Metals,
+    Chrome, Utility, Worn, Alloy (jantes seulement)."""
+    if index in METALS:
+        return "Metals"
+    if index in CHROME:
+        return "Chrome"
+    if index in ALLOY:
+        return "Alloy"
+    name = PALETTE[index][0].lower()
+    if name.startswith("matte"):
+        return "Matte"
+    if name.startswith("util"):
+        return "Utility"
+    if name.startswith("worn"):
+        return "Worn"
+    return "Classic"
+
+
+DEFAULT_FINISH = {"Classic": "Metallic", "Matte": "Matte", "Metals": "Metal", "Chrome": "Chrome",
+                  "Utility": "Classic", "Worn": "Worn", "Alloy": "Metallic"}
+
+
+def lua_module() -> str:
+    """Source de roblox/runtime/VehiclePaints.lua (généré : tests/test_paints.py vérifie la copie)."""
+    rows = []
+    for i in sorted(PALETTE):
+        name, hexa = PALETTE[i]
+        g = group(i)
+        label = LABELS_FR[i].replace('"', '\\"')
+        name = name.replace('"', '\\"')
+        rows.append(f'\t[{i}] = {{ Name = "{name}", Label = "{label}", Hex = "{hexa}", '
+                    f'Group = "{g}", Finish = "{DEFAULT_FINISH[g]}" }},\n')
+    return (
+        "--!nonstrict\n"
+        "-- FiveMVehicles/VehiclePaints (ModuleScript, ReplicatedStorage) — GÉNÉRÉ par\n"
+        "-- scripts/f2r/gta_colors.py (lua_module) : ne pas éditer à la main.\n"
+        "-- Palette des 160 peintures de véhicule GTA V (index carvariations / vMenu) : nom d'origine,\n"
+        "-- libellé français, couleur, groupe de menu et finition par défaut. Partagée client / serveur :\n"
+        "-- un menu de custom liste Paints.Group(\"Classic\") ; le serveur applique par\n"
+        "-- VehicleCustomization.SetPaint(model, layer, index, finish).\n"
+        "-- Source des couleurs : documentation alt:V / rebar-altv (docs/data/vehicle-colors.md).\n\n"
+        "local Paints = {}\n\n"
+        "Paints.List = {\n" + "".join(rows) + "}\n\n"
+        "-- Groupes affichés par un menu (ordre de GTA / vMenu) et finitions applicables.\n"
+        'Paints.Groups = { "Classic", "Matte", "Metals", "Chrome", "Utility", "Worn", "Alloy" }\n'
+        'Paints.Finishes = { "Classic", "Metallic", "Pearl", "Matte", "Metal", "Chrome", "Worn" }\n\n'
+        "for _, p in pairs(Paints.List) do\n"
+        "\tp.Color = Color3.fromHex(p.Hex)\n"
+        "end\n\n"
+        "function Paints.Get(index)\n"
+        "\treturn type(index) == \"number\" and Paints.List[index] or nil\n"
+        "end\n\n"
+        "-- Index de la palette (ordre croissant) d'un groupe.\n"
+        "function Paints.Group(name)\n"
+        "\tlocal out = {}\n"
+        "\tfor i = 0, 159 do\n"
+        "\t\tlocal p = Paints.List[i]\n"
+        "\t\tif p and p.Group == name then\n"
+        "\t\t\ttable.insert(out, i)\n"
+        "\t\tend\n"
+        "\tend\n"
+        "\treturn out\n"
+        "end\n\n"
+        "-- Peinture de la palette la plus proche d'une couleur (retour à une couleur du jeu).\n"
+        "function Paints.Nearest(color)\n"
+        "\tlocal best, bestD = 0, math.huge\n"
+        "\tfor i, p in pairs(Paints.List) do\n"
+        "\t\tlocal d = (p.Color.R - color.R) ^ 2 + (p.Color.G - color.G) ^ 2 + (p.Color.B - color.B) ^ 2\n"
+        "\t\tif d < bestD then\n"
+        "\t\t\tbest, bestD = i, d\n"
+        "\t\tend\n"
+        "\tend\n"
+        "\treturn best\n"
+        "end\n\n"
+        "return Paints\n"
+    )
+
+
+if __name__ == "__main__":
+    import pathlib
+    out = pathlib.Path(__file__).resolve().parents[2] / "roblox" / "runtime" / "VehiclePaints.lua"
+    out.write_text(lua_module(), encoding="utf-8")
+    print("écrit", out)

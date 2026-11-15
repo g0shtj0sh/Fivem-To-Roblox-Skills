@@ -886,6 +886,7 @@ end
 if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleRuntime", SOURCES.VehicleRuntime)
 	upsert(folder, "ModuleScript", "VehicleCustomization", SOURCES.VehicleCustomization)
+	upsert(folder, "ModuleScript", "VehiclePaints", SOURCES.VehiclePaints)
 	upsert(folder, "ModuleScript", "VehicleInput", SOURCES.VehicleInput)
 	upsert(folder, "ModuleScript", "VehicleAccess", SOURCES.VehicleAccess)
 	upsert(folder, "ModuleScript", "VehicleDynamics", SOURCES.VehicleDynamics)
