@@ -167,6 +167,20 @@ end
 -- ------------------------------------------------------------------ groupes
 local groups = {}
 
+-- Sons du véhicule : couche moteur (« Sounds ») et, depuis 2026-11-15, couche échappement (« SoundsExhaust »).
+local function vehicleSounds()
+	local list = {}
+	for _, n in ipairs({ "Sounds", "SoundsExhaust" }) do
+		local a = model:FindFirstChild(n, true)
+		for _, s in ipairs(a and a:GetChildren() or {}) do
+			if s:IsA("Sound") then
+				table.insert(list, s)
+			end
+		end
+	end
+	return list
+end
+
 function groups.runtime()
 	local folder = ReplicatedStorage:FindFirstChild("FiveMVehicles")
 	check(folder ~= nil, "ReplicatedStorage.FiveMVehicles", folder and ("RuntimeVersion " .. tostring(folder:GetAttribute("RuntimeVersion"))) or "absent")
@@ -974,28 +988,28 @@ function groups.sounds()
 		return
 	end
 	local empty, total, list = 0, 0, {}
-	for _, s in ipairs(folder:GetChildren()) do
-		if s:IsA("Sound") then
-			total += 1
-			if s.SoundId == "" then
-				empty += 1
-				table.insert(list, s.Name)
-			end
+	for _, s in ipairs(vehicleSounds()) do
+		total += 1
+		if s.SoundId == "" then
+			empty += 1
+			table.insert(list, s.Name)
 		end
 	end
 	check(total > 0 and empty == 0, "SoundId renseignés", fmt("%d/%d%s", total - empty, total, empty > 0 and (" ; vides : " .. table.concat(list, ", ")) or ""))
 	local loops = (CONFIG.Audio and CONFIG.Audio.EngineLoops) or {}
+	-- deux couches depuis 2026-11-15 : moteur dans « Sounds », échappement dans « SoundsExhaust »
+	local exhaust = model:FindFirstChild("SoundsExhaust", true)
 	local missingLoops = 0
 	for _, l in ipairs(loops) do
-		if not folder:FindFirstChild(l.Name) then
+		if not folder:FindFirstChild(l.Name) and not (exhaust and exhaust:FindFirstChild(l.Name)) then
 			missingLoops += 1
 		end
 	end
 	check(#loops > 0 and missingLoops == 0, "boucles moteur présentes", fmt("%d boucle(s), %d absente(s)", #loops, missingLoops))
 	if context == "client" then
 		local sounds = {}
-		for _, s in ipairs(folder:GetChildren()) do
-			if s:IsA("Sound") and s.SoundId ~= "" then
+		for _, s in ipairs(vehicleSounds()) do
+			if s.SoundId ~= "" then
 				table.insert(sounds, s)
 			end
 		end
@@ -1526,8 +1540,8 @@ function groups.audio()
 	local t0 = os.clock()
 	repeat
 		task.wait(0.1)
-		for _, s in ipairs((model:FindFirstChild("Sounds", true) or Instance.new("Folder")):GetChildren()) do
-			if s:IsA("Sound") and s.IsPlaying and s.Volume > 0.01 then
+		for _, s in ipairs(vehicleSounds()) do
+			if s.IsPlaying and s.Volume > 0.01 then
 				playing[s.Name] = true
 			end
 		end
