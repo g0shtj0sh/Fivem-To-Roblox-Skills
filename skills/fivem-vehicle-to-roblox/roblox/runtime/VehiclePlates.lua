@@ -12,6 +12,7 @@
 --   Plates.Assign(car)                                  -- plaque unique générée
 --   Plates.Assign(car, "AB12CDE", { OwnerUserId = 123 }) -- plaque imposée (code du jeu, non filtrée)
 --   local ok, why = Plates.RequestCustom(player, car, "MA CAISSE") -- saisie d'un joueur : filtrée
+--       (Plates.FilterText ; Roblox ne filtre rien dans Studio) ; plus de 8 caractères → false, "too_long"
 --   local entry = Plates.Lookup("46EEK572")            -- { Model, OwnerUserId, Text } ou nil
 --   Plates.SetStyle(car, 2)
 --   Plates.RegisterStyle(2, { Name = "Jaune", BackgroundColor = Color3.fromRGB(250, 205, 30),
@@ -63,13 +64,19 @@ function Plates.GetStyle(index)
 end
 
 -- ------------------------------------------------------------------ texte
-function Plates.Normalize(text)
+-- Texte nettoyé (A-Z, 0-9, espaces simples), SANS couper à Plates.Letters.
+function Plates.Clean(text)
 	text = string.upper(tostring(text or ""))
 	text = string.gsub(text, "[^A-Z0-9 ]", "")
 	text = string.gsub(text, "^%s+", "")
 	text = string.gsub(text, "%s+$", "")
 	text = string.gsub(text, "%s+", " ")
-	return string.sub(text, 1, Plates.Letters)
+	return text
+end
+
+-- Texte nettoyé et coupé à Plates.Letters (recherche, plaque imposée par le jeu).
+function Plates.Normalize(text)
+	return string.sub(Plates.Clean(text), 1, Plates.Letters)
 end
 
 function Plates.IsValid(text)
@@ -160,6 +167,19 @@ function Plates.RenderGui(gui, text, style)
 	if not holder then
 		return
 	end
+	-- véhicule installé AVANT les plaques à cases : « PlateText » y est un simple TextLabel. On lui donne le
+	-- texte tel quel (des cases dessinées dedans se superposaient à l'ancien texte : plaque illisible).
+	-- Pour avoir les vraies plaques, refaire le Setup du véhicule avec ce runtime.
+	if holder:IsA("TextLabel") then
+		for _, c in ipairs(holder:GetChildren()) do
+			if c:IsA("GuiObject") or c:IsA("UIListLayout") then
+				c:Destroy()
+			end
+		end
+		holder.Text = text
+		holder.TextColor3 = style.TextColor or holder.TextColor3
+		return
+	end
 	for _, c in ipairs(holder:GetChildren()) do
 		if not c:IsA("UIListLayout") then
 			c:Destroy()
@@ -217,10 +237,15 @@ end
 -- ------------------------------------------------------------------ registre (serveur)
 local live = {} -- [TEXT] = { Model, OwnerUserId, Text }
 local byModel = {} -- [model] = TEXT
+local watched = {} -- [model] = connexion Destroying (libération de la plaque)
 
 -- Stockage persistant (facultatif) : { Reserve(text, info) -> bool, Release(text), Get(text) -> info|nil }.
 -- Par défaut : aucun (plaques valables pour la session du serveur seulement).
 local store = nil
+function Plates.HasStore()
+	return store ~= nil
+end
+
 function Plates.SetStore(s)
 	store = s
 end
@@ -318,6 +343,18 @@ function Plates.Assign(model, text, info)
 	end
 	live[text] = { Model = model, OwnerUserId = owner, Text = text }
 	byModel[model] = text
+	-- libère la plaque quand le véhicule est détruit, quel que soit le chemin d'attribution
+	-- (Register, Custom.SetPlate, Custom.Apply d'une sauvegarde) ; une seule connexion par modèle
+	if not watched[model] then
+		watched[model] = model.Destroying:Connect(function()
+			release(model)
+			local c = watched[model]
+			watched[model] = nil
+			if c then
+				c:Disconnect()
+			end
+		end)
+	end
 	model:SetAttribute("PlateText", text)
 	if not model:GetAttribute("PlateStyle") then
 		model:SetAttribute("PlateStyle", Plates.DefaultStyle)
@@ -337,9 +374,6 @@ function Plates.Register(model)
 	if not ok then
 		ok, text = Plates.Assign(model, nil)
 	end
-	model.Destroying:Connect(function()
-		release(model)
-	end)
 	return text
 end
 
@@ -358,20 +392,37 @@ function Plates.Lookup(text)
 	return nil
 end
 
--- Plaque personnalisée demandée par un joueur : normalisée, filtrée par Roblox (obligatoire pour un
--- texte saisi par un joueur et affiché aux autres), unique. Renvoie true, texte  ou  false, raison
--- ("invalid", "filtered", "filter_error", "taken", "store").
+-- Filtre de texte d'une plaque saisie par un joueur : (player, text) -> texte filtré (erreur levée = échec).
+-- Par défaut le filtre Roblox (diffusion publique). ATTENTION : Roblox ne filtre RIEN dans Studio
+-- (le texte revient intact, grossièretés comprises) ; le refus « filtered » ne s'observe qu'en serveur
+-- publié, ou en remplaçant ce filtre pour un test. Un jeu peut le remplacer (liste maison en plus du filtre
+-- Roblox), jamais par un filtre plus permissif que celui de Roblox.
+local function robloxFilter(player, text)
+	local result = game:GetService("TextService"):FilterStringAsync(text, player.UserId, Enum.TextFilterContext.PublicChat)
+	return result:GetNonChatStringForBroadcastAsync()
+end
+Plates.FilterText = robloxFilter
+
+local studioWarned = false
+
+-- Plaque personnalisée demandée par un joueur : nettoyée (A-Z, 0-9, espace), filtrée (Plates.FilterText,
+-- obligatoire pour un texte saisi par un joueur et affiché aux autres), unique. Un texte trop long est
+-- REFUSÉ, pas coupé (le joueur doit voir la plaque qu'il a demandée). Renvoie true, texte  ou  false, raison
+-- ("invalid", "too_long", "filtered", "filter_error", "taken", "store").
 function Plates.RequestCustom(player, model, text)
-	local clean = Plates.Normalize(text)
+	local clean = Plates.Clean(text)
+	if #clean > Plates.Letters then
+		return false, "too_long"
+	end
 	if not Plates.IsValid(clean) then
 		return false, "invalid"
 	end
-	local TextService = game:GetService("TextService")
-	local ok, filtered = pcall(function()
-		local result = TextService:FilterStringAsync(clean, player.UserId, Enum.TextFilterContext.PublicChat)
-		return result:GetNonChatStringForBroadcastAsync()
-	end)
-	if not ok then
+	if not studioWarned and game:GetService("RunService"):IsStudio() and Plates.FilterText == robloxFilter then
+		studioWarned = true
+		warn("[VehiclePlates] Studio : Roblox ne filtre pas le texte ici ; les plaques personnalisées ne sont filtrées qu'en serveur publié")
+	end
+	local ok, filtered = pcall(Plates.FilterText, player, clean)
+	if not ok or type(filtered) ~= "string" then
 		return false, "filter_error"
 	end
 	if filtered ~= clean then

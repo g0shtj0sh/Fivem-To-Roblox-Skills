@@ -19,7 +19,8 @@
 		collision  hitbox fidèle : collision GTA présente, invisible, solide, bien soudée, précision
 		           réglée ; rayons depuis les 6 faces : écart hitbox / carrosserie visible (et ancienne boîte)
 		sounds     SoundId renseignés, boucles moteur présentes (client en Play : chargement réel)
-		custom     SetColor / SetMod / SetLivery / SetExtra / SetNeon / SetPlate, Serialize / Apply restaure l'état
+		custom     SetColor / SetMod / SetLivery / SetExtra / SetNeon / SetPlate / SetPlateStyle, plaques (Lookup,
+		           RequestCustom : filtré, trop long, accepté), Serialize / Apply restaure l'état
 		joints     Motor6D qui bougent (roues, volant, portes, capot, coffre) — client en Play (runtime actif)
 		lights     chaque LightRole passe en Neon selon Headlights / Brake / Indicator / Reverse / Engine / Siren — client en Play
 		audio      les boucles moteur jouent quand Engine = true — client en Play
@@ -1129,6 +1130,55 @@ function groups.custom()
 	end
 	check(okP and assigned == true and labels > 0 and good == labels, "SetPlate",
 		fmt("%d/%d plaque(s) à jour (texte et 7 caractères rendus)", good, labels))
+	-- registre des plaques : recherche, style, plaque personnalisée (filtre remplacé : Roblox ne filtre pas en Studio)
+	-- le registre de CE module Custom (même exemplaire que SetPlate)
+	local okPl, Plates = pcall(function()
+		return Custom.Plates and Custom.Plates()
+	end)
+	if not (okPl and type(Plates) == "table" and Plates.Lookup) then
+		rec("skip", "registre des plaques", "module VehiclePlates absent")
+	elseif labels == 0 then
+		rec("skip", "registre des plaques", "véhicule sans plaque (plateType)")
+	else
+		local found = Plates.Lookup("f2rtest")
+		check(found ~= nil and found.Model == model, "Plates.Lookup", found and ("trouvée : " .. tostring(found.Model and found.Model:GetFullName())) or "introuvable")
+		-- style : un style de test, appliqué à toutes les plaques, puis retiré (Apply remet le style sauvé)
+		local probe = Color3.fromRGB(250, 205, 30)
+		local hadStyle = Plates.Styles[9999]
+		Plates.RegisterStyle(9999, { Name = "F2R Verify", BackgroundColor = probe })
+		local okS = pcall(Custom.SetPlateStyle, model, 9999)
+		local styled = 0
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("SurfaceGui") and d.Name == "Plate" then
+				local bg = d:FindFirstChild("Background")
+				if bg and bg.BackgroundColor3 == probe and bg.BackgroundTransparency == 0 then
+					styled += 1
+				end
+			end
+		end
+		Plates.Styles[9999] = hadStyle
+		check(okS and styled == labels and model:GetAttribute("PlateStyle") == 9999, "SetPlateStyle",
+			fmt("%d/%d plaque(s) au fond du style de test", styled, labels))
+		-- plaque personnalisée : filtre de test qui masque « BADWORD »
+		local realFilter = Plates.FilterText
+		Plates.FilterText = function(_, t)
+			return (string.gsub(t, "BADWORD", "#######"))
+		end
+		local fake = { UserId = nil, Name = "F2RVerify" }
+		local okR1, r1, why1 = pcall(Plates.RequestCustom, fake, model, "badword")
+		local okR2, r2, why2 = pcall(Plates.RequestCustom, fake, model, "F2R TOO LONG")
+		local okR3, r3, why3 = true, nil, nil
+		local accepted = "non essayé (stockage persistant actif)"
+		if not (Plates.HasStore and Plates.HasStore()) then
+			okR3, r3, why3 = pcall(Plates.RequestCustom, fake, model, "f2r ok")
+			accepted = fmt("« f2r ok » → %s %s", tostring(r3), tostring(why3))
+		end
+		Plates.FilterText = realFilter
+		check(okR1 and r1 == false and why1 == "filtered", "RequestCustom refuse un texte filtré", fmt("%s %s", tostring(r1), tostring(why1)))
+		check(okR2 and r2 == false and why2 == "too_long", "RequestCustom refuse un texte trop long", fmt("%s %s", tostring(r2), tostring(why2)))
+		check(okR3 and (r3 == nil or (r3 == true and why3 == "F2R OK" and model:GetAttribute("PlateText") == "F2R OK")),
+			"RequestCustom accepte un texte normal", accepted)
+	end
 	-- sauvegarde / restauration
 	local changed = Custom.Serialize(model)
 	local okA, errA = pcall(Custom.Apply, model, snapshot)

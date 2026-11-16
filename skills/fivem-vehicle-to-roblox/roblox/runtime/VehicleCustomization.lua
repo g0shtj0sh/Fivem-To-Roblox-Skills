@@ -369,7 +369,13 @@ end
 
 -- Plaque imposée par le code du jeu (non filtrée ; pour une saisie de joueur : VehiclePlates.RequestCustom).
 -- texte vide ou nil = plaque unique générée au format GTA. Renvoie true, texte  ou  false, raison.
+local platesModule = nil
 local function getPlates()
+	-- un seul registre par exemplaire de ce module : en Edit, la copie de VehiclePlates est faite UNE fois
+	-- (une copie par appel donnait un registre neuf à chaque SetPlate : Lookup ne retrouvait rien)
+	if platesModule then
+		return platesModule
+	end
 	-- le Setup charge ce module par une copie sans parent : on retombe sur ReplicatedStorage
 	local folder = script.Parent or game:GetService("ReplicatedStorage"):FindFirstChild("FiveMVehicles")
 	local mod = folder and folder:FindFirstChild("VehiclePlates")
@@ -379,7 +385,13 @@ local function getPlates()
 	if not game:GetService("RunService"):IsRunning() then
 		mod = mod:Clone() -- Edit : éviter la version mise en cache par un require précédent
 	end
-	return require(mod)
+	platesModule = require(mod)
+	return platesModule
+end
+
+-- Le registre des plaques utilisé par ce module (VehiclePlates), ou nil s'il n'est pas installé.
+function Custom.Plates()
+	return getPlates()
 end
 
 function Custom.SetPlate(model, text)

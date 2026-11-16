@@ -447,10 +447,23 @@ rectangle de la plaque, zone de texte `TextRect`, avant / arrière). Le Setup po
 - **Plaque imposée par le code du jeu** : `Plates.Assign(car, texte, { OwnerUserId = id })` ou
   `Custom.SetPlate(car, texte)` → `true, texte` ou `false, raison` (`invalid`, `taken`, `store`). Non filtrée :
   réservée aux textes choisis par le jeu.
-- **Plaque personnalisée d'un joueur** : `Plates.RequestCustom(player, car, texte)` : normalisation (A-Z, 0-9,
-  espace, 8 caractères max), **filtre de texte Roblox obligatoire** (`TextService:FilterStringAsync`), unicité.
-  Raisons de refus : `invalid`, `filtered`, `filter_error`, `taken`, `store`. À appeler depuis un RemoteEvent
-  du jeu (menu de custom), jamais avec un texte non filtré.
+- **Plaque personnalisée d'un joueur** : `Plates.RequestCustom(player, car, texte)` : nettoyage (A-Z, 0-9,
+  espace), **refus** au-delà de 8 caractères (`too_long` : jamais coupé en silence, le joueur doit voir la
+  plaque qu'il a demandée), **filtre de texte obligatoire** (`Plates.FilterText`, par défaut
+  `TextService:FilterStringAsync` + `GetNonChatStringForBroadcastAsync`), unicité.
+  Raisons de refus : `invalid`, `too_long`, `filtered`, `filter_error`, `taken`, `store`. À appeler depuis un
+  RemoteEvent du jeu (menu de custom), jamais avec un texte non filtré.
+  **Roblox ne filtre rien dans Studio** (mesuré le 2026-11-16 : « FUCK », « fuck you », un lien discord et un
+  numéro de téléphone reviennent intacts) : en Studio une grossièreté est donc ACCEPTÉE (avertissement unique
+  dans la sortie) ; le refus `filtered` ne s'observe qu'en serveur publié. Pour le tester, remplacer
+  `Plates.FilterText` le temps de l'essai (c'est ce que fait Verify). Un jeu peut le remplacer par une règle
+  plus stricte (liste maison + filtre Roblox), jamais plus permissive.
+- **Véhicules installés avant les plaques à cases** (plaque = un simple `TextLabel` `PlateText`) : le runtime
+  leur écrit le texte dans ce label (sinon les cases se superposaient à l'ancien texte : plaque illisible).
+  Ils gardent la texture d'origine du mod (« San Andreas ») tant que leur Setup n'est pas refait.
+- La plaque est libérée à la destruction du véhicule quel que soit le chemin d'attribution (`Register`,
+  `Custom.SetPlate`, `Custom.Apply`). `Custom.Plates()` renvoie le registre utilisé par `Custom` (en Edit,
+  une seule copie du module par exemplaire de `Custom`).
 - **Persistance** (facultative) : `Plates.SetStore(Plates.DataStore("Plates_v1"))` réserve les plaques des
   véhicules possédés (`OwnerUserId`) dans un DataStore (une clé par plaque, réservation atomique). Sans
   stockage, les plaques valent pour la session du serveur. Un stockage maison doit fournir `Reserve(text, info)`,
