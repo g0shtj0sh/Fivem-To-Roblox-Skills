@@ -22,6 +22,20 @@ local Dyn = require(folder:WaitForChild("VehicleDynamics"))
 local Runtime = require(folder:WaitForChild("VehicleRuntime"))
 local Input = require(folder:WaitForChild("VehicleInput"))
 local TyreFx = require(folder:WaitForChild("VehicleTyreFx"))
+-- VehicleDamage peut arriver chez le client APRÈS ce module (réplication au démarrage : constaté 2026-11-16, aucun
+-- choc n'était envoyé) : cherché à nouveau toutes les 2 s tant qu'il manque
+local damageMod, damageLook = nil, -math.huge
+local function damageApi()
+	if damageMod == nil and os.clock() - damageLook > 2 then
+		damageLook = os.clock()
+		local m = folder:FindFirstChild("VehicleDamage")
+		local ok, mod = pcall(function()
+			return m and require(m)
+		end)
+		damageMod = (ok and mod) or nil
+	end
+	return damageMod
+end
 
 local Drive = {}
 Drive.Active = nil -- { car, cfg, sim, root, spm, wheels, ... }
@@ -224,9 +238,30 @@ local function step(a, dt)
 			end
 		end
 	end
+	-- moteur touché (VehicleDamage) : moins de puissance
+	local Damage = damageApi()
+	if Damage then
+		inp.Throttle = (inp.Throttle or 0) * Damage.PowerFactor(car)
+	end
 	a.lastThrottle = inp.Throttle
 
 	local vWorld = root.AssemblyLinearVelocity
+	-- choc : variation brutale de la vitesse horizontale en un pas (un freinage fort ≈ 0,2 m/s par pas) ; envoyée au
+	-- serveur (VehicleDamage.Apply), direction = du centre vers le point touché, dans le repère du véhicule
+	if Damage and a.prevVel then
+		local dv = cf:VectorToObjectSpace(vWorld - a.prevVel) / spm
+		local hz = Vector3.new(dv.X, 0, dv.Z)
+		if hz.Magnitude > Damage.MinImpact and os.clock() - (a.lastImpact or 0) > 0.15 then
+			a.lastImpact = os.clock()
+			local dir = -hz.Unit
+			-- envoyé hors de la boucle physique (BindToSimulation : un FireServer fait ici n'arrivait jamais au
+			-- serveur, mesuré 2026-11-16) : gardé, envoyé au prochain Heartbeat (le plus fort s'il y en a plusieurs)
+			if not a.pendingImpact or a.pendingImpact[3] < hz.Magnitude then
+				a.pendingImpact = { dir.X, dir.Z, hz.Magnitude }
+			end
+		end
+	end
+	a.prevVel = vWorld
 	local ctx = {
 		vBody = cf:VectorToObjectSpace(vWorld) / spm,
 		wBody = cf:VectorToObjectSpace(root.AssemblyAngularVelocity),
@@ -354,6 +389,17 @@ function Drive.Start(car)
 			Dyn.SetUpgrades(sim, upgrades())
 		elseif string.sub(attr, 1, 5) == "Tune_" then
 			Dyn.SetTune(sim, tune())
+		end
+	end))
+	-- chocs mesurés dans la boucle physique, envoyés au serveur ici (VehicleDamage)
+	table.insert(a.conns, RunService.Heartbeat:Connect(function()
+		local imp = a.pendingImpact
+		if imp then
+			a.pendingImpact = nil
+			local remote = folder:FindFirstChild("VehicleEvent")
+			if remote then
+				remote:FireServer(car, "Impact", imp[1], imp[2], imp[3])
+			end
 		end
 	end))
 	table.insert(a.conns, Input.Action.Event:Connect(function(name)

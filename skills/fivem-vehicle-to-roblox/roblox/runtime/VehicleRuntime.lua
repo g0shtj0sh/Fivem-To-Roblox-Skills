@@ -52,6 +52,20 @@ end
 -- avec la géométrie du moteur de conduite (VehicleDrive : un spherecast par roue depuis le haut du débattement).
 Runtime.SuspensionEstimateDistance = 200 -- studs de la caméra : au-delà, roues laissées telles quelles
 
+local damageFx, damageFxLook = nil, -math.huge
+local function damageFxModule()
+	-- cherché à nouveau tant qu'il manque (il peut arriver après ce module chez le client)
+	if damageFx == nil and os.clock() - damageFxLook > 2 then
+		damageFxLook = os.clock()
+		local m = script.Parent:FindFirstChild("VehicleDamage")
+		local ok, mod = pcall(function()
+			return m and require(m)
+		end)
+		damageFx = (ok and mod) or nil
+	end
+	return damageFx
+end
+
 local dynModule
 local function dynamics()
 	if dynModule == nil then
@@ -560,6 +574,9 @@ function Runtime:_setRole(role, on, color, brightness)
 		return
 	end
 	self.LastLightState[role] = key
+	if on and self.Model:GetAttribute("LightBroken_" .. role) == true then
+		on = false -- feu cassé par un choc (VehicleDamage)
+	end
 	for _, p in ipairs(self.LightParts[role] or {}) do
 		setPart(p, on, color)
 	end
@@ -1441,6 +1458,10 @@ RunService.RenderStepped:Connect(function(dt)
 				local L = Runtime.Lod
 				r:_applyLod(r.IsLocalOccupant and 0 or (dist > L.Far and 2) or (dist > L.Mid and 1) or 0)
 				r:_applyDirt()
+				local dm = damageFxModule()
+				if dm then
+					dm.UpdateFx(r)
+				end
 			end
 			if near or r.IsLocalOccupant then
 				r:Update(dt)

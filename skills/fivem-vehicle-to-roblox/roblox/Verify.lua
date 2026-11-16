@@ -185,7 +185,7 @@ end
 function groups.runtime()
 	local folder = ReplicatedStorage:FindFirstChild("FiveMVehicles")
 	check(folder ~= nil, "ReplicatedStorage.FiveMVehicles", folder and ("RuntimeVersion " .. tostring(folder:GetAttribute("RuntimeVersion"))) or "absent")
-	for _, n in ipairs({ "VehicleRuntime", "VehicleCustomization", "VehiclePaints", "VehicleInput", "VehicleAccess", "VehicleDashboard", "VehiclePose", "VehicleCamera", "VehicleMirror", "VehicleScreen", "VehicleTyreFx", "VehicleBackfire", "VehicleTarget", "VehicleEvent", "VehicleTelemetry" }) do
+	for _, n in ipairs({ "VehicleRuntime", "VehicleCustomization", "VehiclePaints", "VehicleInput", "VehicleAccess", "VehicleDashboard", "VehiclePose", "VehicleCamera", "VehicleMirror", "VehicleScreen", "VehicleDamage", "VehicleTyreFx", "VehicleBackfire", "VehicleTarget", "VehicleEvent", "VehicleTelemetry" }) do
 		local o = folder and folder:FindFirstChild(n)
 		check(o ~= nil, "FiveMVehicles." .. n, o and o.ClassName or "absent")
 	end

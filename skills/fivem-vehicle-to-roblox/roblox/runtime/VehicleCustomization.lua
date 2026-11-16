@@ -854,13 +854,15 @@ function Custom.GetOptions(model)
 	}
 end
 
-local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
+local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_",
+	"LightBroken_" }
 -- PlateStyleChosen : style choisi par le joueur (SetPlateStyle) -> sauvegardé avec lui, pas de tirage au sort à la
 -- réapparition (VehiclePlates.UseStyles avec Random). Le serveur réapplique la config propre de chaque véhicule à
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
 local SAVE_KEYS = {
 	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
 	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade", "HornSound", "DirtLevel", "KeepClean",
+	"BodyHealth", "EngineHealth", "EngineDead", "NoDamage",
 }
 
 -- Clé gardée dans une sauvegarde / acceptée à la restauration. Vitres : seulement les vraies vitres du modèle (une
@@ -906,9 +908,9 @@ end
 -- Clés dont l'absence dans une sauvegarde vaut « état d'origine » : Apply les efface pour que
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
-local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
+local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_", "LightBroken_" }
 local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
-	"HornSound" }
+	"HornSound", "DirtLevel", "KeepClean", "BodyHealth", "EngineHealth", "EngineDead", "NoDamage" }
 
 function Custom.Apply(model, data)
 	data = data or {}
@@ -1062,6 +1064,13 @@ end
 
 function Custom.Repair(model)
 	model:SetAttribute("DirtLevel", 0)
+	local dm = script.Parent:FindFirstChild("VehicleDamage")
+	local okD, Damage = pcall(function()
+		return dm and require(dm)
+	end)
+	if okD and Damage then
+		Damage.Reset(model) -- santé, feux cassés, moteur détruit
+	end
 	for k in pairs(model:GetAttributes()) do
 		if string.sub(k, 1, 12) == "DoorRemoved_" or string.sub(k, 1, 13) == "WindowBroken_" then
 			model:SetAttribute(k, nil)
@@ -1472,6 +1481,11 @@ OPS.RemoveDoor = function(model, bone, keepDebris)
 	end
 	local ok = Custom.RemoveDoor(model, bone, keepDebris)
 	return ok, (not ok) and "already" or nil
+end
+
+OPS.NoDamage = function(model, on)
+	model:SetAttribute("NoDamage", on == true or nil)
+	return true
 end
 
 OPS.Wash = function(model)

@@ -14,6 +14,8 @@ local Custom = require(folder:WaitForChild("VehicleCustomization"))
 local Plates = require(folder:WaitForChild("VehiclePlates"))
 local Access = require(folder:WaitForChild("VehicleAccess"))
 local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
+local damageModule = folder:FindFirstChild("VehicleDamage")
+local Damage = damageModule and require(damageModule) or nil
 local remote = folder:WaitForChild("VehicleEvent")
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
@@ -60,6 +62,7 @@ local RATES = {
 	telemetry = { 15, 20 }, -- le client en envoie 10 par seconde
 	set = { 8, 12 }, -- phares, clignotants, klaxon, sirène, moteur
 	window = { 4, 6 },
+	impact = { 6, 8 },
 	fit = { 2, 3 },
 }
 local buckets = {}
@@ -183,6 +186,9 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if key == "Engine" and value == false and model:GetAttribute("EngineAlwaysOn") == true then
 			return -- « Moteur toujours allumé » (Custom.SetEngineAlwaysOn)
 		end
+		if key == "Engine" and value == true and model:GetAttribute("EngineDead") == true then
+			return -- moteur détruit (VehicleDamage) : il faut réparer
+		end
 		model:SetAttribute(key, value)
 	elseif action == "Door" then
 		-- portières / capot / coffre : à bord (menus du jeu), ou dehors à portée de la charnière visée
@@ -200,6 +206,19 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		end
 		local cur = model:GetAttribute("Door_" .. key) or 0
 		model:SetAttribute("Door_" .. key, cur > 0.5 and 0 or 1)
+	elseif action == "Impact" then
+		-- choc mesuré par le client du conducteur (VehicleDrive) : direction (x, z du repère du véhicule) et force
+		local dx, dz, strength = key, value, ...
+		if not Damage or not isDriver(player, model) or not allowed(player, "impact") then
+			return
+		end
+		if type(dx) ~= "number" or type(dz) ~= "number" or type(strength) ~= "number" then
+			return
+		end
+		if dx ~= dx or dz ~= dz or strength ~= strength or math.abs(dx) > 1.01 or math.abs(dz) > 1.01 then
+			return
+		end
+		Damage.Apply(model, Vector3.new(dx, 0, dz), strength)
 	elseif action == "Fit" then
 		-- corps de l'occupant adapté à l'habitacle (VehicleSeatFit) ; validé et borné côté serveur
 		if allowed(player, "fit") then
@@ -320,6 +339,36 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- Chocs d'un véhicule SANS conducteur (le serveur tient sa physique) : même mesure que VehicleDrive, côté serveur.
+if Damage then
+	local RunService = game:GetService("RunService")
+	local lastVel = setmetatable({}, { __mode = "k" })
+	local lastHit = setmetatable({}, { __mode = "k" })
+	RunService.Heartbeat:Connect(function()
+		for _, model in ipairs(CollectionService:GetTagged(TAG)) do
+			local root = model.PrimaryPart
+			local seat = model:FindFirstChild("DriverSeat", true)
+			if root and not root.Anchored and not (seat and seat.Occupant) then
+				local v = root.AssemblyLinearVelocity
+				local prev = lastVel[model]
+				lastVel[model] = v
+				if prev then
+					local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
+					local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
+					local dv = root.CFrame:VectorToObjectSpace(v - prev) / spm
+					local hz = Vector3.new(dv.X, 0, dv.Z)
+					if hz.Magnitude > Damage.MinImpact and os.clock() - (lastHit[model] or 0) > 0.15 then
+						lastHit[model] = os.clock()
+						Damage.Apply(model, -hz.Unit, hz.Magnitude)
+					end
+				end
+			else
+				lastVel[model] = nil
+			end
+		end
+	end)
+end
 
 local function enterPrompts(model)
 	local out = {}
