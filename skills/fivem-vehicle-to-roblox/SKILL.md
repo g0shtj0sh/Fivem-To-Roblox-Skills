@@ -33,6 +33,7 @@ Mesures, choix et pièges : [`docs/studio-import-tests.md`](../../docs/studio-im
 | Python 3.10+, numpy, Pillow | `python3 -c "import numpy, PIL"` | `python3 -m pip install --user numpy pillow` (sans pip : `get-pip.py --user`) |
 | .NET 8 (fichiers binaires .yft/.ytd/.awc) | `dotnet --version` ou `~/.dotnet/dotnet` | `dotnet-install.sh --channel 8.0 --install-dir ~/.dotnet` ; le convertisseur trouve `~/.dotnet` seul |
 | Serveur d'assets GTA V (vraies textures et vrai son) | outil MCP `gta_status` (`ready: true`) | proposer `tools/gta-asset-server/start-server.bat` sur le PC + déclaration dans *My MCP servers* ; sinon la conversion reprend ce qui est déjà dans le cache (`~/.cache/fivem2roblox`), et seulement à défaut couleur unie / son synthétisé |
+| `lune` (calage des performances réelles, § 1f) | `lune --version` (PATH, `F2R_LUNE` ou `~/.cargo/bin`) | `cargo install lune --locked` (≈ 5 min) ou binaire des versions GitHub de `lune-org/lune` ; sans lui la conversion garde le moteur du mod et l'écrit dans le rapport |
 | Studio connecté | `studio_connection_status` (plugin attaché), `list_roblox_studios` | livrer le dossier + étapes manuelles |
 | Upload Roblox | VibeStarter : outils `upload_file` + `asset_publish` ; ailleurs : `ROBLOX_API_KEY` présent dans l'environnement (ne jamais l'afficher) | dernier recours : une seule action manuelle, *Importer 3D* (§ 4c) |
 
@@ -158,6 +159,45 @@ sons), puis reconvertir. Le Setup pose l'attribut `EmissiveMask`, `VehicleLights
 clignotants 12) et `EmissiveTint` = couleur du feu. Sans masque, l'ancien comportement (Néon) reste.
 Véhicule déjà installé : poser `OffTexture`/`TextureID` (texture agrandie) et `EmissiveMask` sur chaque optique, puis
 `VehicleLights.Rig(model)` ; `sync_catalog`. Contrôle : gros plans de jour (éteint) et de nuit (allumé).
+
+## 1f. Performances réelles : moteur et boîte calés sur le vrai véhicule (obligatoire)
+
+Un mod GTA a rarement les performances du vrai véhicule (m422 : 0-100 en 8,9 s et 119 km/h dans GTA, contre
+3,5 s et 250 km/h pour la vraie M4 Competition xDrive). La conversion **cale le moteur et la boîte** sur la
+fiche réelle ; l'**adhérence, la suspension, la direction et les freins restent ceux du mod** (choix de
+l'utilisateur : la tenue de route garde le ressenti GTA). Avant chaque conversion d'un nouveau véhicule :
+1. Identifier la **version exacte** (année, motorisation) et prendre celle dont la **transmission** est celle
+   du mod : `fDriveBiasFront` 0 = propulsion, 1 = traction, entre les deux = intégrale (le rapport avertit
+   si la fiche et le mod diffèrent).
+2. **Chercher sur internet** (site du constructeur d'abord, puis presse / Wikipédia, au moins deux sources) :
+   0-100 km/h, vitesse de pointe **bridée** et **débridée** (option constructeur, ex. M Driver's Package ; à
+   défaut la vitesse de pointe tout court, sans limiteur), nombre de rapports et type de boîte, puissance et
+   couple avec leurs régimes, régime maximal (rupteur), ralenti si publié.
+3. L'écrire dans `specs/vehicle_specs.json` sous le **nom du modèle du mod** (`ZeroTo100S`, `TopSpeedKmh`,
+   `TopSpeedLimited`, `TopSpeedUnlimitedKmh`, `Gears`, `Transmission`, `ShiftTimeS`, `RedlineRpm`,
+   `IdleRpm`, `Drivetrain`, `PowerKw`/`PowerPs`/`PowerRpm`, `TorqueNm`/`TorqueRpm`, `real_model`, `notes`,
+   `sources`, `checked`) et pousser ce fichier avec le skill. `ShiftTimeS` (temps d'un passage) n'est presque
+   jamais publié : boîte auto / double embrayage moderne 0,1-0,2 s, auto classique 0,3-0,4 s, manuelle
+   0,4-0,6 s, et le noter comme estimation dans `notes`. `--specs fiche.json` donne une autre fiche,
+   `--no-real-specs` garde le moteur du mod.
+4. La conversion lance `scripts/perf_solve.luau` (lune) : le **vrai moteur de conduite** tourne en ligne
+   droite et `DriveForce`, la vitesse plate, la traînée, le nombre de rapports et l'embrayage
+   (`ClutchChangeRate` = 0,9 / `ShiftTimeS`) sont cherchés pour redonner le 0-100 et la vitesse de pointe
+   débridée (atteinte à 90 % du régime sur le dernier rapport). La vitesse bridée devient un **limiteur
+   électronique** (`Performance.LimiterKmh`), levé par l'amélioration `Unlimited` (débridage). Le rupteur
+   (`RedlineRpm`) et le ralenti passent au compte-tours et au son. Les valeurs du mod restent dans
+   `Performance.Mod`.
+5. Lire le rapport : « 0-100 km/h : visé … obtenu … », « vitesse de pointe : bridée … débridée … », passages
+   de rapports, et l'aperçu « tout amélioré ». Si « l'adhérence du mod ne permet pas le 0-100 réel » :
+   c'est la limite des pneus du mod (choix de garder leur ressenti) ; le dire à l'utilisateur.
+6. En Studio, `DriveBench` mesure le 0-100 et la vitesse de pointe en 3D : écart attendu < 5 % (le banc
+   lune n'a ni tangage ni roulis).
+
+**Améliorations du garage** (`Custom.SetPerformance(car, slot, niveau)`, attributs `Perf_<Slot>`, appliquées
+en direct par le moteur de conduite) : `Engine` 1-4 (DriveForce × (1 + 0,2 × statMods/100), DATAMINÉ),
+`Transmission` 1-3 (+1 rapport, passages plus rapides), `Brakes` 1-3, `Suspension` 1-4 (plus raide),
+`Turbo` (+10 % de couple une fois chargé, comme GTA), `Unlimited` (débridage), `Armor` (sans effet de
+conduite). Les pourcentages viennent des `statMods` du carcols du véhicule, à défaut de valeurs GTA.
 
 ## 2. Uploader le modèle et les sons (assets privés)
 

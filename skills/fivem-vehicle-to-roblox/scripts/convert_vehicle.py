@@ -35,6 +35,7 @@ from f2r import collision as collision_mod  # noqa: E402
 from f2r import sound_pack  # noqa: E402
 from f2r import brands, cabin, cwxml, gamelib, icon_atlas, inventory, meta, rebadge  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
+from f2r.performance import apply_real_performance  # noqa: E402
 from f2r.plates import plate_zones  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
@@ -580,6 +581,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         config["ModelName"] = naming.model
         config["DisplayName"] = f"{config['Make']} {naming.model}".strip()
     config["Collision"] = collision_cfg
+    # moteur et boîte calés sur les vraies données du véhicule (specs/vehicle_specs.json, SKILL.md § 1f)
+    apply_real_performance(name, config, report, getattr(args, "specs", None),
+                           not getattr(args, "no_real_specs", False))
     sound_ids = load_sound_ids(args.sound_ids, out / "sounds")
     setup = build_setup(config, parts_cfg, sound_ids)
     (out / f"{name}_Setup.lua").write_text(setup, encoding="utf-8")
@@ -936,6 +940,9 @@ def main(argv=None) -> int:
                          "classes/vehicle_classes.json")
     ap.add_argument("--no-engine-pack", action="store_true", help="ignorer le pack de sons moteur maison")
     ap.add_argument("--plate", default="", help="texte de plaque imposé (vide = plaque unique générée en jeu)")
+    ap.add_argument("--specs", help="fiche des performances réelles (JSON) ; défaut : specs/vehicle_specs.json")
+    ap.add_argument("--no-real-specs", action="store_true",
+                    help="garder le moteur et la boîte du mod (pas de calage sur les performances réelles)")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
     ap.add_argument("--no-door-prompts", action="store_true")
     ap.add_argument("--extractor", help="commande gta-extract (sinon détection / compilation auto)")

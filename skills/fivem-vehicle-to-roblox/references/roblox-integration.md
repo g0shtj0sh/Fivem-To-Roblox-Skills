@@ -351,6 +351,39 @@ Tout le `handling.meta` du véhicule est exporté, pour qu'un moteur de conduite
 Les points encore disputés (pic de la courbe d'adhérence, sens du biais d'anti-roulis, échelle de
 `fTractionCurveMax`) sont détaillés dans `reports/Physique véhicules GTA V Roblox.md` à la racine du dépôt.
 
+## Performances réelles et améliorations (`VehicleConfig.Performance`, attributs `Perf_*`)
+
+La conversion cale le moteur et la boîte sur la fiche réelle du véhicule (`specs/vehicle_specs.json`,
+SKILL.md § 1f) ; l'adhérence, la suspension, la direction et les freins restent ceux du mod.
+
+| `VehicleConfig.Performance` | Contenu |
+|---|---|
+| `Vehicle`, `Specs`, `Sources` | vrai modèle, fiche complète et ses sources |
+| `Target` | cibles du calage : `ZeroTo100S`, `VmaxKmh` (débridée), `LimiterKmh`, `Gears`, `ShiftTimeS` |
+| `LimiterKmh` | vitesse bridée d'origine : limiteur électronique du moteur de conduite (absent = non bridé) |
+| `Fitted`, `Result` | calage fait ; mesures au banc : 0-100, 0-200, vitesse bridée / débridée, passages |
+| `Upgrades.Max` | aperçu tout amélioré (moteur 4, boîte 3, turbo, débridé) |
+| `Mod` | valeurs du handling du mod remplacées (DriveForce, rapports, vitesse plate, traînée, embrayage, régimes du son) |
+
+Améliorations : `Custom.SetPerformance(car, slot, niveau)` (serveur) borne le niveau et pose `Perf_<slot>`
+(0 = d'origine, attribut retiré) ; `VehicleDrive` les relit à chaque changement, même en roulant
+(`VehicleDynamics.SetUpgrades`). `Custom.PerformanceSlots(car)` donne le niveau maximal de chaque slot,
+`Custom.GetPerformance(car)` les niveaux et pourcentages en cours. Sauvegardés par `Custom.Serialize`.
+
+| Slot | Niveaux | Effet (`VehicleDynamics`) |
+|---|---|---|
+| `Engine` | 1-4 | DriveForce × (1 + 0,2 × statMods / 100) — DATAMINÉ (100 % → +20 %) |
+| `Transmission` | 1-3 | +1 rapport dès le niveau 1, embrayage × (1 + statMods / 100) |
+| `Brakes` | 1-3 | BrakeForce × (1 + statMods / 100) |
+| `Suspension` | 1-4 | raideur et anti-roulis × (1 + 0,5 × statMods / 100) ; la caisse n'est pas abaissée |
+| `Turbo` | 1 | + `Tuning.TurboGain` (10 %) de couple une fois chargé (`TurboSpool` 1,2 s) ; `out.turbo` pour un sifflement |
+| `Unlimited` | 1 | débridage : lève `Performance.LimiterKmh` (proposé seulement si le véhicule est bridé) |
+| `Armor` | 1-5 | aucun effet de conduite (comme GTA) |
+
+Les pourcentages (`statMods`) viennent du carcols du véhicule (`VehicleConfig.StatMods`), à défaut
+`VehicleDynamics.UpgradeDefaults` (Engine 25/50/75/100, Transmission 25/50/75, Brakes 20/40/60,
+Suspension 20/40/60/80). Seule la loi du moteur est documentée par GTA ; les autres sont posées.
+
 ## Custom (côté serveur)
 
 ```lua
@@ -365,7 +398,7 @@ Custom.SetWindowTint(car, 0.7)                        -- 0 clair → 0.95 limo
 Custom.SetNeon(car, true, Color3.fromRGB(255, 0, 200))
 Custom.SetXenon(car, Color3.fromRGB(120, 170, 255))   -- nil = halogène
 Custom.SetPlate(car, "ROBLOX")                        -- plaque imposée par le jeu (voir « Plaques »)
-Custom.SetPerformance(car, "Engine", 3)               -- lu par ton moteur via Custom.GetPerformance(car)
+Custom.SetPerformance(car, "Engine", 3)               -- appliqué en direct par le moteur de conduite (voir « Performances »)
 local save = Custom.Serialize(car)                     -- table -> DataStore
 Custom.Apply(newCar, save)
 ```

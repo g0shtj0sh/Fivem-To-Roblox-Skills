@@ -399,19 +399,45 @@ function Custom.SetPlateStyle(model, index)
 	end
 end
 
--- ------------------------------------------------------------------ performance (pour ton moteur physique)
--- Les mods de perf (moteur, freins, boîte, suspension, blindage, turbo) ne changent rien
--- visuellement : on stocke juste le niveau ; ton moteur physique lit Custom.GetPerformance().
+-- ------------------------------------------------------------------ performance (améliorations du garage)
+-- Niveaux 0 (d'origine) .. max, en attributs `Perf_<Slot>` ; le moteur de conduite (VehicleDynamics, via
+-- VehicleDrive) les applique en direct : Engine, Transmission, Brakes, Suspension, Turbo (0/1), Unlimited
+-- (0/1 : débridage, seulement si le véhicule a une vitesse bridée d'origine), Armor (sans effet de conduite).
+-- Les pourcentages viennent des statMods du carcols (cfg.StatMods), sinon des valeurs par défaut du moteur.
+local PERF_DEFAULT_LEVELS = { Engine = 4, Transmission = 3, Brakes = 3, Suspension = 4, Armor = 5 }
+
+function Custom.PerformanceSlots(model)
+	local cfg = getConfig(model)
+	local out = {}
+	for slot, n in pairs(PERF_DEFAULT_LEVELS) do
+		local list = cfg.StatMods and cfg.StatMods[slot]
+		out[slot] = (type(list) == "table" and #list > 0) and #list or n
+	end
+	out.Turbo = 1
+	if cfg.Performance and cfg.Performance.LimiterKmh then
+		out.Unlimited = 1
+	end
+	return out
+end
+
 function Custom.SetPerformance(model, slot, level)
-	model:SetAttribute("Perf_" .. slot, level)
+	local max = Custom.PerformanceSlots(model)[slot]
+	if not max then
+		return false, "slot"
+	end
+	level = math.clamp(math.floor(tonumber(level) or 0), 0, max)
+	model:SetAttribute("Perf_" .. slot, level > 0 and level or nil)
+	return true, level
 end
 
 function Custom.GetPerformance(model)
 	local cfg = getConfig(model)
 	local out = {}
-	for slot, levels in pairs(cfg.StatMods or {}) do
+	for slot, max in pairs(Custom.PerformanceSlots(model)) do
 		local lvl = model:GetAttribute("Perf_" .. slot) or 0
-		out[slot] = { Level = lvl, Modifier = lvl > 0 and levels[lvl] and levels[lvl].Modifier or 0 }
+		local list = cfg.StatMods and cfg.StatMods[slot]
+		local item = (type(list) == "table" and lvl > 0) and list[math.min(lvl, #list)] or nil
+		out[slot] = { Level = lvl, Max = max, Modifier = item and item.Modifier or nil }
 	end
 	return out
 end
@@ -436,7 +462,8 @@ function Custom.GetOptions(model)
 		PaintLayers = PAINT_LAYERS,
 		LayersPresent = Custom.LayersPresent(model),
 		FactoryColors = #((cfg.Colors or {}).Variations or {}),
-		Performance = cfg.StatMods or {},
+		Performance = Custom.PerformanceSlots(model),
+		StatMods = cfg.StatMods or {},
 	}
 end
 

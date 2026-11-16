@@ -264,7 +264,15 @@ function Drive.Start(car)
 	local cfg = require(cfgModule)
 	local spm = cfg.StudsPerMeter or 3.571
 	local comLocal = root.CFrame:PointToObjectSpace(root.AssemblyCenterOfMass) / spm
-	local sim = Dyn.new(cfg, comLocal)
+	-- améliorations du garage (attributs Perf_<Slot> posés par VehicleCustomization)
+	local function upgrades()
+		local levels = {}
+		for _, slot in ipairs(Dyn.UpgradeSlots) do
+			levels[slot] = car:GetAttribute("Perf_" .. slot) or 0
+		end
+		return levels
+	end
+	local sim = Dyn.new(cfg, comLocal, nil, upgrades())
 	local vf, tq = actuators(root)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -274,6 +282,11 @@ function Drive.Start(car)
 		car = car, cfg = cfg, sim = sim, root = root, spm = spm, vf = vf, tq = tq, params = params,
 		filterAge = 0, xPrev = {}, conns = {}, margin = 0.3 * spm, extraReach = 0.25 * spm,
 	}
+	table.insert(a.conns, car.AttributeChanged:Connect(function(attr)
+		if string.sub(attr, 1, 5) == "Perf_" then
+			Dyn.SetUpgrades(sim, upgrades())
+		end
+	end))
 	table.insert(a.conns, Input.Action.Event:Connect(function(name)
 		if name == "GearUp" then
 			a.gearUp = true

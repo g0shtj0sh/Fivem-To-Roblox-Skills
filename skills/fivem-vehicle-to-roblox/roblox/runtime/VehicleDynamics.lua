@@ -326,7 +326,33 @@ Dyn.Tuning = {
 	-- intégration devenue stable. Au-delà, on ne paie que du temps de calcul.
 	SubSteps = 16, -- sous-pas internes (roues, embrayage, régime)
 	CurbBoost = 0, -- gain de régime par compression (effet « curb boost » du jeu) ; 0 = désactivé
+	-- Turbo (amélioration `Perf_Turbo`). GTA : « le turbo d'origine n'ajoute que 10 % de couple une fois
+	-- chargé, et il met longtemps à se charger » (ikt, TurboFix). La charge suit gaz × régime au premier ordre.
+	TurboGain = 0.10, -- couple en plus, turbo chargé
+	TurboSpool = 1.2, -- s : constante de temps de charge (et de décharge)
+	-- Limiteur de vitesse électronique (cfg.Performance.LimiterKmh, levé par `Perf_Unlimited`) : les gaz
+	-- sont coupés progressivement sur cette bande au-dessus de la vitesse limite.
+	LimiterBand = 1.0, -- m/s
 }
+
+-- ------------------------------------------------------------------ améliorations (garage)
+-- Niveaux posés par VehicleCustomization en attributs `Perf_<Slot>` (0 = d'origine). Les pourcentages
+-- viennent des `statMods` du carcols du véhicule (cfg.StatMods) ; à défaut, ces valeurs.
+--   Engine       DriveForce × (1 + 0,2 × modifier / 100). DATAMINÉ (wiki carcols, gtacars : Adder 100 → ×1,2).
+--   Transmission +1 rapport dès le niveau 1 (GTA : « toutes ajoutent un rapport ») et passages plus rapides :
+--                ClutchChangeRate × (1 + modifier / 100). Le gain de vitesse des passages n'est pas documenté.
+--   Brakes       BrakeForce × (1 + modifier / 100). Loi posée (GTA : « plus de force de freinage »).
+--   Suspension   raideur et anti-roulis × (1 + 0,5 × modifier / 100). Loi posée ; la caisse n'est pas abaissée.
+--   Turbo        niveau 1 : + TurboGain de couple une fois chargé (voir Dyn.Tuning).
+--   Unlimited    niveau 1 : débridage, le limiteur de vitesse (cfg.Performance.LimiterKmh) est levé.
+--   Armor        aucun effet sur la conduite (GTA non plus).
+Dyn.UpgradeDefaults = {
+	Engine = { 25, 50, 75, 100 },
+	Transmission = { 25, 50, 75 },
+	Brakes = { 20, 40, 60 },
+	Suspension = { 20, 40, 60, 80 },
+}
+Dyn.UpgradeSlots = { "Engine", "Transmission", "Brakes", "Suspension", "Turbo", "Unlimited", "Armor" }
 
 -- Rapports par défaut lus en mémoire dans le jeu (dernier rapport toujours 0,9). >= 7 rapports : étagement
 -- inconnu, interpolé géométriquement entre 3,333 et 0,9 (à mesurer).
@@ -365,7 +391,62 @@ local function sign(x)
 end
 
 -- ------------------------------------------------------------------ paramètres + état
-function Dyn.new(cfg, comLocal, overrides)
+-- pourcentage (statMods) du niveau `level` d'un emplacement : carcols du véhicule, sinon Dyn.UpgradeDefaults
+local function upgradeModifier(cfg, slot, level)
+	level = math.floor(tonumber(level) or 0)
+	if level <= 0 then
+		return 0
+	end
+	local list = cfg.StatMods and cfg.StatMods[slot]
+	if type(list) == "table" and #list > 0 then
+		local item = list[math.min(level, #list)]
+		local m = type(item) == "table" and tonumber(item.Modifier) or tonumber(item)
+		if m then
+			return m
+		end
+	end
+	local d = Dyn.UpgradeDefaults[slot]
+	return d and d[math.min(level, #d)] or 0
+end
+Dyn.UpgradeModifier = upgradeModifier
+
+-- Applique les niveaux d'amélioration { Engine = 3, Turbo = 1, ... } à partir des valeurs de base (sans
+-- amélioration) gardées dans P.base. Appelable en cours de route (VehicleDrive écoute les attributs Perf_*).
+function Dyn.SetUpgrades(sim, levels)
+	local P, S, T = sim.P, sim.S, sim.T
+	local B, cfg = P.base, P.cfg
+	levels = levels or {}
+	local function lvl(slot)
+		return math.floor(tonumber(levels[slot]) or 0)
+	end
+	P.upgrades = table.clone(levels)
+	P.driveForce = B.driveForce * (1 + 0.2 * upgradeModifier(cfg, "Engine", lvl("Engine")) / 100)
+	local tr = lvl("Transmission")
+	local nGears = B.nGears
+	if tr > 0 and P.gearbox ~= "electric" then
+		nGears = math.min(nGears + 1, 10)
+	end
+	if nGears ~= P.nGears then
+		P.nGears = nGears
+		P.ratios = ratiosFor(nGears)
+		P.reverseRatio = P.ratios[1]
+		if S.gear > nGears then
+			S.gear = nGears
+		end
+	end
+	local clutchK = 1 + upgradeModifier(cfg, "Transmission", tr) / 100
+	P.clutchUp, P.clutchDown = B.clutchUp * clutchK, B.clutchDown * clutchK
+	P.brake = B.brake * (1 + upgradeModifier(cfg, "Brakes", lvl("Brakes")) / 100)
+	local suspK = 1 + 0.5 * upgradeModifier(cfg, "Suspension", lvl("Suspension")) / 100
+	P.kF, P.kR, P.arbF, P.arbR = B.kF * suspK, B.kR * suspK, B.arbF * suspK, B.arbR * suspK
+	for _, w in ipairs(P.wheels or {}) do
+		w.k = w.front and P.kF or P.kR
+	end
+	P.turbo = lvl("Turbo") > 0 and (T.TurboGain or 0.1) or 0
+	P.limiter = (lvl("Unlimited") <= 0) and B.limiter or nil
+end
+
+function Dyn.new(cfg, comLocal, overrides, upgrades)
 	local T = table.clone(Dyn.Tuning)
 	-- réglages du jeu posés en attributs sur le dossier du runtime (ReplicatedStorage.FiveMVehicles)
 	-- (pcall : le module tourne aussi hors de Roblox, banc lune, sans `script`)
@@ -530,7 +611,19 @@ function Dyn.new(cfg, comLocal, overrides)
 		S.slipLat[i] = 0
 		S.stick[i] = 0
 	end
-	return { P = P, S = S, T = T }
+	S.turbo = 0
+	-- valeurs de base (sans amélioration) : Dyn.SetUpgrades repart toujours d'elles
+	local perf = cfg.Performance or {}
+	local limKmh = tonumber(perf.LimiterKmh)
+	P.cfg = cfg
+	P.base = {
+		driveForce = P.driveForce, nGears = P.nGears, clutchUp = P.clutchUp, clutchDown = P.clutchDown,
+		brake = P.brake, kF = P.kF, kR = P.kR, arbF = P.arbF, arbR = P.arbR,
+		limiter = (limKmh and limKmh > 0) and limKmh / 3.6 or nil,
+	}
+	local sim = { P = P, S = S, T = T }
+	Dyn.SetUpgrades(sim, upgrades)
+	return sim
 end
 
 -- Remet l'état dynamique au repos (roues arrêtées, ralenti, 1re) : après un téléport, une remise sur
@@ -539,6 +632,7 @@ function Dyn.reset(sim)
 	local S, P = sim.S, sim.P
 	S.rpm, S.gear, S.clutch, S.shiftDir, S.reverseTimer = 0.2, 1, 1, 0, 0
 	S.launch = false
+	S.turbo = 0
 	S.burnout = false
 	for i, w in ipairs(P.wheels) do
 		S.omega[i] = 0
@@ -760,6 +854,14 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		S.clutch, S.shiftDir, S.launch = T.LaunchClutch or 0.1, 1, true
 	end
 	local launchHold = S.launch and driveIn < 0.05
+	-- limiteur de vitesse électronique (vitesse bridée d'origine ; levé par l'amélioration `Unlimited`)
+	local limitK = 1
+	if P.limiter and S.gear >= 1 then
+		-- plein gaz jusqu'à la limite, coupure linéaire sur la bande au-dessus : à vitesse établie la poussée
+		-- utile (≈ 70-80 %) tient le véhicule à moins d'un quart de bande au-dessus de la limite
+		local band = math.max(T.LimiterBand or 1, 0.05)
+		limitK = math.clamp((P.limiter + band - math.abs(vf)) / band, 0, 1)
+	end
 
 	-- sous-pas : régime, embrayage, roues, pneus
 	local nSub = math.max(1, T.SubSteps)
@@ -790,7 +892,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			end
 		end
 		-- passage de rapport : gaz coupés tant que l'embrayage patine ; départ arrêté : la poussée passe
-		local thr = (S.clutch < 1 and not S.launch) and 0 or driveIn
+		local thr = ((S.clutch < 1 and not S.launch) and 0 or driveIn) * limitK
 		local engage = S.clutch
 		if S.launch then
 			if S.clutch >= 1 then
@@ -860,8 +962,15 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		-- le même gain jusqu'au 2026-11-15 (déduction, jamais mesurée) : en arrière le poids passe à l'avant et
 		-- déleste les roues arrière, qui patinaient ×8 à 2 m/s (régime au rupteur, traces) ; gain retiré.
 		local gearForce = (S.gear == 1) and (T.FirstGearForce or 1) or 1
+		-- turbo : la charge suit gaz x régime au premier ordre, +TurboGain de couple une fois chargé
+		if P.turbo > 0 then
+			local target = thr * math.clamp((S.rpm - 0.2) / 0.5, 0, 1)
+			S.turbo += (target - S.turbo) * math.clamp(h / math.max(T.TurboSpool or 1, 0.05), 0, 1)
+		else
+			S.turbo = 0
+		end
 		local aDrive = P.driveForce * math.abs(ratio) * torqueCurve(S.rpm, S.gear, T) * thr * engage * cut * P.g * dir
-			* gearForce
+			* gearForce * (1 + P.turbo * S.turbo)
 		-- en pente, GTA pousse plus fort : 54 % de la résistance de la pente récupérés (MESURÉ ; voir
 		-- Dyn.Tuning). `ctx.slopeSin` est le sinus de la pente longitudinale, positif en montée ; absent,
 		-- l'apport est nul et le comportement est celui d'avant.
@@ -1036,6 +1145,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		wheels = {}, omega = {}, travel = {}, rpm = S.rpmShown, rpmRaw = S.rpm, gear = S.gear, clutch = S.clutch,
 		speed = vf, lock = lock, steerAngle = S.steerAngle, reverse = S.gear < 0, burnout = burnout,
 		drive = driveIn, -- accélérateur effectif (S en marche arrière) : charge du son moteur, retours de flamme
+		turbo = S.turbo, -- charge du turbo 0..1 (0 sans l'amélioration)
+		limited = limitK < 1, -- limiteur de vitesse en action
 	}
 	for i, w in ipairs(P.wheels) do
 		local x = S.x[i]
@@ -1158,13 +1269,16 @@ function Dyn.PredictTopSpeed(sim)
 		local v = gearTop * 1.1 * i / 400
 		local rpm = v / gearTop
 		local a = P.driveForce * ratio * torqueCurve(rpm, P.nGears, P.T) * P.g
-			* ((P.nGears == 1) and (P.T.FirstGearForce or 1) or 1)
+			* ((P.nGears == 1) and (P.T.FirstGearForce or 1) or 1) * (1 + (P.turbo or 0))
 		if P.hardRev and rpm >= 1 then
 			a = 0
 		end
 		if a >= P.dragK * v * v then
 			best = v
 		end
+	end
+	if P.limiter then
+		best = math.min(best, P.limiter)
 	end
 	return best
 end

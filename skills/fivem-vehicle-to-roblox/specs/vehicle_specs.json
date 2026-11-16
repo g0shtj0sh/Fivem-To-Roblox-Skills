@@ -1,0 +1,35 @@
+{
+ "about": "Performances RÉELLES de chaque véhicule converti, vérifiées sur internet (SKILL.md § 1f). Lues par convert_vehicle.py (clé = nom du modèle du mod) : le moteur et la boîte sont calés dessus au banc du vrai moteur de conduite (scripts/perf_solve.luau) ; l'adhérence, la suspension, la direction et les freins restent ceux du mod. Choisir la version dont la TRANSMISSION est celle du mod (propulsion / intégrale). Champs utilisés par le calage : ZeroTo100S, TopSpeedKmh, TopSpeedLimited, TopSpeedUnlimitedKmh, Gears, ShiftTimeS, RedlineRpm, IdleRpm (facultatif), ComHeightM (facultatif). Les autres sont informatifs (rapport, menus du jeu).",
+ "vehicles": {
+  "m422": {
+   "real_model": "BMW M4 Competition Coupé M xDrive (G82, 2022)",
+   "Drivetrain": "AWD",
+   "Engine": "S58B30 6 cylindres en ligne 3,0 l biturbo",
+   "PowerKw": 375,
+   "PowerPs": 510,
+   "PowerRpm": 6250,
+   "TorqueNm": 650,
+   "TorqueRpm": [2750, 5500],
+   "RedlineRpm": 7200,
+   "ZeroTo100S": 3.5,
+   "TopSpeedKmh": 250,
+   "TopSpeedLimited": true,
+   "TopSpeedUnlimitedKmh": 290,
+   "Gears": 8,
+   "Transmission": "auto (M Steptronic 8 rapports, ZF 8HP)",
+   "ShiftTimeS": 0.15,
+   "notes": [
+    "Le mod est en transmission intégrale (fDriveBiasFront 0,5, les deux essieux moteurs mesurés en jeu) : fiche M xDrive. La propulsion fait 0-100 en 3,9 s.",
+    "Vitesse de pointe : 250 km/h bridée d'origine, 290 km/h avec le M Driver's Package (débridage).",
+    "ShiftTimeS est une ESTIMATION (boîte automatique moderne, passages de l'ordre de 0,1 à 0,2 s) : aucune donnée constructeur."
+   ],
+   "sources": [
+    "https://www.bmw-m.com/en/all-models/overview-m-and-m-performance/bmw-m4-coupe/2024/bmw-m4-coupe-and-m4-competition-coupe.html",
+    "https://www.bmw-me.com/en/all-models/m-series/bmw-4-series-m-models/bmw-m4-coupe.html",
+    "https://en.wikipedia.org/wiki/BMW_M4",
+    "https://g80.bimmerpost.com/forums/showthread.php?t=1759748"
+   ],
+   "checked": "2026-11-16"
+  }
+ }
+}
