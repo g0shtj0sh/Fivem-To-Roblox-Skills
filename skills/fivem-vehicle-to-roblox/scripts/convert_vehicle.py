@@ -516,6 +516,16 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
             edir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(mat.emissive_png, edir / mat.emissive_png.name)
             info["EmissiveMask"] = mat.emissive_png.name
+        if p.kind == "glass" and p.tex_diffuse:
+            # texture des vitres (bordure sérigraphiée noire, dégivrage, teinte : vehicle_generic_glasswindows*) :
+            # jetée avant le 2026-11-16 (verre uni). Mise en ligne à part comme les masques d'émission (glass/), id
+            # lu avec les sons (--sound-ids), posée par le Setup en SurfaceAppearance à transparence
+            gpng = store.get(p.tex_diffuse, "color")
+            if gpng is not None:
+                gdir = out / "glass"
+                gdir.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(gpng, gdir / gpng.name)
+                info["GlassTexture"] = gpng.name
         parts_cfg[p.name] = info
 
     if veiled:

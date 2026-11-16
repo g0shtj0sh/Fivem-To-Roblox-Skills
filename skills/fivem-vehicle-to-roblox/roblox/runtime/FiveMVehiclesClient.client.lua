@@ -94,6 +94,8 @@ Input.Action.Event:Connect(function(name, value)
 		set("SirenSound", order[cur % #order + 1])
 	elseif name == "Engine" then
 		set("Engine", not m:GetAttribute("Engine"))
+	elseif name == "InteriorLight" then
+		set("InteriorLight", not m:GetAttribute("InteriorLight"))
 	elseif name == "Cruise" then
 		Drive.ToggleCruise("cruise")
 	elseif name == "Limiter" then

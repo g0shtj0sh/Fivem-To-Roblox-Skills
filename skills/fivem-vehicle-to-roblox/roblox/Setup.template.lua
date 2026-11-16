@@ -387,6 +387,15 @@ for name, info in pairs(PARTS) do
 			if sa then
 				sa:Destroy()
 			end
+			-- texture des vitres du mod (bordure noire, dégivrage) mise en ligne avec les sons : l'alpha de la texture
+			-- dessine ce qui est opaque ; la teinte (WindowTint -> Transparency) s'y ajoute
+			if info.GlassTexture and SOUND_IDS[info.GlassTexture] then
+				local gsa = Instance.new("SurfaceAppearance")
+				gsa.AlphaMode = Enum.AlphaMode.Transparency
+				gsa.ColorMapContent = Content.fromUri(SOUND_IDS[info.GlassTexture])
+				gsa.Parent = p
+				p:SetAttribute("GlassTexture", SOUND_IDS[info.GlassTexture])
+			end
 			p.Material = Enum.Material.Glass
 			p.Color = c3(info.AvgColor, Color3.new(0.1, 0.11, 0.12)):Lerp(Color3.new(0.05, 0.05, 0.06), 0.5)
 			base = 0.45

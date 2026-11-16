@@ -26,6 +26,7 @@ local TOGGLES = {
 	SirenSound = "string",
 	Horn = "boolean",
 	ExtraLights = "boolean",
+	InteriorLight = "boolean",
 }
 local VALID = {
 	Indicator = { Off = true, Left = true, Right = true, Hazard = true },

@@ -204,6 +204,54 @@ def cut_sweep_loops(sweep: np.ndarray, sr: int, positions, idle_rpm: float, max_
     return loops
 
 
+def periodic_loop(seg: np.ndarray, sr: int, min_seconds: float = 0.4) -> np.ndarray:
+    """Boucle SANS COUTURE d'un son tenu et périodique (klaxon, sirène tenue).
+
+    Avant le 2026-11-16, `_loopify` fondait la fin sur le début : sur un klaxon de 0,1 s le fondu de 50 ms écrasait
+    la moitié du son et la boucle repartait en plein milieu d'une onde (clic ~12 fois par seconde, signalé par
+    l'utilisateur : « leurs boucles sont mal faites »). Ici : (1) l'attaque est retirée (rejouée à chaque tour, elle
+    s'entendait) ; (2) la période fondamentale est mesurée par autocorrélation ; (3) le point de fin est choisi là où
+    l'onde qui y mène ressemble le plus à celle qui mène au point de départ, puis la fin est fondue (≤ 10 ms) vers ce
+    qui précède le départ : l'échantillon qui suit la fin EST alors le départ ; (4) la boucle est répétée jusqu'à
+    `min_seconds` (moins de redémarrages audibles du lecteur)."""
+    x = np.asarray(seg, dtype=np.float64)
+    n = len(x)
+    if n < int(sr * 0.03):
+        return seg
+    win = max(1, int(sr * 0.01))
+    rms = np.sqrt(np.convolve(x * x, np.ones(win) / win, mode="same"))
+    sustain_level = float(np.median(rms[n // 4:])) if n >= 8 else float(rms.max())
+    above = np.nonzero(rms >= 0.8 * sustain_level)[0]
+    s0 = int(min(above[0] if len(above) else 0, n // 3, int(sr * 0.08)))
+    # période fondamentale (60..1200 Hz) sur la partie tenue
+    body = x[s0:]
+    lo, hi = int(sr / 1200), int(sr / 60)
+    period = None
+    if len(body) > 2 * hi:
+        ac = np.correlate(body[: len(body) - hi], body[: len(body) - hi], mode="full")[len(body) - hi - 1:]
+        ac = np.array([np.dot(body[:-k], body[k:]) / (len(body) - k) for k in range(lo, hi)])
+        period = lo + int(np.argmax(ac))
+    W = max(int(sr * 0.004), 2 * period if period else int(sr * 0.006))
+    a = s0 + W  # départ de la boucle (une fenêtre W d'onde le précède)
+    if a + 2 * W >= n:
+        return seg
+    ref = x[a - W:a]
+    ref = (ref - ref.mean()) / (ref.std() + 1e-9)
+    best, best_e = -2.0, n - 1
+    for e in range(max(a + 2 * W, a + (n - a) // 2), n):
+        cand = x[e - W:e]
+        c = float(np.dot(ref, (cand - cand.mean()) / (cand.std() + 1e-9)) / W)
+        if c > best:
+            best, best_e = c, e
+    loop = x[a:best_e].copy()
+    F = min(int(sr * 0.01), len(loop) // 4)
+    if F > 1:
+        r = np.linspace(0.0, 1.0, F)
+        loop[-F:] = loop[-F:] * (1 - r) + x[a - F:a] * r
+    reps = max(1, int(np.ceil(min_seconds * sr / max(len(loop), 1))))
+    return np.tile(loop, reps).astype(seg.dtype if hasattr(seg, "dtype") else np.float32)
+
+
 def loop_from_file(src: Path, max_seconds: float, report: Report,
                    label: str) -> tuple[np.ndarray, int] | None:
     """Prend un .wav du jeu et en fait une boucle exploitable par Roblox.
@@ -225,7 +273,7 @@ def loop_from_file(src: Path, max_seconds: float, report: Report,
         report.warn(f"Son {label} silencieux : synthese utilisee.")
         return None
     seg = seg / peak * 0.9
-    return _loopify(seg, min(int(sr * 0.05), max(1, len(seg) // 4))), sr
+    return periodic_loop(seg, sr), sr
 
 
 def pick_stream(streams: dict[str, Path], keywords) -> Path | None:

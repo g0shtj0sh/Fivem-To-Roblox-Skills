@@ -38,6 +38,7 @@ Input.Bindings = {
 	Cruise = { Enum.KeyCode.Y },
 	Limiter = { Enum.KeyCode.U },
 	Windows = { Enum.KeyCode.K },
+	InteriorLight = { Enum.KeyCode.I },
 }
 -- Libellés des actions (panneau des touches du jeu, menus) : même ordre d'affichage que la liste
 Input.Labels = {
@@ -45,7 +46,7 @@ Input.Labels = {
 	{ "SteerRight", "Tourner à droite" }, { "Handbrake", "Frein à main" }, { "GearUp", "Monter un rapport" },
 	{ "GearDown", "Descendre un rapport" }, { "Cruise", "Régulateur de vitesse" }, { "Limiter", "Limiteur de vitesse" },
 	{ "Headlights", "Phares (code / route / éteints)" }, { "IndicatorLeft", "Clignotant gauche" },
-	{ "IndicatorRight", "Clignotant droit" }, { "Hazard", "Warnings" }, { "Horn", "Klaxon" },
+	{ "IndicatorRight", "Clignotant droit" }, { "Hazard", "Warnings" }, { "InteriorLight", "Plafonnier" }, { "Horn", "Klaxon" },
 	{ "Engine", "Moteur (couper / démarrer)" }, { "Windows", "Vitres avant (baisser / monter)" },
 	{ "Siren", "Sirène (véhicules d'urgence)" }, { "SirenTone", "Son de la sirène" }, { "LookBack", "Regarder derrière" },
 }

@@ -184,6 +184,13 @@ function Runtime.Attach(model)
 			self:_prepareAudio()
 		end
 	end)
+	-- vitre qui casse (VehicleCustomization.SmashWindows, WindowBroken_<os>) : éclats en particules qui retombent
+	-- et disparaissent en moins d'une seconde ; aucune pièce physique (demande de l'utilisateur, 2026-11-16)
+	model.AttributeChanged:Connect(function(attr)
+		if renderers[model] == self and string.sub(attr, 1, 13) == "WindowBroken_" and model:GetAttribute(attr) == true then
+			self:_shatter(string.sub(attr, 14))
+		end
+	end)
 	renderers[model] = self
 	model.Destroying:Connect(function()
 		Runtime.Detach(model)
@@ -236,6 +243,7 @@ function Runtime:_state()
 		Siren = m:GetAttribute("Siren") == true,
 		SirenSound = m:GetAttribute("SirenSound") or "wail",
 		Horn = m:GetAttribute("Horn") == true,
+		InteriorLight = m:GetAttribute("InteriorLight") == true,
 		Steer = m:GetAttribute("Steer") or 0,
 		Throttle = m:GetAttribute("Throttle") or 0,
 		Rpm = m:GetAttribute("Rpm"),
@@ -593,6 +601,81 @@ function Runtime:_aimHeadlights(full)
 	end
 end
 
+-- Lumières d'habitacle et de plaque, aux os du modèle GTA (mètres, repère du véhicule)
+Runtime.CabinLights = {
+	interior = { bone = "interiorlight", class = "PointLight", range = 1.1, brightness = 0.9, color = Color3.fromRGB(255, 220, 180) },
+	plate = { bone = "platelight", class = "SpotLight", range = 0.7, brightness = 1.6, angle = 120,
+		color = Color3.fromRGB(255, 245, 230), face = Enum.NormalId.Bottom },
+}
+function Runtime:_cabinLight(kind, on)
+	self.CabinLightObjs = self.CabinLightObjs or {}
+	local l = self.CabinLightObjs[kind]
+	if l == nil then
+		local spec = Runtime.CabinLights[kind]
+		local b = spec and (self.Config.Bones or {})[spec.bone]
+		if not b or not b.Position or (b.Position[1] == 0 and b.Position[2] == 0 and b.Position[3] == 0) then
+			self.CabinLightObjs[kind] = false
+			return
+		end
+		local att = Instance.new("Attachment")
+		att.Name = "F2R_" .. kind .. "Light"
+		att.Position = Vector3.new(b.Position[1], b.Position[2], b.Position[3]) * self.Spm
+		l = Instance.new(spec.class)
+		l.Range = spec.range * self.Spm
+		l.Brightness = spec.brightness
+		l.Color = spec.color
+		l.Shadows = false
+		l.Enabled = false
+		if spec.class == "SpotLight" then
+			l.Angle = spec.angle
+			l.Face = spec.face
+		end
+		l.Parent = att
+		att.Parent = self.Root
+		self.CabinLightObjs[kind] = l
+	end
+	if l and l.Enabled ~= on then
+		l.Enabled = on
+	end
+end
+
+-- Éclats d'une vitre qui casse : un émetteur par pièce de verre, une rafale, détruit après 1,2 s.
+Runtime.GlassShardTexture = "rbxassetid://126211105579117" -- éclat de verre (brolver-rp scripts/vehicle-glass/draw_shard.py) ; attribut GlassShardTexture du véhicule pour un autre
+function Runtime:_shatter(bone)
+	local cam = Workspace.CurrentCamera
+	local Debris = game:GetService("Debris")
+	for _, p in ipairs(self.Model:GetDescendants()) do
+		if p:IsA("BasePart") and p:GetAttribute("Window") == bone and p:GetAttribute("Kind") == "glass" then
+			if cam and (cam.CFrame.Position - p.Position).Magnitude > 150 then
+				continue
+			end
+			local dims = { p.Size.X, p.Size.Y, p.Size.Z }
+			table.sort(dims)
+			local e = Instance.new("ParticleEmitter")
+			e.Name = "F2R_GlassShards"
+			e.Texture = self.Model:GetAttribute("GlassShardTexture") or Runtime.GlassShardTexture
+			e.Enabled = false
+			e.Shape = Enum.ParticleEmitterShape.Box
+			e.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+			e.Lifetime = NumberRange.new(0.45, 0.9)
+			e.Speed = NumberRange.new(4, 11)
+			e.SpreadAngle = Vector2.new(180, 180)
+			e.Acceleration = Vector3.new(0, -70, 0)
+			e.Drag = 2.5
+			e.Rotation = NumberRange.new(0, 360)
+			e.RotSpeed = NumberRange.new(-420, 420)
+			e.Size = NumberSequence.new(0.025 * self.Spm, 0.015 * self.Spm) -- éclats de 3 à 5 cm
+			e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(0.7, 0.25),
+				NumberSequenceKeypoint.new(1, 1) })
+			e.Color = ColorSequence.new(Color3.fromRGB(205, 222, 228))
+			e.LightEmission = 0.15
+			e.Parent = p
+			e:Emit(math.clamp(math.floor(dims[2] * dims[3] * 5), 8, 30))
+			Debris:AddItem(e, 1.2)
+		end
+	end
+end
+
 function Runtime:_updateLights(s)
 	-- véhicule rendu invisible (VehicleCustomization.SetVisible) : tous les feux éteints
 	if s.Invisible then
@@ -652,6 +735,16 @@ function Runtime:_updateLights(s)
 		self:_setRole(r, s.Brake, LIGHT_COLORS.brake, 1.2)
 	end
 	self:_setRole("brakelight_m", s.Brake, LIGHT_COLORS.brake, 0.6)
+	-- plafonnier : portière ouverte (comme une vraie voiture) ou interrupteur (touche I) ; éclairage de plaque avec les
+	-- feux de position et les phares (avant le 2026-11-16 : os interiorlight / platelight sans aucune lumière)
+	local doorOpen = false
+	for bone in pairs(self.Config.Hinges or {}) do
+		if string.find(bone, "door", 1, true) and (self.Model:GetAttribute("Door_" .. bone) or 0) > 0.5 then
+			doorOpen = true
+		end
+	end
+	self:_cabinLight("interior", (s.InteriorLight or doorOpen) and not s.Invisible)
+	self:_cabinLight("plate", (hl or 0) > 0 and not s.Invisible)
 	self:_setRole("reversinglight_l", s.Reverse, LIGHT_COLORS.reverse, 1.2)
 	self:_setRole("reversinglight_r", s.Reverse, LIGHT_COLORS.reverse, 1.2)
 	local left = (s.Indicator == "Left" or s.Indicator == "Hazard") and blink

@@ -174,6 +174,16 @@ coupé par frein / frein à main / marche arrière, PI sur l'accélérateur) et 
 avant (`K`) ; `VehicleInput.Labels` (libellés pour un panneau des touches). Mesuré : régulateur 57–58 km/h pour
 57,9 ; limiteur 55–56 km/h accélérateur à fond ; 200 envois de télémétrie en 1 s → 34 écritures du régime.
 
+**Vitres, plafonnier, plaque, klaxon (2026-11-16)** : la texture des vitres du mod (`vehicle_generic_glasswindows*` :
+bordure noire, dégivrage) est mise en ligne à part (`glass/`, id lu avec les sons) et posée par le Setup en
+SurfaceAppearance à transparence (attribut `GlassTexture`) ; une vitre qui casse (`WindowBroken_<os>`) lance des
+éclats en particules sur chaque client (un émetteur par vitre, ≤ 30 éclats, détruit après 1,2 s, rien au-delà de
+150 studs ; image `Runtime.GlassShardTexture` ou attribut `GlassShardTexture`). Plafonnier à l'os `interiorlight`
+(portière ouverte, ou touche `I` → attribut `InteriorLight`), éclairage de plaque à l'os `platelight` avec les feux
+(`Runtime.CabinLights`). Klaxon : `periodic_loop` (attaque retirée, fin choisie là où l'onde se raccorde, fondu
+≤ 10 ms vers ce qui précède le départ) — l'ancien `_loopify` pompait le volume à chaque tour (mesuré sur 11 klaxons :
+0,24–0,78 → 0,11–0,33).
+
 **Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
 Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).
 Déplacements avant / côté / vertical poussés par les accélérations du véhicule **en g** (vertical passé en
