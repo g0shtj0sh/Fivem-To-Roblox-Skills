@@ -120,6 +120,20 @@ Mesures (Studio, m422, 2026-11-16) : en ligne droite caméra alignée (0°) ; en
 capot (suit la trajectoire + ~18°) ; Dynamic : FOV 55° à l'arrêt → 80° à 120 km/h. Cadrage ChaseNear comparé aux
 vidéos de référence : voiture en bas au centre, ≈ 25 % de la largeur, horizon vers le tiers haut.
 
+**Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
+Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).
+Déplacements avant / côté / vertical poussés par les accélérations du véhicule **en g** (vertical passé en
+passe-haut, `Recenter` s) ; rotations tangage / roulis / lacet : on retranche la rotation du véhicule (tête stable
+dans le monde) puis le ressort ramène vers l'habitacle (`Tracking` = suivi des yeux : passe-haut sur la vitesse de
+rotation, fréquence × 1,2, amortissement × 0,5) ; pivots (`ForwardPitchPivot`, `SideRollPivot`, `SideSighting`) ;
+regard dans le virage = `SteerFollow` × angle du volant (verrou de braquage × `SteerRatio`), borné `SteerMax`,
+lissé `Smoothing` s (conducteur local : direction de `VehicleDrive`, passager : attribut `Steer`) ; à-coup au
+passage de rapport (`GearKick`) ; effets nuls sous `ThresholdKmh`, pleins à `FullKmh` ; garde-fous `Limits`.
+Défauts = preset « NeckFX Imagined Visuals » fourni par l'utilisateur ; FOV cockpit 100 (conseil du pack), regarder
+derrière 130° (par-dessus l'épaule, lissé). Mesuré (m422) : accélération → tête 2,8 cm en arrière et vue +2° ;
+freinage → 4,6 cm en avant, −3,5° ; virage → 1,8 cm vers l'extérieur, roulis 5°, regard 20° dans le virage ; tout à
+0 à l'arrêt.
+
 **Rétroviseur** (`VehicleMirror`, touche **B**, bouton « Rétro » sur mobile) : rectangle en haut au centre (27 % de
 la largeur, 4:1), `ViewportFrame` + `WorldModel` de **copies** (Roblox ne rend pas le monde deux fois) :
 véhicules tagués derrière (≤ `Range` studs, `MaxPartsPerVehicle` plus grosses pièces, `BulkMoveTo` à chaque image),
