@@ -149,6 +149,15 @@ retour du regard en ~2 s en roulant ; fixe 0–8° de la trajectoire en drift. C
 (`Neck.Forward.Accel` 2,2 / `Brake` 0,5, `ForwardPitchAccel` 0,5) → 6,2 cm en arrière + 2,5° à l'accélération,
 2,4 cm en avant + 1,8° au freinage ; FOV 60.
 
+**Suspension vue par les autres joueurs (2026-11-16)** : seul le conducteur simule les roues (`VehicleDrive`) et sa
+télémétrie (`Suspension`, `WheelSpin`…) reste sur son PC ; la caisse, elle, est répliquée par Roblox (avec le
+retard et le lissage de la réplication — inévitable). Sans rien d'autre, chez un passager ou un piéton les roues
+restaient figées au repos pendant que la caisse bougeait. `VehicleRuntime:_estimateSuspension` : chaque client qui
+ne conduit pas sonde lui-même le sol sous chaque roue avec la géométrie du moteur de conduite (un spherecast par roue,
+`Dyn.new(cfg).P.wheels`), lissé 25/s, pour les véhicules à moins de `SuspensionEstimateDistance` (200 studs) de sa
+caméra. Mesuré (passager, voiture lâchée de 3 studs) : roues pendantes −18 cm en l'air, compression à l'impact,
+retour au repos en ~0,4 s.
+
 **Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
 Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).
 Déplacements avant / côté / vertical poussés par les accélérations du véhicule **en g** (vertical passé en

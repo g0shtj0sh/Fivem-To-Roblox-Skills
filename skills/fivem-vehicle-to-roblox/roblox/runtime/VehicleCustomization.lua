@@ -642,6 +642,87 @@ function Custom.GetPerformance(model)
 	return out
 end
 
+-- ------------------------------------------------------------------ son moteur (banque du jeu)
+-- Un véhicule converti porte UN son du pack maison (VehicleConfig.Audio). Le jeu peut publier les autres sons du
+-- pack dans ReplicatedStorage.FiveMVehicles.EngineSoundBank (scripts/engine_sound_bank.py) : le véhicule peut alors
+-- prendre n'importe quel son de SA catégorie (coupé, sport, super…), jamais d'une autre. Choix = attribut
+-- EngineSound (absent = son d'origine) ; chaque client refait ses couches de son (VehicleRuntime).
+local ENGINE_CLASS_CATEGORY = {
+	VC_COMPACT = "compact", VC_SEDAN = "berline", VC_SUV = "suv", VC_COUPE = "coupe", VC_MUSCLE = "muscle",
+	VC_SPORT_CLASSIC = "classique", VC_SPORT = "sport", VC_SUPER = "super", VC_MOTORCYCLE = "sport",
+	VC_OFF_ROAD = "toutterrain", VC_MILITARY = "toutterrain", VC_INDUSTRIAL = "pickup", VC_UTILITY = "pickup",
+	VC_VAN = "pickup", VC_COMMERCIAL = "pickup", VC_SERVICE = "pickup", VC_EMERGENCY = "berline",
+} -- = CLASS_TO_CATEGORY de scripts/f2r/sound_pack.py
+
+local bankCache
+local function engineSoundBank()
+	if bankCache == nil then
+		local folder = script.Parent or game:GetService("ReplicatedStorage"):FindFirstChild("FiveMVehicles")
+		local mod = folder and folder:FindFirstChild("EngineSoundBank")
+		local ok, bank = pcall(function()
+			return mod and require(mod)
+		end)
+		bankCache = (ok and type(bank) == "table" and bank) or false
+	end
+	return bankCache or nil
+end
+Custom.EngineSoundBank = engineSoundBank
+
+-- Son d'origine du véhicule (nom du pack, ex. « brolver_coupe_05 ») lu dans Audio.Source, ou nil.
+local function originalEngineSound(cfg)
+	local src = (cfg.Audio or {}).Source
+	return type(src) == "string" and string.match(src, "^awc:([%w_]-)_moteur_") or nil
+end
+
+-- { Category, Default (son d'origine ou nil), Current, List = { {Name, Label} } } : les sons que CE véhicule peut
+-- prendre (sa catégorie), son d'origine compris ; nil si le véhicule n'a pas de catégorie connue.
+function Custom.EngineSounds(model)
+	local cfg = getConfig(model)
+	local bank = engineSoundBank() or {}
+	local default = originalEngineSound(cfg)
+	local category = (default and bank[default] and bank[default].Category)
+		or (default and string.match(default, "^brolver_(%a+)_%d+$"))
+		or ENGINE_CLASS_CATEGORY[string.upper(tostring(cfg.Class or ""))]
+	if not category then
+		return nil
+	end
+	local list = {}
+	for name, entry in pairs(bank) do
+		if entry.Category == category and entry.Loops then
+			table.insert(list, { Name = name, Label = entry.Label or name })
+		end
+	end
+	if default and not bank[default] then
+		-- son d'origine absent de la banque : il reste choisissable (il est déjà dans le véhicule)
+		local n = string.match(default, "_(%d+)$")
+		table.insert(list, { Name = default, Label = n and (category .. " " .. tonumber(n)) or default })
+	end
+	table.sort(list, function(x, y)
+		return x.Name < y.Name
+	end)
+	local current = model:GetAttribute("EngineSound")
+	return { Category = category, Default = default, Current = type(current) == "string" and current or default, List = list }
+end
+
+-- Met le son `name` (de la catégorie du véhicule) ; nil ou le son d'origine = retour à l'origine.
+function Custom.SetEngineSound(model, name)
+	local info = Custom.EngineSounds(model)
+	if name == nil or (info and name == info.Default) then
+		model:SetAttribute("EngineSound", nil)
+		return true
+	end
+	if not info then
+		return false, "absent"
+	end
+	for _, item in ipairs(info.List) do
+		if item.Name == name then
+			model:SetAttribute("EngineSound", name)
+			return true
+		end
+	end
+	return false, "other_category"
+end
+
 -- ------------------------------------------------------------------ options & sauvegarde
 function Custom.GetOptions(model)
 	local cfg = getConfig(model)
@@ -664,6 +745,7 @@ function Custom.GetOptions(model)
 		FactoryColors = #((cfg.Colors or {}).Variations or {}),
 		Performance = Custom.PerformanceSlots(model),
 		StatMods = cfg.StatMods or {},
+		EngineSounds = Custom.EngineSounds(model),
 	}
 end
 
@@ -673,7 +755,7 @@ local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_"
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
 local SAVE_KEYS = {
 	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
-	"PlateText", "PlateStyle", "PlateStyleChosen",
+	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound",
 }
 
 function Custom.Serialize(model)
@@ -700,7 +782,7 @@ end
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen" }
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound" }
 
 function Custom.Apply(model, data)
 	data = data or {}
@@ -1335,6 +1417,13 @@ OPS.KickOut = function(model)
 		return false, "empty"
 	end
 	return true
+end
+
+OPS.EngineSound = function(model, name)
+	if name ~= nil and (type(name) ~= "string" or #name > 64) then
+		return false, "invalid"
+	end
+	return Custom.SetEngineSound(model, name)
 end
 
 OPS.HornTune = function(model)

@@ -14,6 +14,7 @@
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 
 local Runtime = {}
 Runtime.__index = Runtime
@@ -43,6 +44,24 @@ local function backfireModule()
 		backfire = (ok and mod) or false
 	end
 	return backfire
+end
+
+-- Suspension vue par les autres joueurs (passagers, piétons) : seul le conducteur simule les roues et sa télémétrie
+-- ne quitte pas son PC ; ailleurs les roues restaient figées au repos pendant que la caisse répliquée bougeait
+-- (signalé par l'utilisateur à deux joueurs, 2026-11-16). Chaque client sonde donc lui-même le sol sous chaque roue,
+-- avec la géométrie du moteur de conduite (VehicleDrive : un spherecast par roue depuis le haut du débattement).
+Runtime.SuspensionEstimateDistance = 200 -- studs de la caméra : au-delà, roues laissées telles quelles
+
+local dynModule
+local function dynamics()
+	if dynModule == nil then
+		local m = script.Parent:FindFirstChild("VehicleDynamics")
+		local ok, Dyn = pcall(function()
+			return m and require(m)
+		end)
+		dynModule = (ok and Dyn) or false
+	end
+	return dynModule
 end
 
 local dynT
@@ -158,6 +177,13 @@ function Runtime.Attach(model)
 	self:_prepareSuspensionHinges()
 	self.Sounds = model:FindFirstChild("Sounds", true)
 	self:_prepareAudio()
+	-- son moteur changé en jeu (custom « EngineSound ») : les couches sont refaites avec les boucles de la banque
+	model:GetAttributeChangedSignal("EngineSound"):Connect(function()
+		if renderers[model] == self then
+			self:_resetAudio()
+			self:_prepareAudio()
+		end
+	end)
 	renderers[model] = self
 	model.Destroying:Connect(function()
 		Runtime.Detach(model)
@@ -173,6 +199,9 @@ function Runtime.Detach(model)
 			if l.group then
 				l.group:Destroy()
 			end
+		end
+		for _, snd in ipairs(r.BankSounds or {}) do
+			snd:Destroy()
 		end
 		renderers[model] = nil
 	end
@@ -664,6 +693,72 @@ local function exhaustPosition(cfg)
 	return Vector3.new(0, 0.3, 2.2)
 end
 
+-- Banque des sons moteur du jeu (ReplicatedStorage.FiveMVehicles.EngineSoundBank, écrite par
+-- scripts/engine_sound_bank.py) : { [nom] = { Category, Label, IdleRpm, Loops = { {Name, Rpm, Load, Layer, SoundId} } } }.
+local bankCache
+local function engineSoundBank()
+	if bankCache == nil then
+		local mod = script.Parent and script.Parent:FindFirstChild("EngineSoundBank")
+		local ok, bank = pcall(function()
+			return mod and require(mod)
+		end)
+		bankCache = (ok and type(bank) == "table" and bank) or false
+	end
+	return bankCache or nil
+end
+Runtime.EngineSoundBank = engineSoundBank
+
+-- Boucles jouées par ce véhicule : celles de son VehicleConfig, ou celles du son choisi dans la banque
+-- (attribut EngineSound) ; les Sound de la banque sont créés ici, sur ce client seulement.
+function Runtime:_engineLoops(a)
+	local name = self.Model:GetAttribute("EngineSound")
+	local bank = type(name) == "string" and engineSoundBank()
+	local entry = bank and bank[name]
+	if not (entry and entry.Loops) then
+		return a.EngineLoops or {}, nil
+	end
+	self.BankSounds = {}
+	local list, preload = {}, {}
+	for _, loop in ipairs(entry.Loops) do
+		local snd = Instance.new("Sound")
+		snd.Name = "Bank_" .. loop.Name
+		snd.SoundId = loop.SoundId
+		snd.Volume = 0
+		snd:SetAttribute("EngineSound", name)
+		snd.Parent = self.Sounds
+		table.insert(self.BankSounds, snd)
+		table.insert(preload, snd)
+		table.insert(list, { Name = snd.Name, Rpm = loop.Rpm, Load = loop.Load, Layer = loop.Layer })
+	end
+	task.spawn(function()
+		pcall(function()
+			game:GetService("ContentProvider"):PreloadAsync(preload)
+		end)
+	end)
+	return list, entry
+end
+
+-- Défait les couches (avant de les refaire avec un autre son) : voix coupées, groupes et Sound de la banque détruits.
+function Runtime:_resetAudio()
+	self:_stopAllSounds()
+	for _, l in pairs(self.Layers or {}) do
+		for _, list in ipairs({ l.on, l.off }) do
+			for _, item in ipairs(list) do
+				item.Sound:Stop()
+				item.Sound.Volume = 0
+			end
+		end
+		if l.group then
+			l.group:Destroy()
+		end
+	end
+	for _, snd in ipairs(self.BankSounds or {}) do
+		snd:Destroy()
+	end
+	self.BankSounds = nil
+	self.Layers = {}
+end
+
 function Runtime:_prepareAudio()
 	self.Layers = {}
 	local a = self.Config.Audio
@@ -671,6 +766,8 @@ function Runtime:_prepareAudio()
 		return
 	end
 	local E = Runtime.EngineAudio
+	local loops, bankEntry = self:_engineLoops(a)
+	local idleRpm = (bankEntry and bankEntry.IdleRpm) or a.IdleRpm or 850
 	local function layer(name)
 		local l = self.Layers[name]
 		if not l then
@@ -679,21 +776,21 @@ function Runtime:_prepareAudio()
 		end
 		return l
 	end
-	for _, loop in ipairs(a.EngineLoops or {}) do
+	for _, loop in ipairs(loops) do
 		local snd = self.Sounds:FindFirstChild(loop.Name, true) or (self.Root and self.Root:FindFirstChild(loop.Name, true))
 		if snd and snd:IsA("Sound") then
 			snd.Looped = true
 			snd.Volume = 0
 			local l = layer(loop.Layer or "engine")
 			if loop.Load == "idle" then
-				l.idle = { Sound = snd, Rpm = loop.Rpm or a.IdleRpm or 850 }
+				l.idle = { Sound = snd, Rpm = loop.Rpm or idleRpm }
 			else
 				table.insert(l[loop.Load == "off" and "off" or "on"], { Sound = snd, Rpm = loop.Rpm })
 			end
 		end
 	end
 	-- ancien format : un seul « Idle » (couche moteur)
-	local legacyIdle = self.Sounds:FindFirstChild("Idle")
+	local legacyIdle = not bankEntry and self.Sounds:FindFirstChild("Idle")
 	if legacyIdle and legacyIdle:IsA("Sound") then
 		local l = layer("engine")
 		if not l.idle then
@@ -751,13 +848,16 @@ function Runtime:_prepareAudio()
 		end
 	end
 	self.LoadSmooth = 0
-	self.Model.Destroying:Connect(function()
-		for _, l in pairs(self.Layers or {}) do
-			if l.group then
-				l.group:Destroy()
+	if not self.AudioDestroyHooked then
+		self.AudioDestroyHooked = true
+		self.Model.Destroying:Connect(function()
+			for _, l in pairs(self.Layers or {}) do
+				if l.group then
+					l.group:Destroy()
+				end
 			end
-		end
-	end)
+		end)
+	end
 end
 
 function Runtime:_stopAllSounds()
@@ -914,8 +1014,68 @@ function Runtime:_updateAudio(dt, s)
 end
 
 -- ------------------------------------------------------------------ boucle
+function Runtime:_estimateSuspension(dt)
+	local Dyn = dynamics()
+	if not Dyn then
+		return nil
+	end
+	if self.SuspP == nil then
+		local root = self.Root
+		local comLocal = root.CFrame:PointToObjectSpace(root.AssemblyCenterOfMass) / self.Spm
+		local ok, sim = pcall(Dyn.new, self.Config, comLocal)
+		self.SuspP = (ok and sim and sim.P) or false
+		self.SuspEst = {}
+		self.SuspParams = RaycastParams.new()
+		self.SuspParams.FilterType = Enum.RaycastFilterType.Exclude
+		self.SuspParams.IgnoreWater = true
+		self.SuspFilterAge = math.huge
+	end
+	local P = self.SuspP
+	if not P then
+		return nil
+	end
+	local cam = Workspace.CurrentCamera
+	if cam and (cam.CFrame.Position - self.Root.Position).Magnitude > Runtime.SuspensionEstimateDistance then
+		return self.SuspEst
+	end
+	self.SuspFilterAge += dt
+	if self.SuspFilterAge > 1 then
+		self.SuspFilterAge = 0
+		local list = { self.Model }
+		for _, pl in ipairs(Players:GetPlayers()) do
+			if pl.Character then
+				table.insert(list, pl.Character)
+			end
+		end
+		self.SuspParams.FilterDescendantsInstances = list
+	end
+	local spm = self.Spm
+	local cf = self.Root.CFrame
+	local up = cf.UpVector
+	local margin, extra = 0.3 * spm, 0.25 * spm
+	local travelSt = P.travel * spm
+	local k = 1 - math.exp(-dt * 25) -- lissage : la caisse répliquée arrive par à-coups
+	for _, w in ipairs(P.wheels) do
+		local origin = cf:PointToWorldSpace((w.rest + Vector3.new(0, P.upper + P.raise, 0)) * spm) + up * margin
+		local hit = Workspace:Spherecast(origin, w.radius * spm * 0.95, -up * (margin + travelSt + extra), self.SuspParams)
+		local target = -w.x0 -- roue pendante
+		if hit then
+			local d = hit.Distance - margin
+			if d <= travelSt then
+				target = (travelSt - math.max(d, -travelSt)) / spm - w.x0
+			end
+		end
+		local cur = self.SuspEst[w.bone] or target
+		self.SuspEst[w.bone] = cur + (target - cur) * k
+	end
+	return self.SuspEst
+end
+
 function Runtime:Update(dt)
 	local s = self:_state()
+	if not s.Suspension then
+		s.Suspension = self:_estimateSuspension(dt) -- pas de télémétrie : ce client ne conduit pas ce véhicule
+	end
 	self.State = s
 	self:_updateJoints(dt, s)
 	self:_updateLights(s)
