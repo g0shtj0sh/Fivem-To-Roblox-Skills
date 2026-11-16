@@ -82,6 +82,9 @@ local LIGHT_COLORS = {
 -- ne coupe presque rien vers l'horizon) ; à −10° elle se ramasse devant la voiture et les pleins phares portent
 -- nettement plus loin. Hypothèse non vérifiée : l'`aim.dippedbeam.mod` −0,2 de GTA serait en radians (−11,5°).
 -- Ancien comportement (remplacé) : même portée et même angle, luminosité doublée (3 → 6).
+-- Largeur (demande de l'utilisateur, 2026-11-16 : « éclaire seulement plus loin, il faut aussi plus large ») :
+-- les pleins phares ouvrent aussi le cône (60° → 100°). Dans Roblox la luminosité d'un SpotLight ne baisse pas
+-- quand son angle s'ouvre : la tache s'étale sans pâlir. Le cône est rond, il monte donc aussi (±50°).
 Runtime.Headlights = {
 	FullRange = 60, -- studs (maximum d'un SpotLight)
 	DistMult = 1.3, -- GTA fullbeam.DistMult
@@ -89,6 +92,8 @@ Runtime.Headlights = {
 	Brightness = 3, -- croisements
 	DippedPitch = -10, -- degrés, faisceau baissé (réglé à l'essai, voir plus haut)
 	FullPitch = 0,
+	DippedAngle = 60, -- degrés, ouverture totale du cône en croisement (= VehicleLights.Spec.headlight.angle)
+	FullAngle = 100, -- degrés, ouverture en pleins phares : plus large que les croisements
 }
 
 local function bit(seq, beat)
@@ -490,7 +495,7 @@ function Runtime:_setRole(role, on, color, brightness)
 	end
 end
 
--- Portée et visée des phares selon le mode (croisement ou route). Les attachments des phares sont posés par
+-- Portée, ouverture et visée des phares selon le mode (croisement ou route). Les attachments des phares sont posés par
 -- VehicleLights.Rig aux axes du véhicule (avant = −Z) : on garde cette pose et on la tourne autour de X.
 function Runtime:_aimHeadlights(full)
 	if self.HeadBeamFull == full then
@@ -500,10 +505,14 @@ function Runtime:_aimHeadlights(full)
 	local H = Runtime.Headlights
 	local range = full and H.FullRange or H.FullRange / H.DistMult
 	local pitch = math.rad(full and H.FullPitch or H.DippedPitch)
+	local angle = full and H.FullAngle or H.DippedAngle
 	self.HeadBase = self.HeadBase or {}
 	for _, role in ipairs({ "headlight_l", "headlight_r" }) do
 		for _, l in ipairs(self.LightObjects[role] or {}) do
 			l.Range = range
+			if l:IsA("SpotLight") then
+				l.Angle = angle
+			end
 			local a = l.Parent
 			if a and a:IsA("Attachment") then
 				self.HeadBase[a] = self.HeadBase[a] or a.CFrame
