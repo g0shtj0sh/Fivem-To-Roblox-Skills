@@ -395,6 +395,8 @@ def restyle_geometry(parts: list, ops: list[dict], out_dir: Path, report: Report
     ``roughness`` 0-1 et ``metal`` (bool) -> ``Part.mr_override``. Même os, même rattachement : la pièce suit la
     sienne. Usage : une pièce du mod qui partage son matériau avec d'autres mais doit en changer seule
     (m422 : le silencieux d'échappement, métal poli gris clair comme les manchons des sorties, 2026-11-15).
+    Avec ``facing`` [x, y, z] (et ``min_dot``, 0,5 par défaut) : les TRIANGLES de la boîte tournés vers cette
+    direction, sans exiger un îlot entier (tranche d'une coque de verre, 2026-11-16).
     Renvoie les noms des pièces créées."""
     created = []
     for op in ops:
@@ -402,15 +404,29 @@ def restyle_geometry(parts: list, ops: list[dict], out_dir: Path, report: Report
         hi = np.array(op["box"][1], np.float32) + BOX_TOLERANCE_M
         label = re.sub(r"[^A-Za-z0-9_]", "_", str(op.get("name") or "restyle"))
         moved = 0
+        made: list[str] = []
         for p in list(parts):
             if p.tri_count == 0 or (op.get("part") and not p.name.startswith(op["part"])):
                 continue
             tris = p.idx.reshape(-1, 3)
             take = np.zeros(len(tris), bool)
-            for isl in _islands(p.idx, len(p.pos)):
-                pts = p.pos[np.unique(tris[isl])]
-                if (pts >= lo).all() and (pts <= hi).all():
-                    take[isl] = True
+            facing = op.get("facing")
+            if facing is not None:
+                # mode FACES : triangles entièrement dans la boîte ET tournés vers `facing` (normale géométrique,
+                # sens d'enroulement) à min_dot près. Pour une tranche qui appartient à un grand îlot (la coque
+                # de verre d'un feu, coupée à la jointure coffre / aile : m422, 2026-11-16).
+                d = np.asarray(facing, np.float64)
+                d = d / max(float(np.linalg.norm(d)), 1e-12)
+                t = p.pos[tris].astype(np.float64)
+                inside = ((t >= lo) & (t <= hi)).all(axis=(1, 2))
+                nrm = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+                nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+                take = inside & (nrm @ d >= float(op.get("min_dot", 0.5)))
+            else:
+                for isl in _islands(p.idx, len(p.pos)):
+                    pts = p.pos[np.unique(tris[isl])]
+                    if (pts >= lo).all() and (pts <= hi).all():
+                        take[isl] = True
             if not take.any():
                 continue
             sel = tris[take]
@@ -431,10 +447,11 @@ def restyle_geometry(parts: list, ops: list[dict], out_dir: Path, report: Report
             p.idx = tris[~take].reshape(-1).astype(np.uint32)
             parts.append(q)
             created.append(name)
+            made.append(name)
             moved += int(take.sum())
         why = op.get("why", "")
         if moved:
-            report.info(f"Pièce restylée ({why}) : {moved} triangle(s) -> {', '.join(c for c in created if c.endswith('__' + label))}.")
+            report.info(f"Pièce restylée ({why}) : {moved} triangle(s) -> {', '.join(made)}.")
         else:
             report.warn(f"Retouche « {why} » : aucun îlot dans la boîte {op['box']} (géométrie du mod changée ?).")
     parts[:] = [p for p in parts if p.tri_count > 0]

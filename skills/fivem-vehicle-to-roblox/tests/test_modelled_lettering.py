@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from dataclasses import replace
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -93,3 +94,37 @@ with tempfile.TemporaryDirectory() as d:
     px = np.asarray(Image.open(Path(d) / "f2r_chassis__mesh_13__silencer.png").convert("RGB"))
     assert (px == [62, 60, 58]).all()
 print("ok restyle")
+
+# 6) restyle_islands avec `facing` : seulement les TRIANGLES de la boîte tournés vers la direction, même quand ils
+#    appartiennent à un grand îlot (tranche d'une coque de verre de feu à la jointure coffre / aile, m422 2026-11-16)
+cube_v = np.array([[x, y, z] for x in (0, 0.1) for y in (0, 0.1) for z in (0, 0.1)], np.float32)
+faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+tri_list = []
+for a, b, c2, d2 in faces:
+    for t in ((a, b, c2), (a, c2, d2)):
+        p0, p1, p2 = cube_v[list(t)]
+        n = np.cross(p1 - p0, p2 - p0)
+        if np.dot(n, (p0 + p1 + p2) / 3 - 0.05) < 0:  # enroulement vers l'extérieur
+            t = (t[0], t[2], t[1])
+        tri_list.extend(t)
+cube = Part(name="chassis__badges_7", bone="chassis", owner="chassis", shader=sh, kind="mesh", paint=None,
+            custom_color=None, light=None, pos=cube_v.copy(), nrm=np.tile([0, 1, 0], (8, 1)).astype(np.float32),
+            uv=np.zeros((8, 2), np.float32), idx=np.array(tri_list, np.uint32), tex_diffuse="rgba171717ff")
+box = [[-0.01, -0.01, -0.01], [0.11, 0.11, 0.11]]
+with tempfile.TemporaryDirectory() as d:
+    parts = [cube]
+    ops = [{"op": "restyle_islands", "part": "chassis__badges_7", "box": box, "facing": [1, 0, 0], "name": "lensedge",
+            "color": [38, 14, 16], "roughness": 0.6, "metal": False, "why": "test"}]
+    created = rebadge.restyle_geometry(parts, ops, Path(d), Report())
+    assert created == ["chassis__badges_7__lensedge"], created
+    base = [q for q in parts if q.name == "chassis__badges_7"][0]
+    new = [q for q in parts if q.name == "chassis__badges_7__lensedge"][0]
+    assert base.tri_count == 10 and new.tri_count == 2, (base.tri_count, new.tri_count)
+    assert np.allclose(new.pos[:, 0], 0.1)                                  # la face +X seulement
+    # sans `facing`, la même boîte prend l'îlot entier (le cube)
+    parts2 = [replace(cube, idx=np.array(tri_list, np.uint32))]
+    ops2 = [dict(ops[0], facing=None)]
+    ops2[0].pop("facing")
+    rebadge.restyle_geometry(parts2, ops2, Path(d), Report())
+    assert [q.name for q in parts2] == ["chassis__badges_7__lensedge"] and parts2[0].tri_count == 12
+print("ok restyle facing")

@@ -104,6 +104,12 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
   m422 : le silencieux d'échappement, métal poli gris clair comme les manchons des sorties, lu comme un « bloc
   gris » sous l'arrière (il reflète le sol) → acier sombre et terni. Attention en greffe sur un véhicule installé :
   Roblox mesure un maillage sur ses sommets **utilisés**, la pièce d'origine rétrécit (reposer `Size` et `CFrame`).
+  **Une tranche dans un grand îlot** (la coque de verre d'un feu coupée à la jointure coffre / aile fait un seul îlot
+  avec toute la coque) : ajouter `"facing": [x, y, z]` (+ `"min_dot"`, 0,5 par défaut) → seuls les TRIANGLES de la
+  boîte tournés vers cette direction partent. m422 : faces blanches « selon l'angle » à la jointure des feux arrière
+  = tranches de verre transparent peu rugueux qui renvoient le ciel en incidence rasante → bord sombre opaque.
+  Trouver la pièce fautive : la masquer (`Transparency = 1`) dans Studio sur la vue où le défaut se voit, une pièce
+  à la fois ; un rendu qui ne montre pas le défaut ne prouve rien (le reflet dépend de l'angle et du ciel).
 - **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran, **pommeau, appuie-tête,
   seuils**) avant de rendre la main.
 
