@@ -484,7 +484,13 @@ Plates.UseStyles({
 }, { Random = true })
 ```
 
-- `Background` : image de **toute** la plaque, étirée sur la surface ; préparer les images au rapport des plaques
+- Le fond (image ou couleur) est mis **dans la texture de la plaque du modèle** (MeshPart « plate » qui porte la
+  surface : `TextureID`, sa SurfaceAppearance d'origine rangée dans `F2R_OriginalLook`, remise pour `KeepOriginal`) :
+  ses UV couvrent toute l'image comme la plaque GTA d'origine. La surface `PlateSurface*` ne porte que les
+  caractères, à 2,5 mm de la plaque (posé devant, le fond laissait voir la plaque d'origine et une épaisseur).
+  Image fraîchement mise en ligne : `MeshPart.TextureID` peut échouer quelques minutes (« No asset content
+  representation found ») alors qu'une ImageLabel l'affiche déjà ; vérifier le chargement avant de conclure.
+- `Background` : image de **toute** la plaque, appliquée par ses UV ; préparer les images au rapport des plaques
   GTA (≈ 2:1) et en 1024 × 512 au plus (Roblox plafonne à 1024 px). `BackgroundColor` est dessinée derrière : elle
   se voit dans les coins arrondis transparents (prendre la couleur du bord de la plaque).
 - `TextRect` : zone libre de CETTE image où écrire le numéro (fractions x, y, largeur, hauteur), mesurée sur
@@ -521,11 +527,46 @@ Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a a
    | `"Paint"` | couche, index de palette, finition ou nil | `SetPaint` |
    | `"Color"` | couche, `Color3` | `SetCustomColor` |
    | `"Factory"` | n | `SetFactoryColors` |
+   | `"Mod"` | emplacement (`VehicleConfig.Mods`), index 0..n | `SetMod` (0 = d'origine) |
+   | `"Perf"` | emplacement (`Engine`, `Brakes`, `Transmission`, `Suspension`, `Armor`, `Turbo`, `Unlimited`), niveau | `SetPerformance` |
+   | `"Livery"` | n (0 = aucune) | `SetLivery` |
+   | `"Extra"` | n, booléen | `SetExtra` (extra présent sur ce véhicule) |
+   | `"Tint"` | n de `Custom.WindowTints` (1 = d'origine … 7 = vert) | `SetWindowTintPreset` |
+   | `"Neon"` | `"Front"`/`"Back"`/`"Left"`/`"Right"`/`"All"`, booléen | `SetNeonSide` / `SetNeon` |
+   | `"NeonColor"` | `Color3` | `SetNeonColor` |
+   | `"Xenon"` | booléen, `Color3` ou nil (xénon de série) | `SetXenon` |
+   | `"TyreSmoke"` | booléen, `Color3` ou nil | `SetTyreSmoke` (attribut `TyreSmokeColor`) |
+   | `"Plate"` | texte (vide = plaque générée) | `VehiclePlates.RequestCustom` (filtré pour le joueur) |
+   | `"PlateStyle"` | n de style | `SetPlateStyle` |
+   | `"Window"` | os de vitre, booléen (descendue) | `SetWindowDown` |
+   | `"Door"` | os de charnière, booléen (ouverte) | `Door_<os>` sans condition de portée (véhicule à distance) |
+   | `"SmashWindows"` | — | `SmashWindows` (jusqu'à `Repair`) |
+   | `"RemoveDoor"` | os de charnière, booléen (débris au sol) | `RemoveDoor` |
+   | `"Repair"` | — | `Repair` : portières, vitres, remise sur les roues |
+   | `"Flip"` | — | `Flip` : droit sur ses roues, sans condition |
+   | `"Tune"` | `PowerMult` / `TorqueMult` (1..1024), `SpeedLimitKmh` (0 = aucun), `DriftTyres` (booléen) | `SetTune` → `VehicleDynamics.SetTune` |
+   | `"Freeze"` | booléen | `SetFrozen` (ancré même conduit) |
+   | `"Visible"` | booléen | `SetVisible` (attribut `Invisible` ; feux éteints côté client) |
+   | `"Alarm"` | booléen | `SetAlarm` (détresse + klaxon, `AlarmDuration` s) |
+   | `"Engine"` / `"EngineAlwaysOn"` | booléen | moteur ; `SetEngineAlwaysOn` (le serveur refuse de le couper) |
+   | `"Lights"` | `"Auto"` / `"Off"` / `"On"` | `SetLights` (Auto : selon `Lighting.ClockTime`, une fois) |
+   | `"Lock"` | booléen | `VehicleAccess.SetLocked` |
+   | `"KickOut"` | — | `KickOccupants` |
+   | `"HornTune"` | — | `PlayHornTune` |
+   | `"Seat"` | — | `CycleSeat` : le joueur passe au siège libre suivant |
 
-   Le serveur (`FiveMVehiclesServer`) limite le débit (8 par seconde, rafale 12, par joueur), appelle la règle,
-   puis `Custom.HandleRemote` contrôle chaque argument (couche connue **et présente** sur ce véhicule, index
-   entier de la palette, finition connue, couleur finie, combinaison existante). Rien n'est renvoyé : le menu
-   relit les attributs du modèle (`Paint_…`, `Color_…`, `Finish_…`) pour afficher l'état.
+   Le serveur (`FiveMVehiclesServer`) limite le débit (8 par seconde, rafale 12, par joueur), appelle la règle
+   (qui reçoit l'op : un jeu peut autoriser certaines ops hors du véhicule, p. ex. au propriétaire), puis
+   `Custom.HandleRemote(model, op, a, b, c, player)` contrôle chaque argument (couche connue **et présente**,
+   index entier, finition connue, couleur finie, extra / vitre / charnière / néon existant sur ce véhicule…).
+   **Réponse** : `VehicleEvent:FireClient(player, "CustomResult", model, op, appliquée, raison)` — raison
+   `"denied"` (règle du jeu), `"invalid"`, `"absent"` (le véhicule n'a pas cet élément), `"too_long"` /
+   `"filtered"` / `"taken"` (plaque), `"always_on"`, `"empty"`, `"busy"`, `"no_free_seat"`… ; pour une plaque
+   acceptée, la raison porte le texte posé. L'état se relit dans les attributs du modèle (`Paint_…`, `Mod_…`,
+   `Perf_…`, `Neon_<côté>`, `Tune_…`, `WindowBroken_…`, `DoorRemoved_…`, `Frozen`, `Invisible`, `AlarmUntil`…).
+   `Custom.RemoteOps` liste les ops du runtime installé ; `Custom.WindowTints`, `Custom.LightColors` (13 couleurs
+   GTA des néons / xénons, libellés FR), `Custom.NeonSidesPresent`, `Custom.WindowBones`, `Custom.Seats`
+   servent à construire les menus.
 3. **Ce que le menu affiche** : il `require` `VehiclePaints` (listes et libellés) et lit
    `Custom.LayersPresent(model)` pour griser les couches absentes, `VehicleConfig.Colors.Variations` pour les
    combinaisons d'usine.

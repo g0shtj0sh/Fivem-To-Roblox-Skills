@@ -333,6 +333,9 @@ Dyn.Tuning = {
 	-- Limiteur de vitesse électronique (cfg.Performance.LimiterKmh, levé par `Perf_Unlimited`) : les gaz
 	-- sont coupés progressivement sur cette bande au-dessus de la vitesse limite.
 	LimiterBand = 1.0, -- m/s
+	-- Réglages de menu admin (Dyn.SetTune) : plafond du multiplicateur de force motrice, adhérence des pneus de drift.
+	MaxForceMult = 16,
+	DriftTyreGrip = 0.7,
 }
 
 -- ------------------------------------------------------------------ améliorations (garage)
@@ -444,6 +447,27 @@ function Dyn.SetUpgrades(sim, levels)
 	end
 	P.turbo = lvl("Turbo") > 0 and (T.TurboGain or 0.1) or 0
 	P.limiter = (lvl("Unlimited") <= 0) and B.limiter or nil
+	-- réglages d'un menu admin (Dyn.SetTune) par-dessus les améliorations
+	local tune = P.tune or {}
+	local forceMult = (tonumber(tune.PowerMult) or 1) * (tonumber(tune.TorqueMult) or 1)
+	P.driveForce = P.driveForce * math.clamp(forceMult, 1, T.MaxForceMult or 16)
+	local userLimit = tonumber(tune.SpeedLimitKmh)
+	if userLimit and userLimit > 0 then
+		P.limiter = math.min(P.limiter or math.huge, userLimit / 3.6)
+	end
+	local grip = tune.DriftTyres == true and (T.DriftTyreGrip or 0.7) or 1
+	P.muMax, P.muMin = B.muMax * grip, B.muMin * grip
+end
+
+-- Réglages façon menu admin (attributs Tune_<clé> posés par VehicleCustomization.SetTune, relus par VehicleDrive) :
+--   PowerMult, TorqueMult  la force motrice est multipliée par leur produit, plafonné à Tuning.MaxForceMult (au-delà
+--                          la physique décroche ; le moteur de GTA n'a qu'une force motrice : puissance et couple y
+--                          agissent pareil)
+--   SpeedLimitKmh          limiteur réglé par le joueur (le plus bas des deux limiteurs gagne)
+--   DriftTyres             adhérence × Tuning.DriftTyreGrip (pneus de drift de GTA : moins d'adhérence)
+function Dyn.SetTune(sim, tune)
+	sim.P.tune = tune and table.clone(tune) or {}
+	Dyn.SetUpgrades(sim, sim.P.upgrades)
 end
 
 function Dyn.new(cfg, comLocal, overrides, upgrades)
@@ -620,6 +644,7 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 		driveForce = P.driveForce, nGears = P.nGears, clutchUp = P.clutchUp, clutchDown = P.clutchDown,
 		brake = P.brake, kF = P.kF, kR = P.kR, arbF = P.arbF, arbR = P.arbR,
 		limiter = (limKmh and limKmh > 0) and limKmh / 3.6 or nil,
+		muMax = P.muMax, muMin = P.muMin,
 	}
 	local sim = { P = P, S = S, T = T }
 	Dyn.SetUpgrades(sim, upgrades)

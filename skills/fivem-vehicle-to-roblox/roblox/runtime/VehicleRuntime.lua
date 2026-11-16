@@ -231,6 +231,14 @@ function Runtime:_state()
 			s[k] = v
 		end
 	end
+	-- alarme (VehicleCustomization.SetAlarm) : feux de détresse et klaxon intermittent jusqu'à AlarmUntil
+	local alarmUntil = m:GetAttribute("AlarmUntil")
+	if type(alarmUntil) == "number" and workspace:GetServerTimeNow() < alarmUntil then
+		s.Alarm = true
+		s.Indicator = "Hazard"
+		s.Horn = (os.clock() % 0.9) < 0.45
+	end
+	s.Invisible = m:GetAttribute("Invisible") == true
 	if s.Rpm == nil then
 		-- estimation : boîte à N rapports répartis sur la vitesse max
 		local gears = math.max(1, h.Gears or 6)
@@ -523,6 +531,16 @@ function Runtime:_aimHeadlights(full)
 end
 
 function Runtime:_updateLights(s)
+	-- véhicule rendu invisible (VehicleCustomization.SetVisible) : tous les feux éteints
+	if s.Invisible then
+		for role in pairs(self.LightObjects or {}) do
+			self:_setRole(role, false)
+		end
+		for role in pairs(self.LightParts or {}) do
+			self:_setRole(role, false)
+		end
+		return
+	end
 	local now = os.clock()
 	local blink = (now % 0.75) < 0.4
 	if blink ~= self.BlinkState then

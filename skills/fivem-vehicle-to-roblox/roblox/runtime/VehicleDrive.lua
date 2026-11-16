@@ -272,7 +272,15 @@ function Drive.Start(car)
 		end
 		return levels
 	end
+	local function tune()
+		local t = {}
+		for key in pairs({ PowerMult = true, TorqueMult = true, SpeedLimitKmh = true, DriftTyres = true }) do
+			t[key] = car:GetAttribute("Tune_" .. key)
+		end
+		return t
+	end
 	local sim = Dyn.new(cfg, comLocal, nil, upgrades())
+	Dyn.SetTune(sim, tune())
 	local vf, tq = actuators(root)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -285,6 +293,8 @@ function Drive.Start(car)
 	table.insert(a.conns, car.AttributeChanged:Connect(function(attr)
 		if string.sub(attr, 1, 5) == "Perf_" then
 			Dyn.SetUpgrades(sim, upgrades())
+		elseif string.sub(attr, 1, 5) == "Tune_" then
+			Dyn.SetTune(sim, tune())
 		end
 	end))
 	table.insert(a.conns, Input.Action.Event:Connect(function(name)

@@ -191,17 +191,71 @@ local function glyph(style, ch, parent, order)
 	return cell
 end
 
+-- La plaque du modèle (MeshPart « plate » qui porte la surface) reçoit le fond du style DANS sa texture :
+-- ses UV couvrent toute l'image (0..1, comme la plaque GTA d'origine), donc l'image remplace la plaque au lieu
+-- d'être posée devant (fond dessiné sur la surface : on voyait la plaque d'origine dépasser et l'épaisseur,
+-- signalé par l'utilisateur le 2026-11-16). La SurfaceAppearance d'origine est rangée (dossier
+-- F2R_OriginalLook) et remise pour KeepOriginal.
+local ORIGINAL = "F2R_OriginalLook"
+local function plateMeshOf(gui)
+	local surface = gui.Parent
+	local mesh = surface and surface.Parent
+	if surface and surface:IsA("BasePart") and surface:GetAttribute("PlateZone") ~= nil and mesh and mesh:IsA("MeshPart") then
+		return mesh
+	end
+	return nil
+end
+
+local function paintPlateMesh(mesh, style, keep)
+	local stash = mesh:FindFirstChild(ORIGINAL)
+	if keep then
+		if stash then
+			for _, c in ipairs(stash:GetChildren()) do
+				c.Parent = mesh
+			end
+			mesh.TextureID = stash:GetAttribute("TextureID") or ""
+			mesh.Color = stash:GetAttribute("Color") or mesh.Color
+			mesh.Material = Enum.Material[stash:GetAttribute("Material") or "Plastic"]
+			stash:Destroy()
+		end
+		return
+	end
+	if not stash then
+		stash = Instance.new("Folder")
+		stash.Name = ORIGINAL
+		stash:SetAttribute("TextureID", mesh.TextureID)
+		stash:SetAttribute("Color", mesh.Color)
+		stash:SetAttribute("Material", mesh.Material.Name)
+		stash.Parent = mesh
+	end
+	for _, c in ipairs(mesh:GetChildren()) do
+		if c:IsA("SurfaceAppearance") then
+			c.Parent = stash
+		end
+	end
+	mesh.TextureID = style.Background or ""
+	mesh.Color = style.BackgroundColor or Color3.new(1, 1, 1) -- sous l'image : visible dans ses coins transparents
+	mesh.Material = Enum.Material.SmoothPlastic
+end
+Plates.PlateMeshOf = plateMeshOf
+
 -- Construit (ou met à jour) le contenu d'une SurfaceGui « Plate ».
 function Plates.RenderGui(gui, text, style)
 	style = style or Plates.GetStyle()
 	gui.LightInfluence = 1
 	gui:SetAttribute("Text", text)
 	local bg = gui:FindFirstChild("Background")
+	local keep = style.KeepOriginal == true or gui:GetAttribute("NoBackground") == true
+	local mesh = plateMeshOf(gui)
+	if mesh then
+		paintPlateMesh(mesh, style, keep)
+	end
 	if bg then
-		local keep = style.KeepOriginal == true or gui:GetAttribute("NoBackground") == true
-		bg.BackgroundTransparency = keep and 1 or 0
+		-- fond sur la surface seulement sans plaque modélisée (ancien format) : sinon il est dans la texture
+		local drawn = not keep and mesh == nil
+		bg.BackgroundTransparency = drawn and 0 or 1
 		bg.BackgroundColor3 = style.BackgroundColor or Color3.new(1, 1, 1)
-		bg.Image = (not keep and style.Background) or ""
+		bg.Image = (drawn and style.Background) or ""
 		bg.ImageTransparency = 0
 	end
 	local holder = gui:FindFirstChild("PlateText", true)

@@ -1154,7 +1154,14 @@ function groups.custom()
 		for _, d in ipairs(model:GetDescendants()) do
 			if d:IsA("SurfaceGui") and d.Name == "Plate" then
 				local bg = d:FindFirstChild("Background")
-				if bg and bg.BackgroundColor3 == probe and bg.BackgroundTransparency == 0 then
+				local mesh = Plates.PlateMeshOf and Plates.PlateMeshOf(d)
+				if mesh then
+					-- fond dans la texture de la plaque modélisée, pas devant elle
+					if mesh.Color == probe and mesh.TextureID == "" and not mesh:FindFirstChildOfClass("SurfaceAppearance")
+						and (not bg or bg.BackgroundTransparency == 1) then
+						styled += 1
+					end
+				elseif bg and bg.BackgroundColor3 == probe and bg.BackgroundTransparency == 0 then
 					styled += 1
 				end
 				local h = d:FindFirstChild("PlateText")
@@ -1170,7 +1177,7 @@ function groups.custom()
 		Plates.Styles[9999] = hadStyle
 		check(okS and styled == labels and model:GetAttribute("PlateStyle") == 9999
 			and model:GetAttribute("PlateStyleChosen") == true, "SetPlateStyle",
-			fmt("%d/%d plaque(s) au fond du style de test", styled, labels))
+			fmt("%d/%d plaque(s) au fond du style de test (dans la texture de la plaque)", styled, labels))
 		if framed > 0 then
 			check(placed == framed, "TextRect du style", fmt("%d/%d zone(s) de texte à la place de l'image", placed, framed))
 		end

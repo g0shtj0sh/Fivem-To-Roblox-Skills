@@ -448,7 +448,9 @@ for name, info in pairs(PARTS) do
 				local surf = Instance.new("Part")
 				surf.Name = z.Front and "PlateSurfaceFront" or "PlateSurfaceRear"
 				surf.Size = Vector3.new(z.Width * spm, z.Height * spm, 0.02)
-				surf.CFrame = CFrame.fromMatrix(L2W(z.Center) + normal * (0.004 * spm), right, up, normal)
+				-- face texte (+Z, demi-épaisseur 0,01) à 2,5 mm de la plaque : le fond est dans la texture de la
+				-- plaque (VehiclePlates), la surface ne porte que les caractères, comme peints dessus
+				surf.CFrame = CFrame.fromMatrix(L2W(z.Center) + normal * (0.0025 * spm - 0.01), right, up, normal)
 				surf.Transparency = 1
 				surf.CanCollide, surf.CanQuery, surf.CanTouch, surf.Massless = false, false, false, true
 				surf.CastShadow = false

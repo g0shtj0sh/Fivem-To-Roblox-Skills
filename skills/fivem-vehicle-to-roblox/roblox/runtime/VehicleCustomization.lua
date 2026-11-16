@@ -70,6 +70,36 @@ function Custom.Refresh(model)
 			end
 		end
 	end
+	-- portières / capot / coffre arrachés (Custom.RemoveDoor) : leurs pièces disparaissent
+	for bone in pairs(cfg.Hinges or {}) do
+		if model:GetAttribute("DoorRemoved_" .. bone) == true then
+			hidden[bone] = true
+		end
+	end
+	local invisible = model:GetAttribute("Invisible") == true
+	-- décalques, textures et écrans (plaques) suivent la visibilité du véhicule entier
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Decal") then -- (Texture hérite de Decal)
+			if invisible then
+				if d:GetAttribute("BaseTransparency") == nil then
+					d:SetAttribute("BaseTransparency", d.Transparency)
+				end
+				d.Transparency = 1
+			elseif d:GetAttribute("BaseTransparency") ~= nil then
+				d.Transparency = d:GetAttribute("BaseTransparency")
+			end
+		elseif d:IsA("SurfaceGui") then
+			if invisible then
+				if d:GetAttribute("WasEnabled") == nil then
+					d:SetAttribute("WasEnabled", d.Enabled)
+				end
+				d.Enabled = false
+			elseif d:GetAttribute("WasEnabled") ~= nil then
+				d.Enabled = d:GetAttribute("WasEnabled")
+				d:SetAttribute("WasEnabled", nil)
+			end
+		end
+	end
 	for _, part in ipairs(visualParts(model)) do
 		local visible = true
 		local slot = part:GetAttribute("ModSlot")
@@ -83,7 +113,14 @@ function Custom.Refresh(model)
 			visible = false
 		end
 		local window = part:GetAttribute("Window")
-		if window and model:GetAttribute("WindowDown_" .. window) == true and part:GetAttribute("Kind") == "glass" then
+		if
+			window
+			and part:GetAttribute("Kind") == "glass"
+			and (model:GetAttribute("WindowDown_" .. window) == true or model:GetAttribute("WindowBroken_" .. window) == true)
+		then
+			visible = false
+		end
+		if invisible then
 			visible = false
 		end
 		local base = part:GetAttribute("BaseTransparency") or 0
@@ -92,6 +129,9 @@ function Custom.Refresh(model)
 		end
 		part.Transparency = visible and base or 1
 		part:SetAttribute("Visible", visible)
+	end
+	if Custom.RefreshNeons then
+		Custom.RefreshNeons(model)
 	end
 end
 
@@ -243,43 +283,7 @@ local function finite(x)
 	return type(x) == "number" and x == x and x > -math.huge and x < math.huge
 end
 
--- Opérations acceptées et contrôle de leurs arguments (types, bornes, existence sur ce véhicule).
--- Renvoie true si l'opération a été appliquée.
-function Custom.HandleRemote(model, op, a, b, c)
-	if op == "Paint" then
-		-- (layer, index, finish?)
-		if not validLayer(a) or not validIndex(b) then
-			return false
-		end
-		if c ~= nil and (type(c) ~= "string" or Custom.FinishLooks[c] == nil) then
-			return false
-		end
-		if not Custom.LayersPresent(model)[a] then
-			return false
-		end
-		Custom.SetPaint(model, a, b, c)
-		return true
-	elseif op == "Color" then
-		-- (layer, Color3) : couleur libre
-		if not validLayer(a) or typeof(b) ~= "Color3" then
-			return false
-		end
-		if not (finite(b.R) and finite(b.G) and finite(b.B)) or not Custom.LayersPresent(model)[a] then
-			return false
-		end
-		Custom.SetCustomColor(model, a, Color3.new(math.clamp(b.R, 0, 1), math.clamp(b.G, 0, 1), math.clamp(b.B, 0, 1)))
-		return true
-	elseif op == "Factory" then
-		-- (n) : combinaison d'usine
-		local combos = (getConfig(model).Colors or {}).Variations or {}
-		if type(a) ~= "number" or a ~= a or a % 1 ~= 0 or combos[a] == nil then
-			return false
-		end
-		Custom.SetFactoryColors(model, a)
-		return true
-	end
-	return false
-end
+-- Les opérations acceptées (Custom.HandleRemote) sont en fin de module : elles appellent toute l'API.
 
 -- ------------------------------------------------------------------ livrées
 function Custom.SetLivery(model, index)
@@ -324,47 +328,230 @@ function Custom.SetWindowDown(model, windowBone, down)
 	Custom.Refresh(model)
 end
 
--- 0 = vitres claires, 1 = opaques (les teintes GTA vont ~0.35 -> 0.9)
-function Custom.SetWindowTint(model, amount)
-	amount = math.clamp(amount, 0, 0.95)
-	model:SetAttribute("WindowTint", 0.6 - amount * 0.6)
-	for _, part in ipairs(visualParts(model)) do
-		if part:GetAttribute("Kind") == "glass" then
-			part.Color = Color3.new(0.12, 0.13, 0.14):Lerp(Color3.new(0.02, 0.02, 0.02), amount)
-		end
+-- Vitres brisées (Custom.SmashWindows) : les vitres disparaissent jusqu'à la réparation (Custom.Repair).
+function Custom.SmashWindows(model)
+	for _, bone in ipairs(Custom.WindowBones(model)) do
+		model:SetAttribute("WindowBroken_" .. bone, true)
 	end
 	Custom.Refresh(model)
 end
 
--- ------------------------------------------------------------------ néons / xénons / plaque
-local function paintNeons(model, enabled, color)
-	color = color or Color3.fromRGB(0, 140, 255)
-	local folder = model:FindFirstChild("Neons")
-	if folder then
-		for _, p in ipairs(folder:GetChildren()) do
-			if p:IsA("BasePart") then
-				p.Color = color
-				p.Transparency = enabled and 0 or 1
-				local light = p:FindFirstChildOfClass("SurfaceLight") or p:FindFirstChildOfClass("PointLight")
-				if light then
-					light.Color = color
-					light.Enabled = enabled
+-- Os des vitres présents sur ce véhicule (attribut `Window` des pièces de verre), triés.
+function Custom.WindowBones(model)
+	local seen, out = {}, {}
+	for _, part in ipairs(visualParts(model)) do
+		local w = part:GetAttribute("Window")
+		if w and part:GetAttribute("Kind") == "glass" and not seen[w] then
+			seen[w] = true
+			table.insert(out, w)
+		end
+	end
+	table.sort(out)
+	return out
+end
+
+local function glassParts(model)
+	local out = {}
+	for _, part in ipairs(visualParts(model)) do
+		if part:GetAttribute("Kind") == "glass" then
+			table.insert(out, part)
+		end
+	end
+	return out
+end
+
+-- Teinte d'origine gardée à la première retouche : « D'origine » (WindowTints[1]) y revient.
+local function keepStockTint(model)
+	if model:GetAttribute("WindowTintStock") ~= nil then
+		return
+	end
+	model:SetAttribute("WindowTintStock", model:GetAttribute("WindowTint") or -1)
+	for _, part in ipairs(glassParts(model)) do
+		if part:GetAttribute("StockColor") == nil then
+			part:SetAttribute("StockColor", part.Color)
+		end
+	end
+end
+
+-- 0 = vitres claires, 1 = opaques (les teintes GTA vont ~0.35 -> 0.9) ; color = teinte du verre (nil = fumé)
+function Custom.SetWindowTint(model, amount, color)
+	keepStockTint(model)
+	amount = math.clamp(amount, 0, 0.95)
+	model:SetAttribute("WindowTint", 0.6 - amount * 0.6)
+	local base = color or Color3.new(0.12, 0.13, 0.14)
+	for _, part in ipairs(glassParts(model)) do
+		part.Color = base:Lerp(Color3.new(0.02, 0.02, 0.02), amount * (color and 0.4 or 1))
+	end
+	Custom.Refresh(model)
+end
+
+-- Teintes de vitres de GTA, dans l'ordre des menus (vMenu : D'origine, Aucune, Limousine, Fumé clair,
+-- Fumé foncé, Noir intégral, Vert). Amount : opacité 0..0,95 de SetWindowTint.
+Custom.WindowTints = {
+	{ Name = "Stock", Label = "D'origine" },
+	{ Name = "None", Label = "Aucune", Amount = 0 },
+	{ Name = "Limo", Label = "Limousine", Amount = 0.8 },
+	{ Name = "LightSmoke", Label = "Fumé clair", Amount = 0.35 },
+	{ Name = "DarkSmoke", Label = "Fumé foncé", Amount = 0.6 },
+	{ Name = "PureBlack", Label = "Noir intégral", Amount = 0.95 },
+	{ Name = "Green", Label = "Vert", Amount = 0.55, Color = Color3.fromRGB(30, 90, 45) },
+}
+
+function Custom.SetWindowTintPreset(model, index)
+	local preset = Custom.WindowTints[index]
+	assert(preset, "Teinte de vitres inconnue : " .. tostring(index))
+	if preset.Amount then
+		Custom.SetWindowTint(model, preset.Amount, preset.Color)
+	else
+		local stock = model:GetAttribute("WindowTintStock")
+		if stock ~= nil then
+			model:SetAttribute("WindowTint", stock >= 0 and stock or nil)
+			for _, part in ipairs(glassParts(model)) do
+				local c = part:GetAttribute("StockColor")
+				if typeof(c) == "Color3" then
+					part.Color = c
 				end
+			end
+		end
+		Custom.Refresh(model)
+	end
+	model:SetAttribute("TintPreset", index)
+end
+
+-- ------------------------------------------------------------------ néons / xénons / fumée / plaque
+-- Couleurs prédéfinies des néons et des phares xénon de GTA (même liste dans le jeu), libellés FR.
+Custom.LightColors = {
+	{ Name = "White", Label = "Blanc", Color = Color3.fromRGB(255, 255, 255) },
+	{ Name = "Blue", Label = "Bleu", Color = Color3.fromRGB(2, 21, 255) },
+	{ Name = "ElectricBlue", Label = "Bleu électrique", Color = Color3.fromRGB(3, 83, 255) },
+	{ Name = "MintGreen", Label = "Vert menthe", Color = Color3.fromRGB(0, 255, 140) },
+	{ Name = "LimeGreen", Label = "Vert citron", Color = Color3.fromRGB(94, 255, 1) },
+	{ Name = "Yellow", Label = "Jaune", Color = Color3.fromRGB(255, 255, 0) },
+	{ Name = "GoldenShower", Label = "Pluie d'or", Color = Color3.fromRGB(255, 150, 5) },
+	{ Name = "Orange", Label = "Orange", Color = Color3.fromRGB(255, 62, 0) },
+	{ Name = "Red", Label = "Rouge", Color = Color3.fromRGB(255, 1, 1) },
+	{ Name = "PonyPink", Label = "Rose poney", Color = Color3.fromRGB(255, 50, 100) },
+	{ Name = "HotPink", Label = "Rose vif", Color = Color3.fromRGB(255, 5, 190) },
+	{ Name = "Purple", Label = "Violet", Color = Color3.fromRGB(35, 1, 255) },
+	{ Name = "Blacklight", Label = "Lumière noire", Color = Color3.fromRGB(15, 3, 255) },
+}
+-- Lumière des xénons de série (sans couleur choisie) : blanc bleuté.
+Custom.XenonDefault = Color3.fromRGB(200, 220, 255)
+
+-- Les 4 rampes du dossier Neons (posées par le Setup sous la caisse) rangées par côté, d'après leur
+-- position dans le repère du VehicleRoot (avant = −Z, gauche = −X).
+Custom.NeonSides = { "Front", "Back", "Left", "Right" }
+local function neonSideOf(model, part)
+	local side = part:GetAttribute("NeonSide")
+	if side then
+		return side
+	end
+	local root = model.PrimaryPart
+	if not root then
+		return nil
+	end
+	local p = root.CFrame:PointToObjectSpace(part.Position)
+	if part.Size.X >= part.Size.Z then
+		side = p.Z < 0 and "Front" or "Back"
+	else
+		side = p.X < 0 and "Left" or "Right"
+	end
+	part:SetAttribute("NeonSide", side)
+	return side
+end
+
+-- Néons d'un côté allumés (attribut Neon_<côté>) ; l'ancien attribut global `Neon` vaut « les 4 ».
+local function neonOn(model, side)
+	local v = model:GetAttribute("Neon_" .. side)
+	if v ~= nil then
+		return v == true
+	end
+	return model:GetAttribute("Neon") == true
+end
+
+function Custom.RefreshNeons(model)
+	local folder = model:FindFirstChild("Neons")
+	if not folder then
+		return
+	end
+	local color = model:GetAttribute("NeonColor")
+	color = typeof(color) == "Color3" and color or Color3.fromRGB(0, 140, 255)
+	local hidden = model:GetAttribute("Invisible") == true
+	for _, p in ipairs(folder:GetChildren()) do
+		if p:IsA("BasePart") then
+			local side = neonSideOf(model, p)
+			local on = side ~= nil and neonOn(model, side) and not hidden
+			p.Color = color
+			p.Transparency = on and 0 or 1
+			local light = p:FindFirstChildOfClass("SurfaceLight") or p:FindFirstChildOfClass("PointLight")
+			if light then
+				light.Color = color
+				light.Enabled = on
 			end
 		end
 	end
 end
 
+local function paintNeons(model)
+	Custom.RefreshNeons(model)
+end
+
+-- Côtés du véhicule qui ont une rampe de néon.
+function Custom.NeonSidesPresent(model)
+	local out = {}
+	local folder = model:FindFirstChild("Neons")
+	for _, p in ipairs(folder and folder:GetChildren() or {}) do
+		if p:IsA("BasePart") then
+			local side = neonSideOf(model, p)
+			if side then
+				out[side] = true
+			end
+		end
+	end
+	return out
+end
+
+-- Tous les néons (compatibilité) : enabled pour les 4 côtés.
 function Custom.SetNeon(model, enabled, color)
-	color = color or Color3.fromRGB(0, 140, 255)
+	color = color or model:GetAttribute("NeonColor") or Color3.fromRGB(0, 140, 255)
 	model:SetAttribute("Neon", enabled and true or false)
+	for _, side in ipairs(Custom.NeonSides) do
+		model:SetAttribute("Neon_" .. side, nil)
+	end
 	model:SetAttribute("NeonColor", color)
-	paintNeons(model, enabled, color)
+	paintNeons(model)
+end
+
+function Custom.SetNeonSide(model, side, enabled)
+	assert(table.find(Custom.NeonSides, side), "Côté de néon inconnu : " .. tostring(side))
+	-- premier réglage par côté : les autres côtés partent de l'état global
+	for _, s in ipairs(Custom.NeonSides) do
+		if model:GetAttribute("Neon_" .. s) == nil then
+			model:SetAttribute("Neon_" .. s, model:GetAttribute("Neon") == true)
+		end
+	end
+	model:SetAttribute("Neon_" .. side, enabled and true or false)
+	local any = false
+	for _, s in ipairs(Custom.NeonSides) do
+		any = any or model:GetAttribute("Neon_" .. s) == true
+	end
+	model:SetAttribute("Neon", any)
+	paintNeons(model)
+end
+
+function Custom.SetNeonColor(model, color)
+	model:SetAttribute("NeonColor", color)
+	paintNeons(model)
 end
 
 function Custom.SetXenon(model, color)
-	-- nil = phares halogènes d'origine
+	-- nil = phares halogènes d'origine ; le runtime client colore les phares (VehicleRuntime)
 	model:SetAttribute("XenonColor", color)
+end
+
+-- Fumée de pneus colorée (VehicleTyreFx lit TyreSmokeColor) ; nil = fumée d'origine.
+function Custom.SetTyreSmoke(model, color)
+	model:SetAttribute("TyreSmokeColor", color)
 end
 
 -- Plaque imposée par le code du jeu (non filtrée ; pour une saisie de joueur : VehiclePlates.RequestCustom).
@@ -480,11 +667,14 @@ function Custom.GetOptions(model)
 	}
 end
 
-local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_" }
+local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
 -- PlateStyleChosen : style choisi par le joueur (SetPlateStyle) -> sauvegardé avec lui, pas de tirage au sort à la
 -- réapparition (VehiclePlates.UseStyles avec Random). Le serveur réapplique la config propre de chaque véhicule à
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
-local SAVE_KEYS = { "Livery", "WindowTint", "Neon", "NeonColor", "XenonColor", "PlateText", "PlateStyle", "PlateStyleChosen" }
+local SAVE_KEYS = {
+	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
+	"PlateText", "PlateStyle", "PlateStyleChosen",
+}
 
 function Custom.Serialize(model)
 	local out = {}
@@ -509,8 +699,8 @@ end
 -- Clés dont l'absence dans une sauvegarde vaut « état d'origine » : Apply les efface pour que
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
-local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "PlateStyleChosen" }
+local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen" }
 
 function Custom.Apply(model, data)
 	data = data or {}
@@ -547,11 +737,633 @@ function Custom.Apply(model, data)
 		end
 	end
 	Custom.SetLivery(model, model:GetAttribute("Livery") or 0)
-	paintNeons(model, model:GetAttribute("Neon") == true, model:GetAttribute("NeonColor"))
+	local tint = model:GetAttribute("TintPreset")
+	if type(tint) == "number" and Custom.WindowTints[tint] then
+		Custom.SetWindowTintPreset(model, tint)
+	end
+	paintNeons(model)
 	if model:GetAttribute("PlateText") then
 		Custom.SetPlate(model, model:GetAttribute("PlateText"))
 	end
 	Custom.Refresh(model)
+end
+
+-- ------------------------------------------------------------------ état du véhicule (menus admin type vMenu)
+-- Ces fonctions agissent sur le véhicule entier (portières arrachées, réparation, réglages de conduite,
+-- gel, visibilité, alarme, moteur, phares, verrouillage, occupants). À appeler côté serveur.
+local accessModule = nil
+local function access()
+	if accessModule == nil then
+		local folder = script.Parent or game:GetService("ReplicatedStorage"):FindFirstChild("FiveMVehicles")
+		local mod = folder and folder:FindFirstChild("VehicleAccess")
+		accessModule = mod and require(mod) or false
+	end
+	return accessModule or nil
+end
+
+local function seatsOf(model)
+	local out = {}
+	local folder = model:FindFirstChild("Seats")
+	for _, s in ipairs(folder and folder:GetChildren() or {}) do
+		if s:IsA("Seat") or s:IsA("VehicleSeat") then
+			table.insert(out, s)
+		end
+	end
+	-- conducteur d'abord, puis par nom (ordre stable pour « changer de siège »)
+	table.sort(out, function(a, b)
+		if (a.Name == "DriverSeat") ~= (b.Name == "DriverSeat") then
+			return a.Name == "DriverSeat"
+		end
+		return a.Name < b.Name
+	end)
+	return out
+end
+Custom.Seats = seatsOf
+
+-- Portière / capot / coffre arraché : ses pièces disparaissent jusqu'à la réparation. keepDebris : une copie
+-- de ses pièces tombe au sol et disparaît après DebrisLifetime s (comme dans GTA) ; sinon elle disparaît aussitôt.
+Custom.DebrisLifetime = 30
+function Custom.RemoveDoor(model, bone, keepDebris)
+	local cfg = getConfig(model)
+	assert(cfg.Hinges and cfg.Hinges[bone], "Charnière inconnue : " .. tostring(bone))
+	if model:GetAttribute("DoorRemoved_" .. bone) == true then
+		return false
+	end
+	if keepDebris then
+		local pieces = {}
+		for _, part in ipairs(visualParts(model)) do
+			if part.Transparency < 1 and boneChainHas(part, { [bone] = true }) then
+				table.insert(pieces, part)
+			end
+		end
+		if #pieces > 0 then
+			local debris = Instance.new("Model")
+			debris.Name = model.Name .. "_" .. bone .. "_debris"
+			local first
+			for _, part in ipairs(pieces) do
+				local copy = part:Clone()
+				for _, d in ipairs(copy:GetChildren()) do
+					if d:IsA("JointInstance") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
+						d:Destroy()
+					end
+				end
+				copy.Anchored = false
+				copy.Massless = false
+				copy.CanCollide = false
+				copy.CanQuery = false
+				copy.CanTouch = false
+				copy:SetAttribute("F2RPart", nil)
+				copy.Parent = debris
+				if first then
+					local w = Instance.new("WeldConstraint")
+					w.Part0, w.Part1, w.Parent = first, copy, copy
+				else
+					first = copy
+					copy.CanCollide = true -- une seule pièce touche le sol (assez pour tomber et rouler)
+				end
+			end
+			debris.PrimaryPart = first
+			debris.Parent = workspace
+			game:GetService("Debris"):AddItem(debris, Custom.DebrisLifetime)
+		end
+	end
+	model:SetAttribute("DoorRemoved_" .. bone, true)
+	model:SetAttribute("Door_" .. bone, 0)
+	Custom.Refresh(model)
+	return true
+end
+
+-- Réparation (GTA) : portières remises, vitres réparées et remontées, véhicule remis sur ses roues s'il est
+-- retourné. Ne touche ni à la custom ni aux réglages.
+function Custom.Repair(model)
+	for k in pairs(model:GetAttributes()) do
+		if string.sub(k, 1, 12) == "DoorRemoved_" or string.sub(k, 1, 13) == "WindowBroken_" then
+			model:SetAttribute(k, nil)
+		elseif string.sub(k, 1, 11) == "WindowDown_" then
+			model:SetAttribute(k, false)
+		end
+	end
+	local A = access()
+	if A and A.IsUpsideDown(model) and model.PrimaryPart then
+		local root = model.PrimaryPart
+		A.PlaceOnGround(model, root.Position, root.CFrame.LookVector)
+		model:SetAttribute("Flipped", false)
+	end
+	Custom.Refresh(model)
+end
+
+-- Remet le véhicule droit sur ses roues, là où il est (sans attente ni condition, contrairement à
+-- Access.Recover qui sert au joueur).
+function Custom.Flip(model)
+	local A = access()
+	local root = model.PrimaryPart
+	if not A or not root then
+		return false
+	end
+	local look = root.CFrame.LookVector
+	if math.abs(look.Y) > 0.95 then
+		look = -root.CFrame.UpVector
+	end
+	A.PlaceOnGround(model, root.Position, look)
+	model:SetAttribute("Flipped", false)
+	return true
+end
+
+-- Réglages de conduite façon menu admin (VehicleDynamics.SetTune, appliqués en direct par VehicleDrive) :
+--   PowerMult / TorqueMult  multiplicateur de puissance / de couple (1 = d'origine ; leur produit est plafonné
+--                           à Dyn.Tuning.MaxForceMult pour que la physique tienne)
+--   SpeedLimitKmh           limiteur de vitesse réglé par le joueur (0 ou nil = aucun)
+--   DriftTyres              pneus de drift : adhérence réduite
+Custom.TuneKeys = { PowerMult = "number", TorqueMult = "number", SpeedLimitKmh = "number", DriftTyres = "boolean" }
+function Custom.SetTune(model, key, value)
+	local t = Custom.TuneKeys[key]
+	assert(t, "Réglage inconnu : " .. tostring(key))
+	if value ~= nil then
+		assert(type(value) == t, "Réglage " .. key .. " : " .. t .. " attendu")
+	end
+	if key == "PowerMult" or key == "TorqueMult" then
+		value = value and math.clamp(value, 1, 1024) or nil
+		if value == 1 then
+			value = nil
+		end
+	elseif key == "SpeedLimitKmh" then
+		value = (value and value > 0) and math.clamp(value, 5, 600) or nil
+	elseif key == "DriftTyres" then
+		value = value == true or nil
+	end
+	model:SetAttribute("Tune_" .. key, value)
+end
+
+-- Gel : VehicleRoot ancré, même avec un conducteur (VehicleAccess respecte l'attribut Frozen).
+function Custom.SetFrozen(model, frozen)
+	local root = model.PrimaryPart
+	model:SetAttribute("Frozen", frozen == true or nil)
+	if not root then
+		return
+	end
+	if frozen then
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.Anchored = true
+	else
+		local seat = model:FindFirstChild("DriverSeat", true)
+		local driven = seat and seat:IsA("Seat") and seat.Occupant ~= nil
+		if driven then
+			root.Anchored = false
+			model:SetAttribute("Parked", false)
+		else
+			model:SetAttribute("Parked", true) -- reste posé, comme un véhicule garé, jusqu'au prochain conducteur
+		end
+	end
+end
+
+-- Véhicule invisible (pièces, décalques, plaques, néons ; les feux sont éteints par le runtime client).
+function Custom.SetVisible(model, visible)
+	model:SetAttribute("Invisible", (not visible) or nil)
+	Custom.Refresh(model)
+end
+
+-- Alarme : feux de détresse et klaxon intermittent pendant AlarmDuration s (runtime client, attribut AlarmUntil).
+Custom.AlarmDuration = 30
+function Custom.SetAlarm(model, on)
+	model:SetAttribute("AlarmUntil", on and (workspace:GetServerTimeNow() + Custom.AlarmDuration) or nil)
+end
+
+function Custom.AlarmActive(model)
+	local t = model:GetAttribute("AlarmUntil")
+	return type(t) == "number" and workspace:GetServerTimeNow() < t
+end
+
+-- Moteur toujours allumé : le serveur le rallume s'il est coupé (FiveMVehiclesServer).
+function Custom.SetEngineAlwaysOn(model, on)
+	model:SetAttribute("EngineAlwaysOn", on == true or nil)
+	if on then
+		model:SetAttribute("Engine", true)
+	end
+end
+
+-- Feux (vMenu, véhicule personnel) : "Auto" = selon l'heure (Lighting.ClockTime, allumés de 19 h à 7 h),
+-- "Off" = éteints, "On" = croisement.
+function Custom.SetLights(model, mode)
+	if mode == "Off" then
+		model:SetAttribute("Headlights", 0)
+	elseif mode == "On" then
+		model:SetAttribute("Headlights", 1)
+	elseif mode == "Auto" then
+		local h = game:GetService("Lighting").ClockTime
+		model:SetAttribute("Headlights", (h >= 19 or h < 7) and 1 or 0)
+	else
+		error("Mode de feux inconnu : " .. tostring(mode))
+	end
+	model:SetAttribute("LightsMode", mode)
+end
+
+-- Air de klaxon (vMenu « Jouer un air de klaxon ») : durées en s, klaxon / silence alternés.
+Custom.HornTune = { 0.18, 0.12, 0.18, 0.12, 0.18, 0.3, 0.5, 0.3, 0.18, 0.12, 0.5 }
+local hornPlaying = setmetatable({}, { __mode = "k" })
+function Custom.PlayHornTune(model)
+	if hornPlaying[model] then
+		return false
+	end
+	hornPlaying[model] = true
+	task.spawn(function()
+		for i, d in ipairs(Custom.HornTune) do
+			if not model.Parent then
+				break
+			end
+			model:SetAttribute("Horn", i % 2 == 1)
+			task.wait(d)
+		end
+		if model.Parent then
+			model:SetAttribute("Horn", false)
+		end
+		hornPlaying[model] = nil
+	end)
+	return true
+end
+
+-- Fait descendre tous les occupants (posés dehors comme avec F).
+function Custom.KickOccupants(model)
+	local A = access()
+	local n = 0
+	for _, seat in ipairs(seatsOf(model)) do
+		local hum = seat.Occupant
+		if hum and hum.Parent then
+			n += 1
+			if A then
+				task.spawn(A.EjectOccupant, model, seat, hum, hum.Parent)
+			else
+				hum.Sit = false
+			end
+		end
+	end
+	return n
+end
+
+-- Passe le joueur au siège libre suivant de ce véhicule (vMenu « Changer de siège »).
+function Custom.CycleSeat(player, model)
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum or not hum.SeatPart or not hum.SeatPart:IsDescendantOf(model) then
+		return false, "not_seated"
+	end
+	local seats = seatsOf(model)
+	local current = table.find(seats, hum.SeatPart) or 0
+	for step = 1, #seats - 1 do
+		local seat = seats[(current - 1 + step) % #seats + 1]
+		if seat.Occupant == nil then
+			local weld = hum.SeatPart:FindFirstChild("SeatWeld")
+			if weld then
+				weld:Destroy()
+			end
+			seat:Sit(hum)
+			return true, seat.Name
+		end
+	end
+	return false, "no_free_seat"
+end
+
+-- ------------------------------------------------------------------ remote « Custom » : opérations acceptées
+local function validLayer(layer)
+	return type(layer) == "string" and table.find(PAINT_LAYERS, layer) ~= nil
+end
+
+local function validIndex(n)
+	return type(n) == "number" and n == n and n % 1 == 0 and paints().Get(n) ~= nil
+end
+
+local function finite(x)
+	return type(x) == "number" and x == x and x > -math.huge and x < math.huge
+end
+
+local function integer(x)
+	return finite(x) and x % 1 == 0
+end
+
+local function validColor(c)
+	return typeof(c) == "Color3" and finite(c.R) and finite(c.G) and finite(c.B)
+end
+
+local function clampColor(c)
+	return Color3.new(math.clamp(c.R, 0, 1), math.clamp(c.G, 0, 1), math.clamp(c.B, 0, 1))
+end
+
+local OPS = {}
+
+OPS.Paint = function(model, layer, index, finish)
+	if not validLayer(layer) or not validIndex(index) then
+		return false, "invalid"
+	end
+	if finish ~= nil and (type(finish) ~= "string" or Custom.FinishLooks[finish] == nil) then
+		return false, "invalid"
+	end
+	if not Custom.LayersPresent(model)[layer] then
+		return false, "absent"
+	end
+	Custom.SetPaint(model, layer, index, finish)
+	return true
+end
+
+OPS.Color = function(model, layer, color)
+	if not validLayer(layer) or not validColor(color) then
+		return false, "invalid"
+	end
+	if not Custom.LayersPresent(model)[layer] then
+		return false, "absent"
+	end
+	Custom.SetCustomColor(model, layer, clampColor(color))
+	return true
+end
+
+OPS.Factory = function(model, n)
+	local combos = (getConfig(model).Colors or {}).Variations or {}
+	if not integer(n) or combos[n] == nil then
+		return false, "invalid"
+	end
+	Custom.SetFactoryColors(model, n)
+	return true
+end
+
+OPS.Mod = function(model, slot, index)
+	local info = type(slot) == "string" and (getConfig(model).Mods or {})[slot]
+	if not info or not integer(index) or index < 0 or index > #(info.Options or {}) then
+		return false, "invalid"
+	end
+	Custom.SetMod(model, slot, index)
+	return true
+end
+
+OPS.Perf = function(model, slot, level)
+	if type(slot) ~= "string" or not integer(level) then
+		return false, "invalid"
+	end
+	local ok = Custom.SetPerformance(model, slot, level)
+	return ok, (not ok) and "absent" or nil
+end
+
+OPS.Livery = function(model, index)
+	local store = model:FindFirstChild("Liveries")
+	local count = store and #store:GetChildren() or 0
+	if not integer(index) or index < 0 or index > count then
+		return false, "invalid"
+	end
+	Custom.SetLivery(model, index)
+	return true
+end
+
+OPS.Extra = function(model, n, enabled)
+	if not integer(n) or type(enabled) ~= "boolean" then
+		return false, "invalid"
+	end
+	local present = (getConfig(model).Extras or {})[n] ~= nil
+	if not present then
+		for _, part in ipairs(visualParts(model)) do
+			if part:GetAttribute("Extra") == n then
+				present = true
+				break
+			end
+		end
+	end
+	if not present then
+		return false, "absent"
+	end
+	Custom.SetExtra(model, n, enabled)
+	return true
+end
+
+OPS.Tint = function(model, index)
+	if not integer(index) or Custom.WindowTints[index] == nil then
+		return false, "invalid"
+	end
+	if #glassParts(model) == 0 then
+		return false, "absent"
+	end
+	Custom.SetWindowTintPreset(model, index)
+	return true
+end
+
+OPS.Neon = function(model, side, enabled)
+	if type(enabled) ~= "boolean" then
+		return false, "invalid"
+	end
+	if side == "All" then
+		Custom.SetNeon(model, enabled)
+		return true
+	end
+	if type(side) ~= "string" or not table.find(Custom.NeonSides, side) then
+		return false, "invalid"
+	end
+	if not Custom.NeonSidesPresent(model)[side] then
+		return false, "absent"
+	end
+	Custom.SetNeonSide(model, side, enabled)
+	return true
+end
+
+OPS.NeonColor = function(model, color)
+	if not validColor(color) then
+		return false, "invalid"
+	end
+	Custom.SetNeonColor(model, clampColor(color))
+	return true
+end
+
+OPS.Xenon = function(model, enabled, color)
+	if type(enabled) ~= "boolean" or (color ~= nil and not validColor(color)) then
+		return false, "invalid"
+	end
+	Custom.SetXenon(model, enabled and (color and clampColor(color) or Custom.XenonDefault) or nil)
+	return true
+end
+
+OPS.TyreSmoke = function(model, enabled, color)
+	if type(enabled) ~= "boolean" or (color ~= nil and not validColor(color)) then
+		return false, "invalid"
+	end
+	Custom.SetTyreSmoke(model, enabled and (color and clampColor(color) or Color3.new(1, 1, 1)) or nil)
+	return true
+end
+
+OPS.Plate = function(model, text, _, _, player)
+	if type(text) ~= "string" or #text > 32 then
+		return false, "invalid"
+	end
+	local Plates = getPlates()
+	if not Plates then
+		return false, "no_plates_module"
+	end
+	if text == "" then
+		return Plates.Assign(model, nil)
+	end
+	return Plates.RequestCustom(player, model, text)
+end
+
+OPS.PlateStyle = function(model, index)
+	local Plates = getPlates()
+	if not integer(index) or not Plates or Plates.GetStyle(index) == nil then
+		return false, "invalid"
+	end
+	Custom.SetPlateStyle(model, index)
+	return true
+end
+
+OPS.Window = function(model, bone, down)
+	if type(bone) ~= "string" or type(down) ~= "boolean" or not table.find(Custom.WindowBones(model), bone) then
+		return false, "absent"
+	end
+	if model:GetAttribute("WindowBroken_" .. bone) == true then
+		return false, "broken"
+	end
+	Custom.SetWindowDown(model, bone, down)
+	return true
+end
+
+-- Portière / capot / coffre ouvert ou fermé, sans condition de portée (menu : véhicule personnel à distance).
+OPS.Door = function(model, bone, open)
+	local hinges = getConfig(model).Hinges or {}
+	if type(bone) ~= "string" or hinges[bone] == nil or type(open) ~= "boolean" then
+		return false, "absent"
+	end
+	if model:GetAttribute("DoorRemoved_" .. bone) == true then
+		return false, "removed"
+	end
+	model:SetAttribute("Door_" .. bone, open and 1 or 0)
+	return true
+end
+
+OPS.SmashWindows = function(model)
+	if #Custom.WindowBones(model) == 0 then
+		return false, "absent"
+	end
+	Custom.SmashWindows(model)
+	return true
+end
+
+OPS.RemoveDoor = function(model, bone, keepDebris)
+	local hinges = getConfig(model).Hinges or {}
+	if type(bone) ~= "string" or hinges[bone] == nil or type(keepDebris) ~= "boolean" then
+		return false, "absent"
+	end
+	local ok = Custom.RemoveDoor(model, bone, keepDebris)
+	return ok, (not ok) and "already" or nil
+end
+
+OPS.Repair = function(model)
+	Custom.Repair(model)
+	return true
+end
+
+OPS.Flip = function(model)
+	return Custom.Flip(model)
+end
+
+OPS.Tune = function(model, key, value)
+	local t = type(key) == "string" and Custom.TuneKeys[key]
+	if not t or (value ~= nil and type(value) ~= t) or (t == "number" and value ~= nil and not finite(value)) then
+		return false, "invalid"
+	end
+	Custom.SetTune(model, key, value)
+	return true
+end
+
+OPS.Freeze = function(model, on)
+	if type(on) ~= "boolean" then
+		return false, "invalid"
+	end
+	Custom.SetFrozen(model, on)
+	return true
+end
+
+OPS.Visible = function(model, on)
+	if type(on) ~= "boolean" then
+		return false, "invalid"
+	end
+	Custom.SetVisible(model, on)
+	return true
+end
+
+OPS.Alarm = function(model, on)
+	if type(on) ~= "boolean" then
+		return false, "invalid"
+	end
+	Custom.SetAlarm(model, on)
+	return true
+end
+
+OPS.Engine = function(model, on)
+	if type(on) ~= "boolean" then
+		return false, "invalid"
+	end
+	if not on and model:GetAttribute("EngineAlwaysOn") == true then
+		return false, "always_on"
+	end
+	model:SetAttribute("Engine", on)
+	return true
+end
+
+OPS.EngineAlwaysOn = function(model, on)
+	if type(on) ~= "boolean" then
+		return false, "invalid"
+	end
+	Custom.SetEngineAlwaysOn(model, on)
+	return true
+end
+
+OPS.Lights = function(model, mode)
+	if mode ~= "Auto" and mode ~= "Off" and mode ~= "On" then
+		return false, "invalid"
+	end
+	Custom.SetLights(model, mode)
+	return true
+end
+
+OPS.Lock = function(model, locked)
+	if type(locked) ~= "boolean" then
+		return false, "invalid"
+	end
+	local A = access()
+	if A then
+		A.SetLocked(model, locked)
+	else
+		model:SetAttribute("Locked", locked)
+	end
+	return true
+end
+
+OPS.KickOut = function(model)
+	if Custom.KickOccupants(model) == 0 then
+		return false, "empty"
+	end
+	return true
+end
+
+OPS.HornTune = function(model)
+	if not Custom.PlayHornTune(model) then
+		return false, "busy"
+	end
+	return true
+end
+
+OPS.Seat = function(model, _, _, _, player)
+	return Custom.CycleSeat(player, model)
+end
+
+-- Opérations acceptées par le remote (pour un menu : savoir ce que ce runtime sait faire).
+Custom.RemoteOps = {}
+for name in pairs(OPS) do
+	table.insert(Custom.RemoteOps, name)
+end
+table.sort(Custom.RemoteOps)
+
+-- Contrôle les arguments (types, bornes, existence sur ce véhicule) puis applique.
+-- Renvoie true, détail  ou  false, raison ("invalid", "absent", "filtered"…). player : celui qui demande
+-- (nécessaire pour la plaque, filtrée pour lui, et le changement de siège).
+function Custom.HandleRemote(model, op, a, b, c, player)
+	local fn = type(op) == "string" and OPS[op]
+	if not fn then
+		return false, "unknown_op"
+	end
+	return fn(model, a, b, c, player)
 end
 
 return Custom

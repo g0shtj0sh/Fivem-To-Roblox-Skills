@@ -143,6 +143,9 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if key == "Siren" and not model:GetAttribute("HasSiren") then
 			return
 		end
+		if key == "Engine" and value == false and model:GetAttribute("EngineAlwaysOn") == true then
+			return -- « Moteur toujours allumé » (Custom.SetEngineAlwaysOn)
+		end
 		model:SetAttribute(key, value)
 	elseif action == "Door" then
 		-- portières / capot / coffre : à bord (menus du jeu), ou dehors à portée de la charnière visée
@@ -176,14 +179,22 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		end
 		local okPolicy, allowed = pcall(policy, player, model, key)
 		if not okPolicy or allowed ~= true then
+			remote:FireClient(player, "CustomResult", model, key, false, "denied")
 			return
 		end
-		local ok, err = pcall(Custom.HandleRemote, model, key, value, ...)
+		local b, c = ...
+		local ok, applied, why = pcall(Custom.HandleRemote, model, key, value, b, c, player)
 		if not ok then
-			warn("[FiveMVehicles] custom refusée :", err)
+			warn("[FiveMVehicles] custom refusée :", applied)
+			applied, why = false, "error"
 		end
+		-- réponse au menu (notification) : op, appliquée ?, raison du refus ou détail (texte de plaque…)
+		remote:FireClient(player, "CustomResult", model, key, applied == true, why)
 	elseif action == "Window" then
 		if type(key) ~= "string" or not isOccupantOrNear(player, model, 6) then
+			return
+		end
+		if model:GetAttribute("WindowBroken_" .. key) == true then
 			return
 		end
 		Custom.SetWindowDown(model, key, value == true)

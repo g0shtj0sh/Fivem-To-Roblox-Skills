@@ -588,6 +588,10 @@ function Access.OnDriverChanged(model, player)
 		if builtin then
 			setWheelColliders(model, false)
 		end
+		-- véhicule gelé par un menu (VehicleCustomization.SetFrozen) : il reste ancré, même conduit
+		if model:GetAttribute("Frozen") == true then
+			return
+		end
 		if root.Anchored then
 			root.Anchored = false
 		end
