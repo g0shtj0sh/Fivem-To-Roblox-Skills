@@ -345,7 +345,33 @@ RunService.Heartbeat:Connect(function(dt)
 		local mech = hd.SteeringLockRad or math.rad(hd.SteeringLockDeg or 35)
 		local steerEff = (st.Steer or c.Steer) * (st.WheelSteer or mech) / math.max(mech, 1e-3)
 		-- accélérateur effectif (télémétrie : S en marche arrière), pour que les autres entendent la même charge
-		telemetry:FireServer(m, st.Rpm or 0, st.Throttle or c.Throttle, steerEff, brakeHeld, reverse, st.Gear, packed)
+		-- roues qui ne tournent PAS à la vitesse de la voiture (burn, patinage, roues bloquées) : vitesse de surface
+		-- moyenne des roues avant / arrière (m/s), sinon nil — les autres joueurs voient les roues patiner
+		-- (avant le 2026-11-16 ils les voyaient immobiles pendant un burn : « je voyais pas qu'il faisait un burnout »)
+		local spinF, spinR
+		local wheels = r and r.Config.Wheels
+		if tele and tele.WheelSpin and wheels then
+			local sf, nf, sr, nr = 0, 0, 0, 0
+			for bone, w in pairs(wheels) do
+				local om = tele.WheelSpin[bone]
+				if om then
+					local v = om * (w.Radius or 0.33)
+					if w.Front then
+						sf += v
+						nf += 1
+					else
+						sr += v
+						nr += 1
+					end
+				end
+			end
+			local ground = st.Speed or 0
+			local f, rr = nf > 0 and sf / nf or ground, nr > 0 and sr / nr or ground
+			if math.abs(f - ground) > 2 or math.abs(rr - ground) > 2 then
+				spinF, spinR = f, rr
+			end
+		end
+		telemetry:FireServer(m, st.Rpm or 0, st.Throttle or c.Throttle, steerEff, brakeHeld, reverse, st.Gear, packed, spinF, spinR)
 		brakeHeld = false
 	end
 end)

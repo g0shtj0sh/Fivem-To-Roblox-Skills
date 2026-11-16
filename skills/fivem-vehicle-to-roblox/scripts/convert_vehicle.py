@@ -939,7 +939,9 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "ExhaustPosition": exhaust_pos,
         "Audio": {"IdleRpm": audio["IdleRpm"], "MaxRpm": audio["MaxRpm"], "Volume": 1,
                   "Cylinders": audio["Cylinders"], "Source": audio["Source"],
-                  "EngineLoops": loops, "Files": audio["Files"]},
+                  "EngineLoops": loops, "Files": audio["Files"],
+                  # son par défaut pris dans la banque du jeu (EngineSoundBank), au lieu des boucles du véhicule
+                  **({"DefaultSound": args.default_engine_sound} if getattr(args, "default_engine_sound", None) else {})},
         "Mods": mods_cfg,
         "ModCount": mod_count,
         "StatMods": stat_cfg,
@@ -1000,6 +1002,9 @@ def main(argv=None) -> int:
     ap.add_argument("--engine-sound",
                     help="son du pack à utiliser (ex. brolver_super_03) ou catégorie (ex. muscle) ; "
                          "défaut : catégorie d'après la classe GTA, son tiré du nom du modèle")
+    ap.add_argument("--default-engine-sound",
+                    help="son PAR DÉFAUT du véhicule pris dans la banque du jeu (ex. brolver_coupe_02) : "
+                         "Audio.DefaultSound ; le son converti reste choisissable dans le menu")
     ap.add_argument("--vehicle-class",
                     help="classe GTA réelle (ex. VC_COUPE ou coupe) : remplace celle du mod et de "
                          "classes/vehicle_classes.json")

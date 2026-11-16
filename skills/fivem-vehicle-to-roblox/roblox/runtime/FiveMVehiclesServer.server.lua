@@ -270,7 +270,7 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 end)
 
 -- Télémétrie du conducteur (10 Hz, non fiable) -> attributs lus par les autres clients
-telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, brake, reverse, gear, tyreFx)
+telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, brake, reverse, gear, tyreFx, spinF, spinR)
 	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
 		return
 	end
@@ -297,6 +297,18 @@ telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, br
 	-- traces et fumée par roue (VehicleTyreFx : 4 bits par roue), purement visuelles
 	if type(tyreFx) == "number" and tyreFx == tyreFx then
 		model:SetAttribute("TyreFx", math.clamp(math.floor(tyreFx), 0, 0xFFFFFFFF))
+	end
+	-- roues qui patinent ou sont bloquées (burn, frein à main) : vitesse de surface avant / arrière, purement visuelle
+	local function finite(x)
+		return type(x) == "number" and x == x and math.abs(x) < 1e6
+	end
+	if finite(spinF) and finite(spinR) then
+		local q = function(x)
+			return math.round(math.clamp(x, -150, 150) * 2) / 2
+		end
+		model:SetAttribute("AxleSpin", Vector2.new(q(spinF), q(spinR)))
+	elseif model:GetAttribute("AxleSpin") ~= nil then
+		model:SetAttribute("AxleSpin", nil)
 	end
 end)
 
@@ -459,6 +471,7 @@ local function setupVehicle(model)
 					model:SetAttribute("Throttle", 0)
 					model:SetAttribute("Steer", 0)
 					model:SetAttribute("TyreFx", 0)
+					model:SetAttribute("AxleSpin", nil)
 					-- sans ça le régime, le rapport et la marche arrière du dernier envoi restaient figés pour tout le
 					-- monde (mesuré 2026-11-16 : 5750 tr/min, feux de recul allumés) ; sans Rpm, le rendu l'estime
 					model:SetAttribute("Rpm", nil)

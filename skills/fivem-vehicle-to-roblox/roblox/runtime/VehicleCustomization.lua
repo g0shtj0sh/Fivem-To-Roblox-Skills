@@ -814,7 +814,10 @@ end
 function Custom.EngineSounds(model)
 	local cfg = getConfig(model)
 	local bank = engineSoundBank() or {}
-	local default = originalEngineSound(cfg)
+	local original = originalEngineSound(cfg)
+	-- son PAR DÉFAUT choisi pour ce véhicule (VehicleConfig.Audio.DefaultSound, un son de la banque), sinon son d'origine
+	local wanted = (cfg.Audio or {}).DefaultSound
+	local default = (type(wanted) == "string" and bank[wanted] and bank[wanted].Loops) and wanted or original
 	local category = (default and bank[default] and bank[default].Category)
 		or (default and string.match(default, "^brolver_(%a+)_%d+$"))
 		or ENGINE_CLASS_CATEGORY[string.upper(tostring(cfg.Class or ""))]
@@ -827,10 +830,10 @@ function Custom.EngineSounds(model)
 			table.insert(list, { Name = name, Label = entry.Label or name })
 		end
 	end
-	if default and not bank[default] then
+	if original and not bank[original] then
 		-- son d'origine absent de la banque : il reste choisissable (il est déjà dans le véhicule)
-		local n = string.match(default, "_(%d+)$")
-		table.insert(list, { Name = default, Label = n and (category .. " " .. tonumber(n)) or default })
+		local n = string.match(original, "_(%d+)$")
+		table.insert(list, { Name = original, Label = n and (category .. " " .. tonumber(n)) or original })
 	end
 	table.sort(list, function(x, y)
 		return x.Name < y.Name

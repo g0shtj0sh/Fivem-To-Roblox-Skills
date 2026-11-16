@@ -262,6 +262,7 @@ function Runtime:_state()
 		Throttle = m:GetAttribute("Throttle") or 0,
 		Rpm = m:GetAttribute("Rpm"),
 		Gear = m:GetAttribute("Gear"),
+		AxleSpin = m:GetAttribute("AxleSpin"), -- roues avant / arrière qui patinent (m/s de surface), autre conducteur
 	}
 	-- traces et fumée des autres conducteurs (VehicleTyreFx) ; le conducteur local les a dans sa télémétrie
 	local fxMod = tyreFxModule()
@@ -399,6 +400,9 @@ function Runtime:_updateJoints(dt, s)
 			local spin
 			if s.WheelSpin and s.WheelSpin[bone] then
 				spin = s.WheelSpin[bone]
+			elseif typeof(s.AxleSpin) == "Vector2" then
+				-- autre conducteur en burn / patinage / roues bloquées
+				spin = (w.Front and s.AxleSpin.X or s.AxleSpin.Y) / math.max(w.Radius or 0.33, 0.05)
 			else
 				spin = s.Speed / math.max(w.Radius or 0.33, 0.05)
 			end
@@ -981,7 +985,8 @@ Runtime.EngineSoundBank = engineSoundBank
 -- Boucles jouées par ce véhicule : celles de son VehicleConfig, ou celles du son choisi dans la banque
 -- (attribut EngineSound) ; les Sound de la banque sont créés ici, sur ce client seulement.
 function Runtime:_engineLoops(a)
-	local name = self.Model:GetAttribute("EngineSound")
+	-- sans choix du joueur : le son par défaut du véhicule (Audio.DefaultSound, banque), sinon ses propres boucles
+	local name = self.Model:GetAttribute("EngineSound") or a.DefaultSound
 	local bank = type(name) == "string" and engineSoundBank()
 	local entry = bank and bank[name]
 	if not (entry and entry.Loops) then
