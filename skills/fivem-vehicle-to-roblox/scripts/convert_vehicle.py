@@ -35,6 +35,7 @@ from f2r import collision as collision_mod  # noqa: E402
 from f2r import sound_pack  # noqa: E402
 from f2r import brands, cabin, cwxml, gamelib, icon_atlas, inventory, meta, rebadge  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
+from f2r.plates import plate_zones  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
                         runtime_version, split_for_execute_luau)
@@ -705,6 +706,26 @@ def part_info(p: Part, vb: VehicleBuilder, store: TextureStore, has_tex: bool) -
     return info
 
 
+def plates_config(vb: VehicleBuilder, vinfo: dict, variation: dict, parts_cfg: dict) -> dict:
+    """Plaques : une zone par plaque (rectangle exact + zone de texte du shader GTA), type avant/arrière,
+    probabilités de style. Rendu côté Roblox : runtime/VehiclePlates.lua."""
+    zones = []
+    for p in vb.parts:
+        if p.kind != "plate" or p.name not in parts_cfg:
+            continue
+        for z in plate_zones(p.pos, p.nrm, p.uv, p.idx, p.shader.vectors):
+            z["Part"] = p.name
+            zones.append(z)
+    ptype = (vinfo.get("plateType") or "VPT_FRONT_AND_BACK_PLATES").upper()
+    if ptype == "VPT_NONE":
+        zones = []
+    elif ptype == "VPT_BACK_PLATES":
+        zones = [z for z in zones if not z["Front"]]
+    elif ptype == "VPT_FRONT_PLATES":
+        zones = [z for z in zones if z["Front"]]
+    return {"Type": ptype, "Zones": zones, "Probabilities": variation.get("plateProbabilities", [])}
+
+
 def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, parts_cfg, mods_cfg, stat_cfg,
                  mod_count, carriers, livery_names, audio, is_emergency, args) -> dict:
     lo, hi = vb.bounds()
@@ -860,6 +881,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Handling": handling,
         "Physics": vb.physics_info(),
         "PlateText": args.plate,
+        "Plates": plates_config(vb, vinfo, variation, parts_cfg),
     }
 
 
@@ -913,7 +935,7 @@ def main(argv=None) -> int:
                     help="classe GTA réelle (ex. VC_COUPE ou coupe) : remplace celle du mod et de "
                          "classes/vehicle_classes.json")
     ap.add_argument("--no-engine-pack", action="store_true", help="ignorer le pack de sons moteur maison")
-    ap.add_argument("--plate", default="F2R 000", help="texte de plaque par défaut")
+    ap.add_argument("--plate", default="", help="texte de plaque imposé (vide = plaque unique générée en jeu)")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
     ap.add_argument("--no-door-prompts", action="store_true")
     ap.add_argument("--extractor", help="commande gta-extract (sinon détection / compilation auto)")

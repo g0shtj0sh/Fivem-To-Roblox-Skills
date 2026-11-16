@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 
 local folder = ReplicatedStorage:WaitForChild("FiveMVehicles")
 local Custom = require(folder:WaitForChild("VehicleCustomization"))
+local Plates = require(folder:WaitForChild("VehiclePlates"))
 local Access = require(folder:WaitForChild("VehicleAccess"))
 local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
 local remote = folder:WaitForChild("VehicleEvent")
@@ -344,6 +345,8 @@ local function setupVehicle(model)
 	end
 	refreshPrompts(model)
 	Custom.Apply(model, Custom.Serialize(model))
+	-- plaque unique (garde la sienne si elle est libre, sinon en génère une : copies d'un même modèle)
+	Plates.Register(model)
 end
 
 for _, m in ipairs(CollectionService:GetTagged(TAG)) do

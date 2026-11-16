@@ -106,6 +106,10 @@ def parse_carvariations(paths, report: Report) -> dict[str, dict]:
                 "lightSettings": int(xval(item, "lightSettings", "-1") or -1),
                 "sirenSettings": int(xval(item, "sirenSettings", "-1") or -1),
                 "windowsWithExposedEdges": [w.text for w in item.findall("windowsWithExposedEdges/Item") if w.text],
+                # types de plaque possibles et leur poids (plateProbabilities/Probabilities/Item : Name, Value)
+                "plateProbabilities": [
+                    {"Name": xval(pi, "Name", ""), "Weight": float(xval(pi, "Value", "0") or 0)}
+                    for pi in item.findall("plateProbabilities/Probabilities/Item")],
             }
     return out
 

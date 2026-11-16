@@ -90,10 +90,10 @@ def vertex_rows(P, N, bone_local=None, colour=None, uv=None, skinned=True):
     return rows
 
 
-def geometry_xml(shader_index, P, N, tris, bone_ids, bone_local, colour=None, skinned=True):
+def geometry_xml(shader_index, P, N, tris, bone_ids, bone_local, colour=None, skinned=True, uv=None):
     layout = ["Position"] + (["BlendWeights", "BlendIndices"] if skinned else []) + \
              ["Normal", "Colour0", "TexCoord0", "TexCoord1"]
-    rows = vertex_rows(P, N, bone_local, colour, skinned=skinned)
+    rows = vertex_rows(P, N, bone_local, colour, uv=uv, skinned=skinned)
     idx = " ".join(str(i) for t in tris for i in t)
     lay = "".join(f"<{l} />" for l in layout)
     bid = f"<BoneIDs>{', '.join(map(str, bone_ids))}</BoneIDs>" if skinned else ""
@@ -102,8 +102,11 @@ def geometry_xml(shader_index, P, N, tris, bone_ids, bone_local, colour=None, sk
             f"\n</Data></VertexBuffer><IndexBuffer><Data>{idx}</Data></IndexBuffer></Item>")
 
 
-def shader(name, textures=None, diffuse_color=None):
+def shader(name, textures=None, diffuse_color=None, vectors=None):
     params = ""
+    for k, v in (vectors or {}).items():
+        x, y, z, w = (list(v) + [0, 0, 0, 0])[:4]
+        params += f"<Item name=\"{k}\" type=\"Vector\" x=\"{x}\" y=\"{y}\" z=\"{z}\" w=\"{w}\" />"
     for k, v in (textures or {}).items():
         params += f"<Item name=\"{k}\" type=\"Texture\"><Name>{v}</Name></Item>"
     if diffuse_color:
@@ -131,7 +134,8 @@ def main_yft(out: Path):
         shader("vehicle_vehglass", {"DiffuseSampler": "testcar_glass"}),                       # 2
         shader("vehicle_lightsemissive", {"DiffuseSampler": "testcar_lights"}),                # 3
         shader("vehicle_tire", {"DiffuseSampler": "testcar_tyre", "BumpSampler": "testcar_tyre_n"}),  # 4
-        shader("vehicle_licenseplate", {"DiffuseSampler": "plate01"}),                          # 5
+        shader("vehicle_licenseplate", {"PlateBgSampler": "plate01"},                           # 5
+               vectors={"LicensePlateFontExtents": (0.043, 0.38, 0.945, 0.841), "NumLetters": (8,)}),
         shader("vehicle_mesh", {"DiffuseSampler": "testcar_interior"}),                         # 6
     ]
     geoms = []
@@ -169,7 +173,17 @@ def main_yft(out: Path):
         lp.append(("bodyshell", (p, n, t)))
         cols += [(255, 255, 255, lid)] * len(p)
     skinned(3, lp, cols)
-    skinned(5, [("bodyshell", box(0, -2.12, 0.0, 0.5, 0.02, 0.12))])
+    # plaques avant et arrière dans une même géométrie (deux îlots), UV de plaque 0..1 (v vers le bas)
+    pp, pn, pu, pt = [], [], [], []
+    for y, ny, sx in ((-2.13, -1.0, 1.0), (2.13, 1.0, -1.0)):  # arrière : droite = +x ; avant : droite = -x
+        b = len(pp)
+        for (du, dv) in ((0, 0), (1, 0), (1, 1), (0, 1)):  # haut-gauche, haut-droite, bas-droite, bas-gauche
+            pp.append((sx * (du - 0.5) * 0.52, y, 0.06 - dv * 0.12))
+            pn.append((0.0, ny, 0.0))
+            pu.append((du, dv))
+        pt += [(b, b + 3, b + 2), (b, b + 2, b + 1)]
+    geoms.append(geometry_xml(5, np.array(pp), np.array(pn), pt, used_bones, [used_bones.index(bi["bodyshell"])] * 8,
+                              uv=pu))
     skinned(6, [("steeringwheel", box(-0.4, 0.5, 0.5, 0.35, 0.05, 0.35)),
                 ("seat_dside_f", box(-0.4, 0.0, 0.1, 0.5, 0.5, 0.5))])
     models = f"<DrawableModelsHigh><Item><RenderMask value=\"255\" /><Flags value=\"0\" /><HasSkin value=\"1\" /><BoneIndex value=\"0\" /><Unknown1 value=\"0\" /><Geometries>{''.join(geoms)}</Geometries></Item></DrawableModelsHigh>"

@@ -1110,17 +1110,25 @@ function groups.custom()
 	end
 	check(okN and neonParts > 0 and lit == neonParts, "SetNeon", fmt("%d/%d bandes allumées", lit, neonParts))
 	-- plaque
-	local okP = pcall(Custom.SetPlate, model, "F2RTEST")
+	local okP, assigned = pcall(Custom.SetPlate, model, "F2RTEST")
 	local labels, good = 0, 0
 	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("TextLabel") and d.Name == "PlateText" then
+		if d:IsA("SurfaceGui") and d.Name == "Plate" then
 			labels += 1
-			if d.Text == "F2RTEST" then
+			local holder = d:FindFirstChild("PlateText", true)
+			local glyphs = 0
+			for _, c in ipairs(holder and holder:GetChildren() or {}) do
+				if c:FindFirstChild("Glyph") then
+					glyphs += 1
+				end
+			end
+			if d:GetAttribute("Text") == "F2RTEST" and glyphs == 7 then
 				good += 1
 			end
 		end
 	end
-	check(okP and labels > 0 and good == labels, "SetPlate", fmt("%d/%d plaque(s) à jour", good, labels))
+	check(okP and assigned == true and labels > 0 and good == labels, "SetPlate",
+		fmt("%d/%d plaque(s) à jour (texte et 7 caractères rendus)", good, labels))
 	-- sauvegarde / restauration
 	local changed = Custom.Serialize(model)
 	local okA, errA = pcall(Custom.Apply, model, snapshot)
@@ -1164,7 +1172,7 @@ function groups.custom()
 	local neonOk = (snapshot.Neon == true and litAfter == neonTotal) or (snapshot.Neon ~= true and litAfter == 0)
 	local plateBack = true
 	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("TextLabel") and d.Name == "PlateText" and d.Text ~= (snapshot.PlateText or d.Text) then
+		if d:IsA("SurfaceGui") and d.Name == "Plate" and d:GetAttribute("Text") ~= (snapshot.PlateText or d:GetAttribute("Text")) then
 			plateBack = false
 		end
 	end

@@ -127,6 +127,18 @@ def test_pipeline():
         assert hz["door_dside_f"]["Axis"] == [0.0, -1.0, 0.0]               # s'ouvre vers l'extérieur
         assert hz["bonnet"]["Source"] == "yft" and hz["bonnet"]["Axis"] == [1.0, 0.0, 0.0]
         assert hz["door_pside_f"]["Source"] == "defaut"
+        # plaques : une zone par plaque (avant / arrière), au bon endroit, zone de texte du shader GTA
+        pl = cfg["Plates"]
+        assert pl["Type"] == "VPT_FRONT_AND_BACK_PLATES" and len(pl["Zones"]) == 2
+        rear = next(z for z in pl["Zones"] if not z["Front"])
+        front = next(z for z in pl["Zones"] if z["Front"])
+        assert rear["Center"][2] > 2.0 and rear["Normal"] == [0.0, 0.0, 1.0] and rear["Right"] == [1.0, 0.0, 0.0]
+        assert front["Center"][2] < -2.0 and front["Normal"] == [0.0, 0.0, -1.0] and front["Right"] == [-1.0, 0.0, 0.0]
+        assert abs(rear["Width"] - 0.52) < 1e-3 and abs(rear["Height"] - 0.12) < 1e-3 and rear["Letters"] == 8
+        x, y, w, h = rear["TextRect"]                                     # LicensePlateFontExtents
+        assert abs(x - 0.043) < 1e-3 and abs(y - 0.38) < 1e-3 and abs(w - 0.902) < 1e-3 and abs(h - 0.461) < 1e-3
+        assert cfg["PlateText"] == ""                                     # plaque unique générée en jeu
+        assert "VehiclePlates" in (out / "studio" / "FiveMRuntime.lua").read_text()
         print(f"OK : {len(names)} nœuds, {len(gltf['images'])} images")
 
 

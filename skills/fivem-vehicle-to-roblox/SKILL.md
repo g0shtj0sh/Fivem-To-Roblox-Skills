@@ -40,7 +40,7 @@ Mesures, choix et pièges : [`docs/studio-import-tests.md`](../../docs/studio-im
 
 ```bash
 cd skills/fivem-vehicle-to-roblox
-python scripts/convert_vehicle.py "<zip>" -o "<sortie>" [--plate "TEXTE"] [--texture-overrides <dossier>]
+python scripts/convert_vehicle.py "<zip>" -o "<sortie>" [--plate "TEXTE"  (défaut : plaque unique générée en jeu)] [--texture-overrides <dossier>]
 ```
 Options : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (> 300 000 triangles),
 `--no-collision` (hitbox = simple boîte), `--wheel-collision` (cylindres de roues solides),

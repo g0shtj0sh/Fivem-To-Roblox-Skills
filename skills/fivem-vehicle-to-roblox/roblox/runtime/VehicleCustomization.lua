@@ -367,13 +367,35 @@ function Custom.SetXenon(model, color)
 	model:SetAttribute("XenonColor", color)
 end
 
+-- Plaque imposée par le code du jeu (non filtrée ; pour une saisie de joueur : VehiclePlates.RequestCustom).
+-- texte vide ou nil = plaque unique générée au format GTA. Renvoie true, texte  ou  false, raison.
+local function getPlates()
+	-- le Setup charge ce module par une copie sans parent : on retombe sur ReplicatedStorage
+	local folder = script.Parent or game:GetService("ReplicatedStorage"):FindFirstChild("FiveMVehicles")
+	local mod = folder and folder:FindFirstChild("VehiclePlates")
+	if not mod then
+		return nil
+	end
+	if not game:GetService("RunService"):IsRunning() then
+		mod = mod:Clone() -- Edit : éviter la version mise en cache par un require précédent
+	end
+	return require(mod)
+end
+
 function Custom.SetPlate(model, text)
-	text = string.sub(tostring(text or ""), 1, 8)
-	model:SetAttribute("PlateText", text)
-	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("TextLabel") and d.Name == "PlateText" then
-			d.Text = text
-		end
+	local Plates = getPlates()
+	if not Plates then
+		model:SetAttribute("PlateText", tostring(text or ""))
+		return false, "no_plates_module"
+	end
+	return Plates.Assign(model, text)
+end
+
+function Custom.SetPlateStyle(model, index)
+	local Plates = getPlates()
+	model:SetAttribute("PlateStyle", index)
+	if Plates then
+		Plates.Render(model)
 	end
 end
 
@@ -419,7 +441,7 @@ function Custom.GetOptions(model)
 end
 
 local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_" }
-local SAVE_KEYS = { "Livery", "WindowTint", "Neon", "NeonColor", "XenonColor", "PlateText" }
+local SAVE_KEYS = { "Livery", "WindowTint", "Neon", "NeonColor", "XenonColor", "PlateText", "PlateStyle" }
 
 function Custom.Serialize(model)
 	local out = {}

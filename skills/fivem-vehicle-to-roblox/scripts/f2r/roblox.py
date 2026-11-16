@@ -84,6 +84,7 @@ def runtime_sources() -> dict[str, str]:
         "VehicleTyreFx": (rt / "VehicleTyreFx.lua").read_text(encoding="utf-8"),
         "VehicleBackfire": (rt / "VehicleBackfire.lua").read_text(encoding="utf-8"),
         "VehicleTarget": (rt / "VehicleTarget.lua").read_text(encoding="utf-8"),
+        "VehiclePlates": (rt / "VehiclePlates.lua").read_text(encoding="utf-8"),
         "Server": (rt / "FiveMVehiclesServer.server.lua").read_text(encoding="utf-8"),
         "Client": (rt / "FiveMVehiclesClient.client.lua").read_text(encoding="utf-8"),
     }

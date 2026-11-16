@@ -298,6 +298,7 @@ local function collisionFolderFor(owner)
 	return f
 end
 
+local plateSurfaces = {} -- surfaces de plaque à équiper (VehiclePlates.BuildGui)
 for name, info in pairs(PARTS) do
 	local p = byName[name]
 	if p and info.Kind == "collision" then
@@ -432,31 +433,45 @@ for name, info in pairs(PARTS) do
 		p:SetAttribute("BaseTransparency", base)
 		p.Transparency = info.ModSlot and 1 or base
 		if kind == "plate" then
-			local face = Enum.NormalId.Back
-			if info.Normal then
-				local nl = p.CFrame:VectorToObjectSpace(VF:VectorToWorldSpace(v3(info.Normal)))
-				local ax = { { "Right", nl.X }, { "Left", -nl.X }, { "Top", nl.Y }, { "Bottom", -nl.Y }, { "Back", nl.Z }, { "Front", -nl.Z } }
-				table.sort(ax, function(a, b)
-					return a[2] > b[2]
-				end)
-				face = Enum.NormalId[ax[1][1]]
+			-- surfaces posées exactement sur chaque plaque (zone de texte du shader GTA) ; contenu construit et
+			-- rendu plus bas par VehiclePlates, une fois le runtime installé
+			local zones = {}
+			for _, z in ipairs((CONFIG.Plates and CONFIG.Plates.Zones) or {}) do
+				if z.Part == name then
+					table.insert(zones, z)
+				end
 			end
-			local gui = Instance.new("SurfaceGui")
-			gui.Name = "Plate"
-			gui.Face = face
-			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-			gui.PixelsPerStud = 60
-			local label = Instance.new("TextLabel")
-			label.Name = "PlateText"
-			label.Size = UDim2.fromScale(0.8, 0.5)
-			label.Position = UDim2.fromScale(0.1, 0.3)
-			label.BackgroundTransparency = 1
-			label.TextScaled = true
-			label.Font = Enum.Font.Arcade
-			label.TextColor3 = Color3.fromRGB(20, 30, 90)
-			label.Text = CONFIG.PlateText or "F2R 000"
-			label.Parent = gui
-			gui.Parent = p
+			for _, z in ipairs(zones) do
+				local right = VF:VectorToWorldSpace(v3(z.Right))
+				local up = VF:VectorToWorldSpace(v3(z.Up))
+				local normal = VF:VectorToWorldSpace(v3(z.Normal))
+				local surf = Instance.new("Part")
+				surf.Name = z.Front and "PlateSurfaceFront" or "PlateSurfaceRear"
+				surf.Size = Vector3.new(z.Width * spm, z.Height * spm, 0.02)
+				surf.CFrame = CFrame.fromMatrix(L2W(z.Center) + normal * (0.004 * spm), right, up, normal)
+				surf.Transparency = 1
+				surf.CanCollide, surf.CanQuery, surf.CanTouch, surf.Massless = false, false, false, true
+				surf.CastShadow = false
+				surf.Anchored = false
+				surf:SetAttribute("PlateZone", z.Front and "front" or "rear")
+				surf.Parent = p
+				local w = Instance.new("WeldConstraint")
+				w.Part0, w.Part1, w.Parent = p, surf, surf
+				table.insert(plateSurfaces, { surface = surf, face = Enum.NormalId.Back, rect = z.TextRect })
+			end
+			if #zones == 0 and not (CONFIG.Plates and CONFIG.Plates.Type == "VPT_NONE") then
+				-- ancien format sans zones : texte sur la face de la pièce, texture d'origine gardée
+				local face = Enum.NormalId.Back
+				if info.Normal then
+					local nl = p.CFrame:VectorToObjectSpace(VF:VectorToWorldSpace(v3(info.Normal)))
+					local ax = { { "Right", nl.X }, { "Left", -nl.X }, { "Top", nl.Y }, { "Bottom", -nl.Y }, { "Back", nl.Z }, { "Front", -nl.Z } }
+					table.sort(ax, function(a, b)
+						return a[2] > b[2]
+					end)
+					face = Enum.NormalId[ax[1][1]]
+				end
+				table.insert(plateSurfaces, { surface = p, face = face, rect = nil, noBackground = true })
+			end
 		end
 		p.Parent = folderFor(info)
 		local weld = Instance.new("WeldConstraint")
@@ -848,7 +863,7 @@ cfgModule.Parent = model
 local defaults = {
 	Engine = false, Headlights = 0, Indicator = "Off", Siren = false, SirenSound = "wail",
 	HasSiren = CONFIG.HasSiren == true, Horn = false, Brake = false, Reverse = false,
-	Throttle = 0, Steer = 0, Livery = CONFIG.DefaultLivery or 0, PlateText = CONFIG.PlateText or "F2R 000",
+	Throttle = 0, Steer = 0, Livery = CONFIG.DefaultLivery or 0, PlateText = CONFIG.PlateText or "", PlateStyle = 1,
 	AutoStartEngine = true, WindowTint = 0.45, Neon = false,
 	Locked = false, ParkAnchorDelay = 5, Parked = true, Flipped = false, RecoverCooldown = 5,
 }
@@ -905,6 +920,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehicleTyreFx", SOURCES.VehicleTyreFx)
 	upsert(folder, "ModuleScript", "VehicleBackfire", SOURCES.VehicleBackfire)
 	upsert(folder, "ModuleScript", "VehicleTarget", SOURCES.VehicleTarget)
+	upsert(folder, "ModuleScript", "VehiclePlates", SOURCES.VehiclePlates)
 	upsert(folder, "RemoteEvent", "VehicleEvent")
 	if not folder:FindFirstChild("VehicleTelemetry") then
 		local ok = pcall(function()
@@ -920,6 +936,21 @@ if SOURCES then
 elseif folder:GetAttribute("RuntimeVersion") ~= RUNTIME_VERSION then
 	warnf("Runtime FiveMVehicles absent ou d'une autre version (%s, attendu %s) : exécuter studio/FiveMRuntime.lua.",
 		tostring(folder:GetAttribute("RuntimeVersion")), RUNTIME_VERSION)
+end
+
+-- plaques : fond + zone de texte sur chaque surface, puis rendu (plaque unique générée par Custom.Apply)
+local okPlates, PlatesMod = pcall(function()
+	return require(folder.VehiclePlates:Clone())
+end)
+if okPlates then
+	for _, ps in ipairs(plateSurfaces) do
+		local gui = PlatesMod.BuildGui(ps.surface, ps.face, ps.rect)
+		if ps.noBackground then
+			gui:SetAttribute("NoBackground", true)
+		end
+	end
+elseif #plateSurfaces > 0 then
+	warnf("Impossible de charger VehiclePlates dans Studio : %s", tostring(PlatesMod))
 end
 
 -- application de la livrée / couleurs / visibilité par défaut (code partagé avec le runtime)

@@ -364,7 +364,7 @@ Custom.SetExtra(car, 1, false)
 Custom.SetWindowTint(car, 0.7)                        -- 0 clair → 0.95 limo
 Custom.SetNeon(car, true, Color3.fromRGB(255, 0, 200))
 Custom.SetXenon(car, Color3.fromRGB(120, 170, 255))   -- nil = halogène
-Custom.SetPlate(car, "ROBLOX")
+Custom.SetPlate(car, "ROBLOX")                        -- plaque imposée par le jeu (voir « Plaques »)
 Custom.SetPerformance(car, "Engine", 3)               -- lu par ton moteur via Custom.GetPerformance(car)
 local save = Custom.Serialize(car)                     -- table -> DataStore
 Custom.Apply(newCar, save)
@@ -392,6 +392,38 @@ une couleur libre), `Finish_<couche>`, `FactoryColors`. Finitions (`Custom.Finis
 Pearl, Matte, Metal, Chrome, Worn → matériau + `Reflectance` des pièces peintes **sans** SurfaceAppearance (une
 SurfaceAppearance impose son rendu : seule la couleur s'y applique). Les pièces visuelles sont `Massless` sans
 collision : la finition ne change pas la conduite. Le nacré (`Pearlescent`) n'a de pièce que si le modèle en a.
+
+## Plaques d'immatriculation (`VehiclePlates`)
+
+Comme dans GTA V, le texte n'est pas dans la texture de la plaque : il est dessiné dans la **zone de texte
+du shader GTA** (`LicensePlateFontExtents`), retrouvée à la conversion sur chaque plaque (`CONFIG.Plates.Zones` :
+rectangle de la plaque, zone de texte `TextRect`, avant / arrière). Le Setup pose une surface invisible
+`PlateSurfaceFront` / `PlateSurfaceRear` sur chaque plaque, avec une SurfaceGui `Plate` : fond (`Background`)
++ 8 cases de caractères centrées (`PlateText/C1..C8/Glyph`). `vehicles.meta` `plateType` est respecté
+(avant + arrière, arrière seule, aucune).
+
+- **Plaque unique** : à l'apparition, le serveur appelle `Plates.Register(car)` : la plaque est gardée si elle
+  est libre, sinon une plaque est générée au format GTA (`Plates.Format = "##AAA###"`, ex. « 46EEK572 »).
+  Les copies d'un même modèle reçoivent donc chacune leur plaque.
+- **Styles** : `Plates.RegisterStyle(n, def)` puis `Plates.SetStyle(car, n)` (attribut `PlateStyle`).
+  `def` : `Name`, `BackgroundColor`, `Background` (image de toute la plaque, `rbxassetid://…`), `TextColor`,
+  `Font` (police Roblox), `Atlas` (planche de caractères : `{ Image, Chars, Columns, CellSize }`, prioritaire
+  sur `Font`), `LetterFill`, `KeepOriginal` (garder la texture d'origine du mod). Style 1 par défaut : plaque
+  neutre claire, texte bleu foncé, police standard à chasse fixe ; il recouvre la plaque d'origine du mod.
+- **Recherche** : `Plates.Lookup("46EEK572")` → `{ Model, OwnerUserId, Text }` (ou `nil`).
+- **Plaque imposée par le code du jeu** : `Plates.Assign(car, texte, { OwnerUserId = id })` ou
+  `Custom.SetPlate(car, texte)` → `true, texte` ou `false, raison` (`invalid`, `taken`, `store`). Non filtrée :
+  réservée aux textes choisis par le jeu.
+- **Plaque personnalisée d'un joueur** : `Plates.RequestCustom(player, car, texte)` : normalisation (A-Z, 0-9,
+  espace, 8 caractères max), **filtre de texte Roblox obligatoire** (`TextService:FilterStringAsync`), unicité.
+  Raisons de refus : `invalid`, `filtered`, `filter_error`, `taken`, `store`. À appeler depuis un RemoteEvent
+  du jeu (menu de custom), jamais avec un texte non filtré.
+- **Persistance** (facultative) : `Plates.SetStore(Plates.DataStore("Plates_v1"))` réserve les plaques des
+  véhicules possédés (`OwnerUserId`) dans un DataStore (une clé par plaque, réservation atomique). Sans
+  stockage, les plaques valent pour la session du serveur. Un stockage maison doit fournir `Reserve(text, info)`,
+  `Release(text)`, `Get(text)`.
+- `Custom.Serialize` / `Apply` sauvegardent `PlateText` et `PlateStyle`. La lampe de plaque (rôle `plate`,
+  allumée avec les phares) est posée par `VehicleLights.Rig` au-dessus de la plaque arrière.
 
 ## Brancher un menu de custom (vMenu ou autre)
 
