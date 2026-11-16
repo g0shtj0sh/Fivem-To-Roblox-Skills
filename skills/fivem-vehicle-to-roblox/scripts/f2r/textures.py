@@ -139,6 +139,26 @@ def is_metal(*names: str | None) -> bool:
     return any(h in (n or "").lower() for n in names for h in METAL_HINTS)
 
 
+# Alpha d'une texture posée sur une pièce OPAQUE : Roblox l'applique quand même (SurfaceAppearance en Overlay, la
+# couleur de la pièce transparaît). Une alpha UNIFORME et partielle n'est pas un masque de découpe mais une valeur
+# d'intensité (écrans vehicle_dash_emissive : interior_emissive à 74/255 partout) : gardée, elle voilait les écrans de
+# la m422 d'un gris laiteux (signalé par l'utilisateur, 2026-11-16).
+ALPHA_OPAQUE_MIN = 250
+ALPHA_UNIFORM_STD = 3.0
+
+
+def alpha_kind(img: Image.Image) -> str:
+    """'none' (pas d'alpha utile), 'uniform' (alpha partielle et constante : pas un masque) ou 'mask'."""
+    if img.mode not in ("RGBA", "LA", "PA") and not (img.mode == "P" and "transparency" in img.info):
+        return "none"
+    a = np.asarray(img.convert("RGBA"), np.float32)[..., 3]
+    if a.min() >= ALPHA_OPAQUE_MIN:
+        return "none"
+    if a.std() < ALPHA_UNIFORM_STD:
+        return "uniform"
+    return "mask"
+
+
 def is_neutral_flat(img: Image.Image) -> bool:
     """Aplat neutre : RVB uniforme (écart type < FLAT_STD), quasi blanc (moyenne >= FLAT_MIN_MEAN) et opaque
     (alpha >= FLAT_MIN_ALPHA partout)."""
@@ -159,6 +179,7 @@ class TextureStore:
         self.avg: dict[str, list[float]] = {}
         # texture neutre (aplat quasi blanc et opaque : is_neutral_flat), ex. vehicle_generic_smallspecmap
         self.flat: dict[str, bool] = {}
+        self.alpha: dict[str, str] = {}  # nom -> alpha_kind
         self.missing: set[str] = set()
         # retouches par texture (rebadge) : nom -> fonction(image, role) -> image, sur la taille d'origine
         self.edits: dict = {}
@@ -195,6 +216,7 @@ class TextureStore:
             img = edit(img, role)
         self.avg.setdefault(name.lower(), average_color(img))
         self.flat.setdefault(name.lower(), is_neutral_flat(img))
+        self.alpha.setdefault(name.lower(), alpha_kind(img))
         if role in ("light", "emask"):  # optique : texture agrandie et masque d'émission (light_emissive.py)
             big = light_upscale(img, self.max_size)
             img = emissive_mask(big) if role == "emask" else big
@@ -208,6 +230,8 @@ class TextureStore:
                 img.putalpha(255)
             else:
                 self.report.info(f"Planche d'icônes {name} : fond sombre, symboles clairs, agrandie à {img.size[0]} px.")
+        if role == "opaque" and img.mode != "RGB":
+            img = img.convert("RGB")  # pièce opaque : la texture seule, sans alpha (sinon Overlay de Roblox)
         img = resize_for_roblox(img, self.max_size)
         img = to_normal_png(img) if role == "normal" else to_color_png(img)
         suffix = {"normal": "_n", "opaque": "_opaque"}.get(role, "")
@@ -268,6 +292,14 @@ class TextureStore:
         src = self.find(name)
         img = load_image(src, self.report) if src is not None else None
         return img is not None and has_alpha_mask(img)
+
+    def has_uniform_alpha(self, name: str | None) -> bool:
+        """Alpha partielle et constante (pas un masque de découpe) : voir alpha_kind."""
+        if not name:
+            return False
+        if name.lower() not in self.alpha:
+            self.get(name)
+        return self.alpha.get(name.lower()) == "uniform"
 
     def is_flat(self, name: str | None) -> bool:
         """True si la texture est un aplat NEUTRE (uni, quasi blanc, opaque : is_neutral_flat) : sur une pièce peinte

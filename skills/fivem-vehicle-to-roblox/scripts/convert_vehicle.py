@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -41,7 +42,7 @@ from f2r.plates import plate_zones  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
                         runtime_version, split_for_execute_luau)
-from f2r.textures import TextureStore, load_image  # noqa: E402
+from f2r.textures import TextureStore, alpha_kind, load_image  # noqa: E402
 from f2r.util import Report, extract_archive, register_names, write_json  # noqa: E402
 from f2r.vehicle import (LIGHT_IDS, SEAT_BONES, STEERING_BONES,  # noqa: E402
                          Part, VehicleBuilder)
@@ -494,10 +495,18 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         return _alpha_cache[name.lower()]
     icon_atlas.split_icon_overlays(vb.parts, _atlas_alpha, report)
     tex_manifest: dict = {}
+    veiled: list[str] = []  # pièces opaques avec une alpha uniforme restante (Roblox les voilerait de Part.Color)
     for p in vb.parts:
         flip_if_inverted(p)
         mat, has_tex = make_material(p, store, paint_default, livery_names)
         tex_manifest[p.name] = texture_guard.entry(p.kind, mat, has_tex)
+        # décalques exclus : le Setup les passe en AlphaMode Transparency (alpha voulue)
+        if mat.alpha == "OPAQUE" and mat.color_png is not None and p.kind != "decal" and not (p.paint and p.paint != "Default"):
+            try:
+                if alpha_kind(Image.open(mat.color_png)) == "uniform":
+                    veiled.append(p.name)
+            except OSError:
+                pass
         glb.add_mesh(p.name, p.pos, p.nrm, p.uv, p.idx, mat)
         info = part_info(p, vb, store, has_tex)
         if mat.emissive_png is not None:
@@ -509,6 +518,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
             info["EmissiveMask"] = mat.emissive_png.name
         parts_cfg[p.name] = info
 
+    if veiled:
+        report.warn(f"{len(veiled)} pièce(s) opaque(s) gardent une alpha uniforme : Roblox les mélangera à leur couleur "
+                    "(aspect délavé, ex. écrans). À aplatir dans make_material : " + ", ".join(veiled[:12]))
     collision_cfg = add_collision(frag_path, vb, glb, parts_cfg, args, report)
     # garde-fou : une pièce qui perd sa texture ou sa transparence par rapport à la dernière conversion acceptée
     # de ce véhicule bloque la conversion (code 3) au lieu de passer inaperçue (texture_guard.py)
@@ -658,7 +670,12 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
             # une diffuse uniforme (ex. vehicle_generic_smallspecmap, blanche 4 x 4) n'apporte rien à la peinture :
             # sans texture, la pièce reste sans SurfaceAppearance et la custom peut changer sa finition (SetFinish)
             opaque_atlas = p.kind != "decal" and store.is_icon_atlas(p.tex_diffuse)
-            color_png = store.get(p.tex_diffuse, "opaque" if opaque_atlas else "color")
+            # écran (emissive) ou alpha uniforme sur une pièce sans vraie couche de peinture (« Default ») : sans alpha,
+            # sinon Roblox la mélange à la couleur de la pièce (écrans laiteux de la m422, 2026-11-16) ; une vraie
+            # couche (Primary…) garde son alpha : c'est le mélange texture / peinture voulu, comme dans GTA
+            flatten = p.kind != "decal" and (opaque_atlas or p.kind == "emissive" or (
+                (p.paint in (None, "Default")) and store.has_uniform_alpha(p.tex_diffuse)))
+            color_png = store.get(p.tex_diffuse, "opaque" if flatten else "color")
             has_tex = color_png is not None
     elif p.kind in ("glass", "light", "siren"):
         store.average(p.tex_diffuse)
@@ -668,7 +685,10 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
         # planche d'icônes sur une pièce opaque : version sans transparence (sinon Roblox montre Part.Color
         # ou un fond blanc à la place du fond transparent)
         opaque_atlas = p.kind != "decal" and store.is_icon_atlas(p.tex_diffuse)
-        color_png = store.get(p.tex_diffuse, "opaque" if opaque_atlas else "color")
+        # pièce opaque : sans alpha pour les écrans (emissive) et pour toute alpha uniforme, qui n'est pas une découpe
+        # (Roblox l'appliquerait en Overlay sur la couleur de la pièce : écran voilé de gris, m422 2026-11-16)
+        flatten = p.kind != "decal" and (opaque_atlas or p.kind == "emissive" or store.has_uniform_alpha(p.tex_diffuse))
+        color_png = store.get(p.tex_diffuse, "opaque" if flatten else "color")
         has_tex = color_png is not None
         if p.custom_color and color_png is None:
             base = [*p.custom_color, 1.0]

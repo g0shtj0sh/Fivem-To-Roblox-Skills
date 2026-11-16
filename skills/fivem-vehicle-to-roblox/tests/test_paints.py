@@ -58,6 +58,16 @@ def test_flat_diffuse_keeps_paint_without_texture():
         assert not store2.is_flat("glass_light")
         assert not store2.is_flat("grille1_diff")
         assert not store.is_flat(None) and not store.is_flat("absente")
+        # régression 2026-11-16 : alpha partielle UNIFORME (écran interior_emissive, 74/255) = pas une découpe ;
+        # la version « opaque » n'a plus d'alpha (sinon Roblox voile l'écran avec la couleur de la pièce)
+        Image.new("RGBA", (16, 16), (20, 30, 40, 74)).save(tmp / "interior_emissive.png")
+        store3 = TextureStore({n: tmp / f"{n}.png" for n in ("interior_emissive", "grille1_diff", "black_dark")},
+                              tmp / "out3", Report())
+        assert store3.has_uniform_alpha("interior_emissive")
+        assert not store3.has_uniform_alpha("grille1_diff")  # vrai masque de découpe : gardé
+        assert not store3.has_uniform_alpha("black_dark")
+        flat = Image.open(store3.get("interior_emissive", "opaque"))
+        assert flat.mode == "RGB" and flat.getpixel((3, 3))[:3] == (20, 30, 40)
 
 
 if __name__ == "__main__":
