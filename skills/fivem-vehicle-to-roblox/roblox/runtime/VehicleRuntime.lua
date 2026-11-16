@@ -829,8 +829,11 @@ function Runtime:_updateAudio(dt, s)
 	local vol = Runtime.MasterVolume * (a.Volume or 1)
 	local engineOn = s.Engine
 	if engineOn and not self.EngineWasOn then
+		-- bruit de démarreur : seulement un VRAI son (Sound « Start » qui ne vient pas de engine_start.wav). Les
+		-- anciennes conversions installaient un démarreur synthétisé (engine_start.wav), refusé par l'utilisateur
+		-- (2026-11-16) : il n'est plus joué, même s'il est encore dans le véhicule.
 		local start = self.Sounds:FindFirstChild("Start")
-		if start then
+		if start and start:IsA("Sound") and start:GetAttribute("SourceFile") ~= "engine_start.wav" then
 			start:Play()
 		end
 	end

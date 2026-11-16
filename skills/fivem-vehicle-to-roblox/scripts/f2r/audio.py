@@ -172,16 +172,6 @@ def synth_click(freq: float = 2400.0, seconds: float = 0.05) -> np.ndarray:
     return (np.sin(2 * np.pi * freq * t) * 0.6 + np.random.default_rng(3).normal(0, 0.2, n)) * env
 
 
-def synth_start(cylinders: int) -> np.ndarray:
-    """Démarreur (~0,9 s) puis montée au ralenti."""
-    crank = int(SR * 0.9)
-    t = np.arange(crank) / SR
-    starter = np.sin(2 * np.pi * 7 * t) ** 8 * np.sin(2 * np.pi * 180 * t) * 0.5
-    catch = synth_engine_loop(1400, cylinders, "on", seconds=0.6)
-    catch *= np.linspace(1, 0.4, len(catch))
-    return np.concatenate([starter, catch])
-
-
 # ------------------------------------------------------------------ découpe AWC
 
 def _loopify(seg: np.ndarray, fade: int) -> np.ndarray:
@@ -358,10 +348,11 @@ def build_audio(out_dir: Path, *, wavs: dict[str, Path], audio_name: str, vclass
         report.info(f"Son moteur synthétisé ({cyl} cylindres, basé sur audioNameHash='{audio_name}', 2 couches). "
                     "Remplaçable par de vrais enregistrements dans sounds/.")
 
-    write_wav(out_dir / "engine_start.wav", synth_start(cyl))
+    # Pas de bruit de démarreur : un démarreur synthétisé sonnait faux et a été refusé par l'utilisateur
+    # (2026-11-16). Le moteur démarre directement sur son ralenti (boucles du moteur, vraies ou du pack).
     write_wav(out_dir / "indicator_on.wav", synth_click(2600))
     write_wav(out_dir / "indicator_off.wav", synth_click(1900))
-    manifest["Files"].update({"Start": "engine_start.wav", "Horn": "horn.wav",
+    manifest["Files"].update({"Horn": "horn.wav",
                               "IndicatorOn": "indicator_on.wav", "IndicatorOff": "indicator_off.wav"})
 
     # Klaxon : vrai son du jeu (ou du pack) s'il est la, sinon synthese.
