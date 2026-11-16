@@ -14,8 +14,9 @@
 	  « Imagined Visuals », réécrit ici :
 	  · point suivi = centre des roues, distance comptée depuis l'essieu arrière (une voiture longue est cadrée comme
 	    une courte) ;
-	  · la caméra suit la DIRECTION DE LA VITESSE (pas le capot) dès ~1 m/s : en glisse, la voiture se voit de biais ;
-	    l'angle de glisse est un peu exagéré (SlipExaggerate) ; en marche arrière, pas d'orbite ;
+	  · la caméra suit la DIRECTION DE LA VITESSE (pas le capot) dès ~1 m/s : en glisse, la voiture tourne librement
+	    devant elle et se voit de biais, voire de face en toupie (vidéo de référence waVSKP0OuOs) ; l'angle de glisse
+	    peut être exagéré (SlipExaggerate) ; pas d'orbite en vraie marche arrière (attribut Reverse, ou lente) ;
 	  · elle suit la pente (inclinaison de la vitesse, lissée) ; Pitch incline la vue et la hauteur le compense ;
 	  · effets (0 = coupé) : AccelFx (recul à l'accélération, rapprochement au freinage), BrakeDip (plongée au
 	    freinage), RollFx (roulis en virage), BumpFx (rebond sur les bosses), SpeedShake (léger tremblement avec la
@@ -117,9 +118,10 @@ Camera.Settings = {
 		GearKick = { On = true, Scale = 0.15, Vertical = 1, Forward = 0.5, Pitch = 1, Freq = 4, Damp = 0.26, Gas = 0 },
 		Limits = { Forward = 0.25, Side = 0.12, Vertical = 0.14, Angle = 30 }, -- garde-fous (m, degrés)
 	},
-	-- 0 : la poursuite reste fixe derrière la voiture (vidéos de référence, demande de l'utilisateur 2026-11-16) ;
-	-- 1 : elle suit la trajectoire comme DynaCam (la voiture se voit de biais en glisse)
-	VelocityFollow = 0,
+	-- 1 : la poursuite suit la TRAJECTOIRE comme DynaCam et les vidéos de référence : en drift la voiture tourne
+	-- devant une caméra qui garde le sens de la route (utilisateur, 2026-11-16, vidéo waVSKP0OuOs) ;
+	-- 0 : elle reste collée derrière le capot (refusé : « on a toujours la vue arrière de notre véhicule »)
+	VelocityFollow = 1,
 	SlipExaggerate = 0,
 	Collide = true,
 	-- effets (remplis par le preset)
@@ -362,6 +364,7 @@ local driveModule = false -- VehicleDrive (facultatif), chargé à la première 
 
 local function resetDynamics()
 	state.dirFlat = nil
+	state.reverseMode = false
 	state.dirY = 0
 	state.slip = 0
 	state.lastVel = nil
@@ -535,13 +538,26 @@ local function chaseCFrame(model, root, dt, viewSettings)
 	-- direction suivie : la trajectoire dès ~1 m/s (pas en marche arrière), lissée
 	local follow = (S.VelocityFollow or 1) * math.clamp(state.speed - 1, 0, 1)
 	local target = carDir
-	local reversing = speed > 0.1 and vel.Unit:Dot(carDir) < -0.25
+	-- vraie marche arrière : pas d'orbite. On y entre seulement en reculant depuis (presque) l'arrêt ; une toupie à
+	-- vitesse (la voiture glisse l'arrière en avant) n'en est pas une : la caméra garde la trajectoire et montre
+	-- l'avant de la voiture. (L'attribut Reverse ne suffit pas : il passe à true dès que la voiture recule, toupie
+	-- comprise — mesuré 2026-11-16 : caméra recollée au capot à 126° de glisse et 30 km/h.)
+	local backwards = speed > 0.1 and vel.Unit:Dot(carDir) < -0.25
+	if not backwards then
+		state.reverseMode = false
+	elseif not state.reverseMode and speed < (Camera.ReverseEnterSpeed or 1.5) then
+		state.reverseMode = true
+	end
+	local reversing = backwards and state.reverseMode
 	if speed > 0.1 and not reversing then
 		target = carDir:Lerp(vel.Unit, follow)
 	end
 	state.dirY += ((speed < 0.1 and carDir.Y or target.Y) - state.dirY) * lerpK(4, dt)
 	local tFlat = flat(target) or carFlat
-	state.dirFlat = state.dirFlat and (state.dirFlat:Lerp(tFlat, lerpK(10, dt))) or tFlat
+	-- rotation lissée par l'ANGLE (un mélange de vecteurs passerait par zéro sur un demi-tour : saut de caméra)
+	state.dirFlat = state.dirFlat
+			and rotY(state.dirFlat, signedAngle(state.dirFlat, tFlat) * lerpK(Camera.Settings.FollowRate or 6, dt))
+		or tFlat
 	local dirFlat = flat(state.dirFlat) or carFlat
 	-- angle de glisse un peu exagéré (la voiture se montre davantage de biais)
 	local angle = reversing and 0 or signedAngle(carFlat, dirFlat)

@@ -131,6 +131,15 @@ dérivées d'une vitesse lissée puis lissées (6/s) ; seules les rotations lent
 (17,5 °/s en ligne droite) ; regard dans le virage 0,04 / 6° max ; inclinaison latérale divisée par deux. Mesuré
 (m422, ligne droite > 30 km/h) : rotation de l'image 6,8 °/s avec la tête contre 13,6 sans ; habitacle 3,9 °/s.
 
+**Poursuite en drift (2026-11-16, retour de l'utilisateur avec vidéo)** : la poursuite suit la TRAJECTOIRE
+(`VelocityFollow = 1`, défaut) : en drift la voiture tourne librement devant une caméra qui garde le sens de la route
+(de profil à 90° de glisse, de face en toupie) — c'est ce que montrent les vidéos de référence ; collée au capot
+(`VelocityFollow = 0`), « on a toujours la vue arrière ». La marche arrière n'est plus déduite du sens du mouvement
+(une toupie recule aussi, et l'attribut `Reverse` passe alors à true) : on n'y entre qu'en reculant depuis moins de
+1,5 m/s (`ReverseEnterSpeed`). Direction lissée par l'angle (`FollowRate` 6/s), jamais par mélange de vecteurs
+(passage par zéro sur un demi-tour). Mesuré (m422) : caméra à 3–6° de la trajectoire en drift et en toupie jusqu'à
+164° de glisse ; revient derrière la voiture à l'arrêt ; reste derrière le capot en vraie marche arrière.
+
 **Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
 Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).
 Déplacements avant / côté / vertical poussés par les accélérations du véhicule **en g** (vertical passé en
