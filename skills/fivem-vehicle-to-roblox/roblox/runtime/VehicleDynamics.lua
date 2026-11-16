@@ -218,7 +218,18 @@ Dyn.Tuning = {
 	-- 16,6 ° de braquage, lacet = v × braquage / 2,811 m à 3,9 % près (écart-type 0,038 m). Ni sous-virage
 	-- ni survirage dans cette plage : si le braquage est juste, le lacet suit. C'est le critère de
 	-- vérification en 3D.
-	CounterSteer = 0, -- aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée.
+	CounterSteer = 0.65, -- contre-braquage automatique (rad de roue par rad de dérive de caisse), seulement quand la
+	-- caisse glisse VERS L'EXTÉRIEUR du virage (dérive et lacet de même signe : survirage). MESURÉ le 2026-11-16
+	-- sur les traces GTA `hbcorner_40/70` : frein à main serré, volant tenu, les roues avant passent de −3,5 ° à
+	-- +7,5 ° (70 km/h) et de −7,2 ° à −0,9 ° (40 km/h) — elles s'alignent d'elles-mêmes sur la trajectoire, puis
+	-- reviennent au relâchement. Ajusté sur 19 traces (11 cercles, virages 40 / 80 coupé avant l'arête,
+	-- créneau, slalom, frein à main 40 / 70) avec SteerSlideK = 0 : angle de roue avant moyen, écart 1,33 °
+	-- contre 1,58 ° pour l'ancienne réduction seule (frein à main : 3,7 → 1,9 ° et 5,4 → 1,6 °). Une dérive vers
+	-- l'INTÉRIEUR (géométrique, cercle tenu) n'en déclenche pas : sinon le virage 40 passait de 0,6 à 3,1 °.
+	-- Avant le 2026-11-16 : 0 (« GTA n'en applique aucune »), conclu sur la consigne du volant, qui ne bouge
+	-- pas en effet : la correction est en aval, sur l'angle de roue. Elle rend la glisse contrôlable : sans
+	-- elle, un frein à main à 70 km/h finissait en tête-à-queue au relâchement (dérive 29 °, lacet 101 °/s).
+	-- Ancien commentaire, gardé pour l'histoire : aide au contre-braquage (rad par rad de dérive du véhicule) ; 0 = désactivée.
 	-- MESURÉ : GTA n'en applique aucune, du moins pas sur l'entrée. Au virage 80, la commande (`steerAngle`,
 	-- le volant) monte à 35 ° et y RESTE pendant que la dérive de caisse passe de 0 à 15 ° et que l'angle de
 	-- roue tombe de 12,2 ° à 3,1 °. Si le jeu corrigeait la consigne, la commande baisserait. Elle ne baisse
@@ -236,7 +247,8 @@ Dyn.Tuning = {
 	-- Ce que ça remplace : la note « GTA réduit le braquage quand le véhicule glisse, non calé ». Ce n'était
 	-- pas une loi de glisse mais ceci, et le virage 80 s'explique entièrement par là.
 	SteerSlideV0 = 1.8, -- m/s : seuil, en dessous duquel rien n'est réduit
-	SteerSlideK = 0.18, -- par m/s au-delà du seuil
+	SteerSlideK = 0, -- par m/s au-delà du seuil. 0,18 jusqu'au 2026-11-16 : remplacée par CounterSteer (gardée
+	-- réglable ; avec CounterSteer elle dégradait l'ajustement : 1,58 → 2,6 ° sur les mêmes 19 traces)
 	SteerSlideMin = 0.30, -- plancher de la réduction
 	-- Retard de la direction : l'angle de roue de GTA ne saute pas à sa valeur établie, il la rejoint par un
 	-- premier ordre. MESURÉ (2026-11-12) sur 380 fronts de consigne à vitesse tenue, tirés des créneaux
@@ -273,7 +285,19 @@ Dyn.Tuning = {
 	-- car notre braquage REMONTE quand la vitesse tombe (9,4 ° contre 4,6 dans GTA). Une passe par réglage.
 	HandbrakeSlideStart = 8, -- degrés de dérive de la roue arrière où l'adhérence ôtée commence à revenir
 	HandbrakeSlideFull = 20, -- degrés où elle est entièrement revenue
-	HandbrakeGripRear = 0.4, -- part du latéral arrière gardée sous frein à main, à faible dérive. Avant le 2026-11-13 :
+	-- RECALÉ le 2026-11-16 (« le frein à main, fais-le mieux ») avec le contre-braquage (CounterSteer 0,65), banc
+	-- Bench.hbcorner, m422 aux performances réelles (849c6c1), PC Studio, 1 joueur :
+	--   70 km/h, pendant | GTA lacet 38,8 (47,4) dérive 9,9 ° fin 42,9 km/h | après lacet 28,1, dérive 3,7 °
+	--   avant (0,4, sans) | 65,2 (93,4) 11,5 ° 36,6                            | 72,6 (102), 29 ° : TÊTE-À-QUEUE
+	--   0,4 + contre-br.  | 35,4 (41,7) 6,7 ° 42                              | 19,4, 1,6 °
+	--   0,3 + contre-br.  | 39,2 (46,1) 8,2 ° 42   ← retenu                  | 19,0, 1,8 °
+	--   (0,3 + CounterSteer 0,5 : 46,6 (53,0) 9,0 ° ; 0,6 sans contre-braquage : 44,9 (49,1) 6,2 °)
+	--   40 km/h, pendant  | GTA 32,6 (38,1) dérive 4,9 ° | retenu 39,3 (50,0) 1,9 ° — écart connu, voir LIMITES.
+	--   Inchangés : 60-0 au frein à main 18,5 m / lacet 0,8 °/s (GTA 20,0 / 0,13) ; virage 40 1,85 g (GTA 1,83).
+	--   Virage 80 (1,3 s) 2,11 g contre 2,25 avant (GTA 2,24) ; créneau 60 lacet max 26,4 contre 28,7 (GTA 31,2),
+	--   une seule passe chacun.
+	HandbrakeGripRear = 0.3, -- part du latéral arrière gardée sous frein à main, à faible dérive (0,4 du 2026-11-13
+	-- au 2026-11-16). Avant le 2026-11-13 :
 	-- 1,0, pris sur la ligne droite (« GTA bloque l'arrière sans lui faire perdre son adhérence latérale »), qui
 	-- reste vrai : en ligne droite la dérive est nulle, et il n'y a rien à faire glisser.
 	-- CONTRÔLE EN L'AIR. MESURÉ (2026-11-12) sur 15 vols au tremplin, 3 passes par cas. GTA
@@ -842,7 +866,10 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	local beta = (math.abs(vf) > 2) and math.atan2(vBody.X, math.abs(vf)) or 0
 	S.lock = lock
 	-- l'angle de roue rejoint sa cible par un premier ordre (MESURÉ ; voir Dyn.Tuning)
-	local steerTarget = math.clamp(-(inp.Steer or 0) * lock + T.CounterSteer * beta, -cap, cap)
+	-- contre-braquage automatique : seulement sur une dérive vers l'extérieur (survirage), voir Dyn.Tuning
+	local outward = (beta * wYaw > 0) and beta or 0
+	S.counterSteer = -T.CounterSteer * outward
+	local steerTarget = math.clamp(-(inp.Steer or 0) * lock - T.CounterSteer * outward, -cap, cap)
 	local steerA = (T.SteerTau > 0) and (1 - math.exp(-dt / T.SteerTau)) or 1
 	S.steerAngle += (steerTarget - S.steerAngle) * steerA
 	S.steerTarget = steerTarget
