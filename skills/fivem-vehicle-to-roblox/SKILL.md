@@ -405,12 +405,12 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   `Motor6D` et `AnimationConstraint` ; R6 : angles fixes, non vérifié. `DrivingPose = false` pour la retirer.
   On ne s'assoit jamais en touchant un siège (`CanTouch = false`) : seulement par l'invite F ; à bord, les
   invites du véhicule sont masquées.
-- **Vue intérieure façon GTA** (`VehicleCamera`, occupant local) : V (bouton « Vue » sur mobile) bascule, comme
-  zoomer à fond ; reculer la molette n'en sort pas (comme GTA ; `PovWheelExit = true` sur le dossier `FiveMVehicles`
-  pour l'autoriser) ; caméra sur l'œil GTA du siège (`Seats[i].PovOffset` = `PovCameraOffset`), qui tourne avec le
-  véhicule, bornée à ±110 ° de cap, +30 / −45 ° d'inclinaison, revient vers l'avant en roulant (1,5 s sans
-  toucher à la vue), regarde derrière avec C / R3 ; seuls les avant-bras et les mains sont visibles, amincis sur l'écran de l'occupant. Bornes
-  posées à l'œil (celles de GTA ne sont pas documentées). `PovCamera = false` pour garder la caméra de Roblox.
+- **Caméra façon Assetto Corsa** (`VehicleCamera`, occupant local) : V fait défiler poursuite proche → poursuite →
+  capot → cockpit (l'œil GTA du siège, comme l'ancienne vue intérieure : ±110°, avant-bras seuls visibles). La
+  poursuite suit la trajectoire (voiture de biais en glisse), la pente, avec effets réglables (presets Calm /
+  Dynamic, FOV dynamique compensé) ; réglages en mètres. **Rétroviseur virtuel** (`VehicleMirror`, B) en haut de
+  l'écran : véhicules, décor et terrain derrière, reflétés. Détail, API et mesures : `references/roblox-integration.md`
+  (« Caméra façon Assetto Corsa »).
 - **Traces de pneus, fumée et burn façon GTA** (`VehicleTyreFx`, chaque client ; `VehicleDynamics`) : par roue,
   trace noire au sol + fumée légère **ensemble**, dès que la roue glisse dans son propre repère au-delà du pic
   d'adhérence : patinage ou roue bloquée (burn, départ, frein à main) marquent seuls ; une glisse **de côté** ne marque

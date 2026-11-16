@@ -1,29 +1,38 @@
 --!nonstrict
 --[[
-	VehicleCamera (ModuleScript, ReplicatedStorage.FiveMVehicles) — caméra de l'occupant local, façon GTA V.
+	VehicleCamera (ModuleScript, ReplicatedStorage.FiveMVehicles) — caméra de l'occupant local, façon Assetto Corsa.
 
 		local Camera = require(ReplicatedStorage.FiveMVehicles.VehicleCamera)
-		Camera.Start()   -- FiveMVehiclesClient l'appelle une fois
+		Camera.Start()                         -- FiveMVehiclesClient l'appelle une fois
+		Camera.SetSettings({ Fov = 72 })       -- le jeu (ou son menu) règle la caméra ; Camera.Changed prévient
+		Camera.ApplyPreset("Dynamic")          -- jeu d'effets : "Calm" (défaut) ou "Dynamic"
+		Camera.SetView("Cockpit")              -- ou Camera.CycleView() ; touche V / bouton « Vue »
 
-	Vue extérieure : la caméra de Roblox, pivot sur l'œil du conducteur (Humanoid.CameraOffset).
-	Vue à la première personne (« POV » de GTA) : une caméra à nous, posée sur l'œil GTA du siège
-	(VehiclePose.EyeWorld : os du siège + PovCameraOffset de vehicles.meta), qui :
-	- tourne AVEC le véhicule (le regard est un cap et une inclinaison relatifs à l'habitacle) ;
-	- ne fait pas le tour complet : cap borné à ±YawMax, inclinaison entre −PitchDown et +PitchUp ;
-	- revient d'elle-même vers l'avant quand on roule sans toucher à la vue (RecenterDelay) ;
-	- regarde derrière tant que « regarder derrière » est tenu (C, R3 manette : la même touche que GTA) ;
-	- ne montre que les avant-bras et les mains du personnage (posés sur le volant par VehiclePose), pas le corps.
+	Vues (cycle de V, comme la touche F1 d'Assetto Corsa) :
+	- ChaseNear / Chase : caméra de poursuite. Réglages en MÈTRES (Distance, Height) et degrés (Pitch), convertis
+	  avec le StudsPerMeter du véhicule. Comportement relevé sur DynaCam (chase cam CSP de kirbyguy22) et sa version
+	  « Imagined Visuals », réécrit ici :
+	  · point suivi = centre des roues, distance comptée depuis l'essieu arrière (une voiture longue est cadrée comme
+	    une courte) ;
+	  · la caméra suit la DIRECTION DE LA VITESSE (pas le capot) dès ~1 m/s : en glisse, la voiture se voit de biais ;
+	    l'angle de glisse est un peu exagéré (SlipExaggerate) ; en marche arrière, pas d'orbite ;
+	  · elle suit la pente (inclinaison de la vitesse, lissée) ; Pitch incline la vue et la hauteur le compense ;
+	  · effets (0 = coupé) : AccelFx (recul à l'accélération, rapprochement au freinage), BrakeDip (plongée au
+	    freinage), RollFx (roulis en virage), BumpFx (rebond sur les bosses), SpeedShake (léger tremblement avec la
+	    vitesse), Impact (secousse aux chocs) ; FovDynamic + FovGain élargissent le champ avec la vitesse, la distance
+	    est alors corrigée pour garder la voiture à la même taille à l'écran ;
+	  · regarder autour : clic droit maintenu + souris, stick droit, glisser au doigt ; C (R3) regarde derrière ;
+	    la vue revient d'elle-même derrière la voiture (RecenterDelay) ;
+	  · un mur entre la voiture et la caméra rapproche la caméra (Collide).
+	- Bonnet : sur le capot, au pied du pare-brise, le capot visible en bas.
+	- Cockpit : l'œil GTA du siège (VehiclePose.EyeWorld). La vue tourne avec le véhicule, cap borné à ±YawMax,
+	  recentrage automatique ; seuls les avant-bras et les mains du personnage sont visibles ; la tête suit un peu les
+	  accélérations (HeadFx).
 
-	Entrer / sortir : V (bouton « Vue » à l'écran sur mobile) bascule, comme la touche « vue » de GTA ; zoomer
-	jusqu'au bout (molette, pincement) entre aussi en vue intérieure si le jeu laisse la caméra de Roblox aller
-	jusqu'à la première personne. Reculer la molette n'en sort PAS par défaut (GTA : seule la touche « vue »
-	change de vue) ; attribut `PovWheelExit = true` sur ReplicatedStorage.FiveMVehicles pour l'autoriser.
-	Pendant le ciblage de VehicleTarget (Alt maintenu), la vue est figée et la souris libre. Un jeu en
-	LockFirstPerson reste en vue intérieure dans le véhicule.
-
-	Les bornes de GTA ne sont pas documentées (DEFAULT_POV_CAMERA_LOOKAROUND_MID, dans les métadonnées de caméra du
-	jeu) : YawMax, PitchUp, PitchDown et le recentrage sont posés à l'œil, à mesurer dans FiveM.
-	Réglages : attribut `PovCamera = false` sur le véhicule pour garder la caméra de Roblox.
+	En entrant dans un véhicule : vue Cockpit si le joueur était en première personne, sinon la dernière vue
+	extérieure (DefaultView au début). Pendant le ciblage de VehicleTarget (Alt), la vue est figée, souris libre.
+	Attribut `ChaseCamera = false` sur un véhicule : caméra de Roblox (pivot sur l'œil) au lieu des vues extérieures ;
+	`PovCamera = false` : pas de vue cockpit.
 ]]
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
@@ -49,29 +58,128 @@ end
 
 local Camera = {}
 Camera.Tag = "FiveMVehicle"
-Camera.YawMax = 110 -- degrés de part et d'autre de l'avant
-Camera.PitchUp = 30 -- degrés
-Camera.PitchDown = 45 -- degrés
-Camera.StartPitch = 4 -- degrés vers le bas à l'ouverture de la vue (route et compteurs)
-Camera.RecenterDelay = 1.5 -- s sans toucher à la vue avant de revenir vers l'avant
-Camera.RecenterRate = 2.5 -- 1/s (retour exponentiel)
-Camera.RecenterSpeed = 3 -- m/s : en dessous, la vue reste où on l'a laissée (à l'arrêt, on regarde autour)
-Camera.ToggleKey = Enum.KeyCode.V -- et un bouton « Vue » à l'écran sur mobile (ContextActionService)
+Camera.Views = { "ChaseNear", "Chase", "Bonnet", "Cockpit" }
+Camera.ViewLabels = { ChaseNear = "Poursuite proche", Chase = "Poursuite", Bonnet = "Capot", Cockpit = "Cockpit" }
+
+-- Jeux d'effets de la poursuite. « Calm » = Imagined Visuals (FOV fixe, sans recul ni roulis), « Dynamic » = DynaCam.
+Camera.Presets = {
+	Calm = { Fov = 72, FovDynamic = false, FovGain = 0, BrakeZoom = 0, AccelFx = 0, BrakeDip = 0, RollFx = 0,
+		BumpFx = 0.5, SpeedShake = 1, ShakeSpeed = 25, Impact = 1 },
+	Dynamic = { Fov = 55, FovDynamic = true, FovGain = 25, BrakeZoom = 1, AccelFx = 1, BrakeDip = 1, RollFx = 1,
+		BumpFx = 1, SpeedShake = 1, ShakeSpeed = 45, Impact = 1 },
+}
+
+-- Réglages courants (le jeu les change avec SetSettings ; tout est lu à chaque image)
+Camera.Settings = {
+	Preset = "Calm",
+	DefaultView = "ChaseNear",
+	ChaseNear = { Distance = 2.4, Height = 1.15, Pitch = 13 }, -- mètres, mètres, degrés (réglage « cinématique »)
+	Chase = { Distance = 2.8, Height = 1.25, Pitch = 15 }, -- réglage « jouable »
+	Bonnet = { Fov = 65, Forward = 1.15, Height = 0.2 }, -- avance depuis l'œil (m), hauteur au-dessus du capot (m)
+	Cockpit = { Fov = 60, HeadFx = 1 },
+	VelocityFollow = 1, -- 0 : la poursuite suit le capot ; 1 : la trajectoire (AC)
+	SlipExaggerate = 1,
+	Collide = true,
+	-- effets (remplis par le preset)
+}
+for k, v in pairs(Camera.Presets.Calm) do
+	Camera.Settings[k] = v
+end
+
+Camera.YawMax = 110 -- cockpit : degrés de part et d'autre de l'avant
+Camera.PitchUp = 30
+Camera.PitchDown = 45
+Camera.StartPitch = 4 -- cockpit : degrés vers le bas à l'ouverture de la vue
+Camera.RecenterDelay = 1.5 -- s sans toucher à la vue avant de revenir vers l'avant (toutes les vues)
+Camera.RecenterRate = 2.5 -- 1/s
+Camera.RecenterSpeed = 3 -- m/s : en dessous, la vue reste où on l'a laissée
+Camera.ToggleKey = Enum.KeyCode.V
 Camera.LookBackKeys = { Enum.KeyCode.C, Enum.KeyCode.ButtonR3 }
-Camera.ExitZoom = 12 -- studs : distance de la vue extérieure en sortant de la vue intérieure
--- pièces du personnage visibles en vue intérieure (R6 : aucune, ses bras sont d'un bloc depuis l'épaule)
-Camera.Visible = { LeftLowerArm = 0.55, RightLowerArm = 0.55, LeftHand = 0.75, RightHand = 0.75 } -- et leur finesse
+Camera.ExitZoom = 12 -- studs : distance de la caméra de Roblox à la sortie du véhicule
+Camera.Visible = { LeftLowerArm = 0.55, RightLowerArm = 0.55, LeftHand = 0.75, RightHand = 0.75 }
+
+local changed = Instance.new("BindableEvent")
+Camera.Changed = changed.Event -- (settings, view)
 
 local player = Players.LocalPlayer
 local state = {
-	pov = false,
-	yaw = 0,
+	view = nil, -- vue en cours, nil hors véhicule
+	lastOutside = nil, -- dernière vue extérieure choisie
+	model = nil,
+	yaw = 0, -- regard (cockpit : relatif à l'habitacle ; poursuite/capot : décalage autour de la voiture)
 	pitch = 0,
 	lastLook = 0,
-	offsetHum = nil,
 	touches = {},
+	fovBefore = nil,
+	offsetHum = nil,
+	-- poursuite
+	dirFlat = nil,
+	dirY = 0,
+	slip = 0,
+	speed = 0,
+	lastVel = nil,
+	acc = Vector3.zero, -- g lissées (x latéral, y vertical, z longitudinal)
+	accFast = Vector3.zero,
+	accSlow = Vector3.zero,
+	lastAccRaw = Vector3.zero,
+	bump = 0,
+	bumpV = 0,
+	after = 0,
+	fovAdd = 0,
+	t = 0,
+	head = Vector3.zero,
 }
 
+local function deepMerge(dst, src)
+	for k, v in pairs(src) do
+		if type(v) == "table" and type(dst[k]) == "table" then
+			deepMerge(dst[k], v)
+		else
+			dst[k] = v
+		end
+	end
+end
+
+local function copy(t)
+	local c = {}
+	for k, v in pairs(t) do
+		c[k] = type(v) == "table" and copy(v) or v
+	end
+	return c
+end
+
+function Camera.GetSettings()
+	return copy(Camera.Settings)
+end
+
+function Camera.SetSettings(partial)
+	if type(partial) ~= "table" then
+		return
+	end
+	deepMerge(Camera.Settings, partial)
+	changed:Fire(Camera.GetSettings(), state.view)
+end
+
+function Camera.ApplyPreset(name)
+	local p = Camera.Presets[name]
+	if not p then
+		return false
+	end
+	local s = copy(p)
+	s.Preset = name
+	Camera.SetSettings(s)
+	return true
+end
+
+function Camera.GetView()
+	return state.view
+end
+
+function Camera.IsPov()
+	return state.view == "Cockpit"
+end
+
+-- ------------------------------------------------------------------ véhicule occupé
 local function occupied()
 	local char = player.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -83,8 +191,63 @@ local function occupied()
 	return nil
 end
 
-local function enabled(model, seat)
+local cfgCache = setmetatable({}, { __mode = "k" })
+local function config(model)
+	local c = cfgCache[model]
+	if c == nil then
+		local m = model:FindFirstChild("VehicleConfig")
+		local ok, r = pcall(function()
+			return require(m)
+		end)
+		c = (ok and type(r) == "table" and r) or false
+		cfgCache[model] = c
+	end
+	return c or nil
+end
+
+-- géométrie utile à la poursuite (repère du véhicule, mètres) : centre des roues, demi-empattement, essieu arrière
+local geoCache = setmetatable({}, { __mode = "k" })
+local function geometry(model)
+	local g = geoCache[model]
+	if g then
+		return g
+	end
+	local cfg = config(model) or {}
+	local spm = cfg.StudsPerMeter or 3.571
+	local sum, n, zMin, zMax, yLow = Vector3.zero, 0, math.huge, -math.huge, math.huge
+	for _, w in pairs(cfg.Wheels or {}) do
+		local p = w.Position
+		if p then
+			sum += Vector3.new(p[1], p[2], p[3])
+			n += 1
+			zMin = math.min(zMin, p[3])
+			zMax = math.max(zMax, p[3])
+			yLow = math.min(yLow, p[2] - (w.Radius or 0.33))
+		end
+	end
+	if n == 0 then
+		local size = model:GetExtentsSize() / spm
+		g = { spm = spm, center = Vector3.zero, halfWB = size.Z * 0.3, ground = -size.Y / 2 }
+	else
+		g = { spm = spm, center = sum / n, halfWB = math.max((zMax - zMin) / 2, 0.5), ground = yLow }
+	end
+	geoCache[model] = g
+	return g
+end
+
+local function enabledPov(model, seat)
 	return model:GetAttribute("PovCamera") ~= false and Pose.EyeWorld(model, seat) ~= nil
+end
+local function enabledChase(model)
+	return model:GetAttribute("ChaseCamera") ~= false
+end
+local function viewAllowed(model, seat, v)
+	if v == "Cockpit" then
+		return enabledPov(model, seat)
+	elseif v == "Bonnet" then
+		return enabledChase(model) and Pose.EyeWorld(model, seat) ~= nil
+	end
+	return enabledChase(model)
 end
 
 local function anyDown(keys)
@@ -103,12 +266,10 @@ local function anyDown(keys)
 	return false
 end
 
+-- ------------------------------------------------------------------ corps du personnage (cockpit)
 -- Bras de la vue intérieure : les VRAIS avant-bras et mains, amincis sur ce client seulement (une taille changée
--- par un client ne se réplique pas : les autres joueurs voient l'avatar tel quel). Des copies locales perdaient
--- la texture du vêtement (appliquée au personnage) et sortaient grises. Avec un avatar large, les avant-bras
--- bouchaient le volant (demande de l'utilisateur, 2026-11-13). Tailles d'origine rendues à la sortie ; une mise
--- à l'échelle du serveur (VehicleSeatFit) pendant la vue est reprise comme nouvelle taille d'origine.
-local thinned = {} -- part -> { orig = Vector3, set = Vector3 }
+-- par un client ne se réplique pas). Tailles d'origine rendues à la sortie.
+local thinned = {}
 local function restoreArms()
 	for part, t in pairs(thinned) do
 		if part.Parent and part.Size == t.set then
@@ -124,7 +285,6 @@ local function thinArms(char)
 			local t = thinned[part]
 			if not t or part.Size ~= t.set then
 				local orig = part.Size
-				-- l'axe long d'un membre R15 est Y : on n'amincit que X et Z
 				local set = Vector3.new(orig.X * thin, orig.Y, orig.Z * thin)
 				thinned[part] = { orig = orig, set = set }
 				part.Size = set
@@ -132,8 +292,14 @@ local function thinArms(char)
 		end
 	end
 end
-
+local bodyHidden = false
 local function setBody(char, pov)
+	if not char then
+		return
+	end
+	if pov == bodyHidden and not pov then
+		return
+	end
 	for _, p in ipairs(char:GetDescendants()) do
 		if p:IsA("BasePart") then
 			local isLimb = p.Parent == char and Camera.Visible[p.Name] ~= nil
@@ -145,47 +311,322 @@ local function setBody(char, pov)
 	else
 		restoreArms()
 	end
+	bodyHidden = pov
 end
 
-local function enter()
-	-- comme GTA : la vue intérieure s'ouvre face à la route, quel que soit l'endroit où regardait la caméra extérieure
-	-- (en reprenant ce regard, on entrait la tête tournée vers la portière, cap borné à 110 °)
-	state.pov = true
-	state.lastLook = os.clock()
-	state.yaw = 0
-	state.pitch = -math.rad(Camera.StartPitch)
-	Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+-- ------------------------------------------------------------------ vues
+local function resetDynamics()
+	state.dirFlat = nil
+	state.dirY = 0
+	state.slip = 0
+	state.lastVel = nil
+	state.acc, state.accFast, state.accSlow, state.lastAccRaw = Vector3.zero, Vector3.zero, Vector3.zero, Vector3.zero
+	state.bump, state.bumpV, state.after, state.fovAdd = 0, 0, 0, 0
+	state.head = Vector3.zero
 end
 
-local function exit(char, zoomOut)
-	if not state.pov then
+local function setView(v, char)
+	if state.view == v then
 		return
 	end
-	state.pov = false
-	local cam = Workspace.CurrentCamera
-	cam.CameraType = Enum.CameraType.Custom
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		cam.CameraSubject = hum
+	local was = state.view
+	state.view = v
+	state.yaw = 0
+	state.pitch = (v == "Cockpit") and -math.rad(Camera.StartPitch) or 0
+	state.lastLook = os.clock()
+	if v and v ~= "Cockpit" then
+		state.lastOutside = v
 	end
-	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-	UserInputService.MouseIconEnabled = true
-	if char then
-		setBody(char, false)
+	if was == "Cockpit" and v ~= "Cockpit" then
+		setBody(char or player.Character, false)
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
 	end
-	if zoomOut and player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
-		-- la caméra de Roblox reprend au plus près : on l'éloigne une image par la distance minimale
-		local was = player.CameraMinZoomDistance
-		player.CameraMinZoomDistance = math.min(Camera.ExitZoom, player.CameraMaxZoomDistance)
-		task.delay(0.1, function()
-			player.CameraMinZoomDistance = was
-		end)
+	if was == nil then
+		resetDynamics()
 	end
+	changed:Fire(Camera.GetSettings(), v)
 end
 
--- Décalage de caméra du Humanoid qui met le pivot de la vue extérieure sur l'œil du conducteur. La caméra de
--- Roblox suit HumanoidRootPart + (0, 1,5 + (taille Y − 2)/2, 0) (R15 mis à l'échelle ; R6 : 1,5) + CameraOffset,
--- dans le repère de HumanoidRootPart (CameraModule, BaseCamera:GetSubjectPosition).
+function Camera.SetView(v)
+	local model, seat, _, char = occupied()
+	if not model or not table.find(Camera.Views, v) or not viewAllowed(model, seat, v) then
+		return false
+	end
+	setView(v, char)
+	return true
+end
+
+function Camera.CycleView()
+	local model, seat, _, char = occupied()
+	if not model then
+		return nil
+	end
+	local i = table.find(Camera.Views, state.view) or 0
+	for step = 1, #Camera.Views do
+		local v = Camera.Views[(i + step - 1) % #Camera.Views + 1]
+		if viewAllowed(model, seat, v) then
+			setView(v, char)
+			return v
+		end
+	end
+	return state.view
+end
+
+-- regard (radians) : entrée des scripts et des essais
+local function look(dYaw, dPitch)
+	if state.view == "Cockpit" then
+		state.yaw = math.clamp(state.yaw + dYaw, -math.rad(Camera.YawMax), math.rad(Camera.YawMax))
+		state.pitch = math.clamp(state.pitch + dPitch, -math.rad(Camera.PitchDown), math.rad(Camera.PitchUp))
+	else
+		state.yaw = (state.yaw + dYaw + math.pi) % (2 * math.pi) - math.pi
+		-- poursuite / capot : comme la caméra de Roblox, souris vers le haut = caméra plus basse qui regarde en l'air
+		state.pitch = math.clamp(state.pitch + dPitch, -math.rad(60), math.rad(15))
+	end
+	state.lastLook = os.clock()
+end
+function Camera.Look(dYaw, dPitch)
+	look(dYaw, dPitch or 0)
+end
+
+-- ------------------------------------------------------------------ outils
+local function lerpK(rate, dt)
+	return 1 - math.exp(-rate * dt)
+end
+local function flat(v)
+	local f = Vector3.new(v.X, 0, v.Z)
+	return f.Magnitude > 1e-4 and f.Unit or nil
+end
+local function signedAngle(a, b) -- de a vers b autour de +Y
+	return math.atan2(a:Cross(b).Y, a:Dot(b))
+end
+local function rotY(v, a)
+	return CFrame.Angles(0, a, 0):VectorToWorldSpace(v)
+end
+local function softsat(x) -- sin(atan(x)) : linéaire près de 0, borné à ±1
+	return x / math.sqrt(1 + x * x)
+end
+local function sigmoid(x)
+	return 1 / (1 + math.exp(-x))
+end
+local function deadzone(x) -- palier doux au centre (roulis), ±1 au-delà
+	return 0.5 * (math.tanh((x + 3) / 2) + math.tanh((x - 3) / 2))
+end
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.IgnoreWater = true
+
+local function collide(target, pos, model)
+	local list = { model }
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character then
+			table.insert(list, p.Character)
+		end
+	end
+	rayParams.FilterDescendantsInstances = list
+	local d = pos - target
+	local hit = Workspace:Raycast(target, d, rayParams)
+	if hit and hit.Instance.CanCollide then
+		return target + d.Unit * math.max((hit.Position - target).Magnitude - 0.4, 0.5)
+	end
+	return pos
+end
+
+-- accélérations du véhicule (g, repère : x latéral, y vertical, z avant) et secousses, lissées comme DynaCam
+local function updateDynamics(root, g, dt)
+	local spm = g.spm
+	local vel = root.AssemblyLinearVelocity / spm
+	local cf = root.CFrame
+	if state.lastVel and dt > 0 then
+		local a = (vel - state.lastVel) / dt / 9.81
+		local raw = Vector3.new(a:Dot(cf.RightVector), a.Y, a:Dot(cf.LookVector))
+		state.acc = state.acc:Lerp(raw, lerpK(3, dt))
+		state.accFast = state.accFast:Lerp(raw, lerpK(15, dt))
+		state.accSlow = state.accSlow:Lerp(raw, lerpK(1, dt))
+		local jerk = (raw - state.lastAccRaw) / dt / 16
+		state.lastAccRaw = raw
+		-- choc : un à-coup fort laisse une secousse qui retombe
+		local j = jerk.Magnitude
+		state.after += ((j > 8 and math.min(j - 8, 10) or 0) * (Camera.Settings.Impact or 0) - state.after) * lerpK(8, dt)
+		-- rebond vertical : ressort amorti (raideur 10, amortissement 10) tiré vers l'à-coup vertical
+		local sub = math.max(1, math.ceil(dt / (1 / 240)))
+		local h = dt / sub
+		for _ = 1, sub do
+			local acc = 10 * (math.clamp(jerk.Y, -5, 5) - state.bump) - 10 * state.bumpV
+			state.bumpV += acc * h
+			state.bump += state.bumpV * h
+		end
+	end
+	state.lastVel = vel
+	state.speed += (vel.Magnitude - state.speed) * lerpK(30, dt)
+	return vel
+end
+
+local function noise(seed)
+	return math.noise(state.t * 6, seed, 0.5)
+end
+
+-- ------------------------------------------------------------------ poursuite
+local function chaseCFrame(model, root, dt, viewSettings)
+	local S = Camera.Settings
+	local g = geometry(model)
+	local spm = g.spm
+	local cf = root.CFrame
+	local vel = updateDynamics(root, g, dt)
+	local carDir = cf.LookVector
+	local carFlat = flat(carDir) or Vector3.zAxis
+	local speed = vel.Magnitude
+
+	-- direction suivie : la trajectoire dès ~1 m/s (pas en marche arrière), lissée
+	local follow = (S.VelocityFollow or 1) * math.clamp(state.speed - 1, 0, 1)
+	local target = carDir
+	local reversing = speed > 0.1 and vel.Unit:Dot(carDir) < -0.25
+	if speed > 0.1 and not reversing then
+		target = carDir:Lerp(vel.Unit, follow)
+	end
+	state.dirY += ((speed < 0.1 and carDir.Y or target.Y) - state.dirY) * lerpK(4, dt)
+	local tFlat = flat(target) or carFlat
+	state.dirFlat = state.dirFlat and (state.dirFlat:Lerp(tFlat, lerpK(10, dt))) or tFlat
+	local dirFlat = flat(state.dirFlat) or carFlat
+	-- angle de glisse un peu exagéré (la voiture se montre davantage de biais)
+	local angle = reversing and 0 or signedAngle(carFlat, dirFlat)
+	state.slip += ((S.SlipExaggerate or 1) * 0.32 * softsat(2 * angle) - state.slip) * lerpK(8, dt)
+	local view = rotY(dirFlat, state.slip)
+
+	-- regarder autour / derrière, et retour derrière la voiture
+	local mps = speed
+	if os.clock() - state.lastLook > Camera.RecenterDelay and mps > Camera.RecenterSpeed then
+		local k = lerpK(Camera.RecenterRate, dt)
+		state.yaw -= state.yaw * k
+		state.pitch -= state.pitch * k
+	end
+	local yaw = state.yaw + (anyDown(Camera.LookBackKeys) and math.pi or 0)
+	view = rotY(view, yaw)
+
+	-- pente de la route
+	local roadPitch = math.asin(math.clamp(state.dirY, -0.9, 0.9))
+	local right = view:Cross(Vector3.yAxis).Unit
+	local dir3 = (view * math.cos(roadPitch) + Vector3.yAxis * math.sin(roadPitch)).Unit
+	-- regard vertical (souris, stick) : orbite autour du point visé
+	dir3 = CFrame.fromAxisAngle(right, state.pitch):VectorToWorldSpace(dir3)
+
+	-- champ de vision (vertical) et distance
+	local base = S.Fov or 72
+	if S.FovDynamic then
+		local az = state.accSlow.Z
+		local accelPart = az > 0 and softsat(az) or (S.BrakeZoom or 0) * 0.5 * softsat(2 * az)
+		state.fovAdd += ((S.FovGain or 0) * softsat(state.speed / 36) + accelPart * 20 - state.fovAdd) * lerpK(5, dt)
+	else
+		state.fovAdd += (0 - state.fovAdd) * lerpK(5, dt)
+	end
+	local fov = math.clamp(base + state.fovAdd, 10, 110)
+	local az = state.acc.Z
+	local accelPush = (az > 0 and 2 * softsat(0.5 * az) or softsat(az)) * g.halfWB * 1.5 * (S.AccelFx or 0)
+	local D = viewSettings.Distance + 0.1 + 1.5 * g.halfWB + accelPush
+	-- quand le FOV s'élargit, la caméra se rapproche pour garder la voiture à la même taille
+	D += (D - (2.5 * g.halfWB + 1.1)) * (math.tan(math.rad(base) / 2) / math.tan(math.rad(fov) / 2) - 1)
+	local pitchUser = math.rad(viewSettings.Pitch)
+	-- Height = hauteur de la caméra au-dessus du point suivi (≈ centre de gravité) ; Pitch penche la vue vers le bas
+	local H = viewSettings.Height
+
+	-- position (orbite autour du point suivi, distance comptée depuis l'essieu arrière)
+	-- point suivi : centre des roues, un peu au-dessus (≈ centre de gravité), avancé d'un quart d'empattement
+	local anchor = cf:PointToWorldSpace(Vector3.new(g.center.X, g.center.Y + 0.15, g.center.Z) * spm)
+		+ carDir * (0.5 * g.halfWB * spm)
+	local camUp = right:Cross(dir3).Unit
+	local shakeK = sigmoid(state.speed / (S.ShakeSpeed or 25) * 5 - 5) * (S.SpeedShake or 0)
+	local bumpK = math.clamp(state.bump, -1, 1) * (S.BumpFx or 0)
+	local after = state.after
+	local pos = anchor - dir3 * D * spm + camUp * H * spm
+		+ camUp * (bumpK * 0.15 + noise(3) * after * 0.03) * spm
+		+ right * (noise(1) * shakeK * 0.004 + noise(2) * after * 0.03) * spm
+	local lookTarget = anchor + camUp * 0.5 * spm -- pour la collision : du toit vers la caméra
+
+	-- orientation : inclinaison réglée, regard vertical, plongée au freinage, bosses, tremblement
+	local lookDir = (CFrame.fromAxisAngle(right, -pitchUser)):VectorToWorldSpace(dir3)
+	local dip = az < 0 and 2 * softsat(-az / 2) or 0.1 * softsat(-10 * az)
+	local tilt = -math.rad(dip * 7) * (S.BrakeDip or 0) - bumpK * 0.05
+		+ noise(4) * (shakeK * 0.0012 + after * 0.02)
+	lookDir = CFrame.fromAxisAngle(right, tilt):VectorToWorldSpace(lookDir)
+	lookDir = CFrame.fromAxisAngle(camUp, noise(5) * (after * 0.008 + shakeK * 0.0008)):VectorToWorldSpace(lookDir)
+	local roll = deadzone(3.4 * state.accFast.X) * -0.06 * (S.RollFx or 0) + noise(6) * after * 0.02
+	local up = CFrame.fromAxisAngle(lookDir, roll):VectorToWorldSpace(Vector3.yAxis)
+
+	if S.Collide ~= false then
+		pos = collide(lookTarget, pos, model)
+	end
+	return CFrame.lookAt(pos, pos + lookDir, up), fov
+end
+
+-- ------------------------------------------------------------------ capot
+local bonnetCache = setmetatable({}, { __mode = "k" })
+local bonnetParams = RaycastParams.new()
+bonnetParams.FilterType = Enum.RaycastFilterType.Include
+local function bonnetLocal(model, seat)
+	local c = bonnetCache[model]
+	if c then
+		return c
+	end
+	local S = Camera.Settings.Bonnet
+	local g = geometry(model)
+	local root = model.PrimaryPart
+	local eye = root.CFrame:PointToObjectSpace(Pose.EyeWorld(model, seat))
+	local p = Vector3.new(0, eye.Y, eye.Z - (S.Forward or 0.75) * g.spm)
+	-- hauteur du capot à cet endroit : la coque de collision du véhicule (les pièces visibles ne sont pas visées)
+	local parts = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.CanQuery and d.CanCollide then
+			table.insert(parts, d)
+		end
+	end
+	bonnetParams.FilterDescendantsInstances = parts
+	local from = root.CFrame:PointToWorldSpace(p + Vector3.new(0, 3 * g.spm, 0))
+	local hit = #parts > 0 and Workspace:Raycast(from, -root.CFrame.UpVector * 6 * g.spm, bonnetParams)
+	if hit then
+		local y = root.CFrame:PointToObjectSpace(hit.Position).Y + (S.Height or 0.1) * g.spm
+		p = Vector3.new(0, math.min(y, eye.Y), p.Z)
+	end
+	bonnetCache[model] = p
+	return p
+end
+
+local function bonnetCFrame(model, seat, root, dt)
+	local cf = root.CFrame
+	updateDynamics(root, geometry(model), dt)
+	if os.clock() - state.lastLook > Camera.RecenterDelay and state.speed > Camera.RecenterSpeed then
+		local k = lerpK(Camera.RecenterRate, dt)
+		state.yaw -= state.yaw * k
+		state.pitch -= state.pitch * k
+	end
+	local yaw = state.yaw + (anyDown(Camera.LookBackKeys) and math.pi or 0)
+	local p = cf:PointToWorldSpace(bonnetLocal(model, seat))
+	return CFrame.new(p) * cf.Rotation * CFrame.Angles(0, yaw, 0) * CFrame.Angles(math.clamp(state.pitch, -0.6, 0.6) - math.rad(2), 0, 0),
+		Camera.Settings.Bonnet.Fov or 65
+end
+
+-- ------------------------------------------------------------------ cockpit
+local function cockpitCFrame(model, seat, root, dt, char)
+	local eye = Pose.EyeWorld(model, seat)
+	local g = geometry(model)
+	updateDynamics(root, g, dt)
+	if os.clock() - state.lastLook > Camera.RecenterDelay and state.speed > Camera.RecenterSpeed then
+		local k = lerpK(Camera.RecenterRate, dt)
+		state.yaw -= state.yaw * k
+		state.pitch += (-math.rad(Camera.StartPitch) - state.pitch) * k
+	end
+	-- la tête suit un peu les accélérations (recule à l'accélération, penche dans les virages) : quelques cm
+	local k = (Camera.Settings.Cockpit.HeadFx or 0)
+	local headT = Vector3.new(-state.accFast.X * 0.02, 0, state.accFast.Z * 0.02) * k
+	state.head = state.head:Lerp(headT, lerpK(6, dt))
+	local yaw = anyDown(Camera.LookBackKeys) and math.pi or state.yaw
+	local cf = CFrame.new(eye) * root.CFrame.Rotation * CFrame.new(state.head * g.spm)
+		* CFrame.Angles(0, yaw, 0) * CFrame.Angles(state.pitch, 0, 0)
+	setBody(char, true)
+	return cf, Camera.Settings.Cockpit.Fov or 60
+end
+
+-- caméra de Roblox (véhicule avec ChaseCamera = false) : pivot sur l'œil du conducteur
 local function setOffset(hum, eye)
 	local hrp = hum.RootPart
 	local h = (hum.RigType == Enum.HumanoidRigType.R15 and hum.AutomaticScalingEnabled) and (1.5 + (hrp.Size.Y - 2) / 2)
@@ -193,19 +634,44 @@ local function setOffset(hum, eye)
 	hum.CameraOffset = hrp.CFrame:VectorToObjectSpace(eye - hrp.Position) - Vector3.new(0, h, 0)
 	state.offsetHum = hum
 end
-
-local function look(dYaw, dPitch)
-	state.yaw = math.clamp(state.yaw + dYaw, -math.rad(Camera.YawMax), math.rad(Camera.YawMax))
-	state.pitch = math.clamp(state.pitch + dPitch, -math.rad(Camera.PitchDown), math.rad(Camera.PitchUp))
-	state.lastLook = os.clock()
+local function clearOffset()
+	if state.offsetHum then
+		if state.offsetHum.Parent then
+			state.offsetHum.CameraOffset = Vector3.zero
+		end
+		state.offsetHum = nil
+	end
 end
 
--- tourner la vue intérieure (radians, bornés) : entrée des scripts et des essais
-function Camera.Look(dYaw, dPitch)
-	look(dYaw, dPitch or 0)
-end
-function Camera.IsPov()
-	return state.pov
+local function leave(char)
+	local cam = Workspace.CurrentCamera
+	if state.view then
+		local wasPov = state.view == "Cockpit"
+		state.view = nil
+		cam.CameraType = Enum.CameraType.Custom
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			cam.CameraSubject = hum
+		end
+		if state.fovBefore then
+			cam.FieldOfView = state.fovBefore
+			state.fovBefore = nil
+		end
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+		setBody(char, false)
+		if not wasPov and player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
+			-- la caméra de Roblox reprend au plus près : on l'éloigne une image par la distance minimale
+			local was = player.CameraMinZoomDistance
+			player.CameraMinZoomDistance = math.min(Camera.ExitZoom, player.CameraMaxZoomDistance)
+			task.delay(0.1, function()
+				player.CameraMinZoomDistance = was
+			end)
+		end
+		changed:Fire(Camera.GetSettings(), nil)
+	end
+	state.model = nil
+	clearOffset()
 end
 
 local started = false
@@ -215,26 +681,19 @@ function Camera.Start()
 	end
 	started = true
 
-	local function toggle(_, inputState)
+	local function cycle(_, inputState)
 		if inputState ~= Enum.UserInputState.Begin then
 			return Enum.ContextActionResult.Pass
 		end
-		local model, seat, _, char = occupied()
-		if model and enabled(model, seat) then
-			if state.pov then
-				if player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
-					exit(char, true)
-				end
-			else
-				enter()
-			end
+		if occupied() then
+			Camera.CycleView()
 		end
 		return Enum.ContextActionResult.Sink
 	end
 	local bound = false
-	local function bindToggle(on)
+	local function bindCycle(on)
 		if on and not bound then
-			ContextActionService:BindAction("F2R_View", toggle, true, Camera.ToggleKey)
+			ContextActionService:BindAction("F2R_View", cycle, true, Camera.ToggleKey)
 			ContextActionService:SetTitle("F2R_View", "Vue")
 		elseif not on and bound then
 			ContextActionService:UnbindAction("F2R_View")
@@ -242,84 +701,94 @@ function Camera.Start()
 		bound = on
 	end
 
+	local rmb = false
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed then
 			return
 		end
-		local model, seat = occupied()
-		if not model or not enabled(model, seat) then
+		if not state.view then
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.Touch then
 			state.touches[input] = true
+		elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+			rmb = true
 		end
 	end)
 	UserInputService.InputEnded:Connect(function(input)
 		state.touches[input] = nil
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			rmb = false
+		end
 	end)
-	UserInputService.InputChanged:Connect(function(input, processed)
-		if not state.pov then
+	UserInputService.InputChanged:Connect(function(input)
+		if not state.view then
 			return
 		end
-		if input.UserInputType == Enum.UserInputType.MouseWheel and not processed then
-			-- sortie à la molette : seulement si le jeu la demande (attribut `PovWheelExit` du dossier FiveMVehicles).
-			-- Par défaut, comme GTA V, seule la touche « vue » (V) quitte la vue intérieure (demande de l'utilisateur,
-			-- brolver-rp 2026-11-15 : la molette ne doit pas faire passer en troisième personne, V seulement).
-			local folder = script.Parent
-			if input.Position.Z < 0 and folder:GetAttribute("PovWheelExit") == true
-				and player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
-				local _, _, _, char = occupied()
-				exit(char, true)
-			end
-		elseif input.UserInputType == Enum.UserInputType.Touch and state.touches[input] then
-			-- même sensibilité que la caméra tactile de Roblox (≈ 0,0045 rad par pixel)
+		if input.UserInputType == Enum.UserInputType.Touch and state.touches[input] then
 			look(-input.Delta.X * 0.0045, -input.Delta.Y * 0.0045)
 		end
 	end)
 
 	RunService:BindToRenderStep("F2R_VehicleCamera", Enum.RenderPriority.Camera.Value + 1, function(dt)
+		state.t += dt
 		local model, seat, hum, char = occupied()
-		bindToggle(model ~= nil and enabled(model, seat))
-		if not model or not enabled(model, seat) then
-			if state.pov then
-				exit(player.Character, false)
-			end
-			if state.offsetHum then
-				if state.offsetHum.Parent then
-					state.offsetHum.CameraOffset = Vector3.zero
+		local anyView = model ~= nil and (enabledChase(model) or enabledPov(model, seat))
+		bindCycle(anyView)
+		if not model then
+			leave(player.Character)
+			return
+		end
+		local cam = Workspace.CurrentCamera
+		if model ~= state.model then
+			-- entrée : cockpit si on était en première personne, sinon la dernière vue extérieure
+			leave(char)
+			state.model = model
+			local firstPerson = player.CameraMode == Enum.CameraMode.LockFirstPerson
+				or (cam.CFrame.Position - cam.Focus.Position).Magnitude < 1
+			local want = firstPerson and "Cockpit" or (state.lastOutside or Camera.Settings.DefaultView)
+			if not viewAllowed(model, seat, want) then
+				want = nil
+				for _, v in ipairs(Camera.Views) do
+					if viewAllowed(model, seat, v) then
+						want = v
+						break
+					end
 				end
-				state.offsetHum = nil
+			end
+			if want then
+				state.fovBefore = cam.FieldOfView
+				setView(want, char)
+			end
+		end
+		if not state.view then
+			-- aucune de nos vues : caméra de Roblox pivotant sur l'œil
+			local eye = Pose.EyeWorld(model, seat)
+			if eye then
+				setOffset(hum, eye)
 			end
 			return
 		end
-		local eye = Pose.EyeWorld(model, seat)
-		setOffset(hum, eye)
-		local cam = Workspace.CurrentCamera
-
-		if not state.pov then
-			-- la caméra de Roblox est arrivée à la première personne (molette, LockFirstPerson) : on prend la main
-			local firstPerson = (cam.CFrame.Position - cam.Focus.Position).Magnitude < 1
-			if firstPerson or player.CameraMode == Enum.CameraMode.LockFirstPerson then
-				enter()
-			else
-				return
-			end
-		end
+		clearOffset()
 
 		cam.CameraType = Enum.CameraType.Scriptable
-		-- Alt maintenu (VehicleTarget : viser une portière, le capot, le coffre) : vue figée, curseur libre
 		local aiming = targeting()
-		if not aiming then
-			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-			UserInputService.MouseIconEnabled = false
-		end
-		-- souris (sensibilité de la caméra de Roblox : 0,002π / 0,0015π rad par pixel × réglage du joueur)
 		local sens = UserSettings():GetService("UserGameSettings").MouseSensitivity
+		if state.view == "Cockpit" then
+			if not aiming then
+				UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+				UserInputService.MouseIconEnabled = false
+			end
+		else
+			-- extérieur : souris libre ; clic droit maintenu pour regarder autour (comme la caméra de Roblox)
+			if not aiming then
+				UserInputService.MouseBehavior = rmb and Enum.MouseBehavior.LockCurrentPosition or Enum.MouseBehavior.Default
+			end
+		end
 		local d = aiming and Vector2.zero or UserInputService:GetMouseDelta()
-		if d.Magnitude > 0 then
+		if d.Magnitude > 0 and (state.view == "Cockpit" or rmb) then
 			look(-d.X * 0.002 * math.pi * sens, -d.Y * 0.0015 * math.pi * sens)
 		end
-		-- manette : stick droit
 		for _, pad in ipairs(UserInputService:GetConnectedGamepads()) do
 			for _, st in ipairs(UserInputService:GetGamepadState(pad)) do
 				if st.KeyCode == Enum.KeyCode.Thumbstick2 and st.Position.Magnitude > 0.2 then
@@ -327,18 +796,21 @@ function Camera.Start()
 				end
 			end
 		end
-		-- retour vers l'avant quand on roule sans toucher à la vue
-		local speed = model.PrimaryPart.AssemblyLinearVelocity.Magnitude / 3.571
-		if os.clock() - state.lastLook > Camera.RecenterDelay and speed > Camera.RecenterSpeed then
-			local k = 1 - math.exp(-Camera.RecenterRate * dt)
-			state.yaw -= state.yaw * k
-			state.pitch += (-math.rad(Camera.StartPitch) - state.pitch) * k
+
+		local root = model.PrimaryPart
+		local cf, fov
+		if state.view == "Cockpit" then
+			cf, fov = cockpitCFrame(model, seat, root, dt, char)
+		elseif state.view == "Bonnet" then
+			cf, fov = bonnetCFrame(model, seat, root, dt)
+			setBody(char, false)
+		else
+			cf, fov = chaseCFrame(model, root, dt, Camera.Settings[state.view] or Camera.Settings.Chase)
+			setBody(char, false)
 		end
-		local yaw = anyDown(Camera.LookBackKeys) and math.pi or state.yaw
-		local cf = CFrame.new(eye) * model.PrimaryPart.CFrame.Rotation * CFrame.Angles(0, yaw, 0) * CFrame.Angles(state.pitch, 0, 0)
 		cam.CFrame = cf
 		cam.Focus = cf
-		setBody(char, true)
+		cam.FieldOfView = fov
 	end)
 end
 

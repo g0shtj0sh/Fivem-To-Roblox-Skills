@@ -82,8 +82,53 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | W A S D, Espace | gâchettes, stick, R1 | conduite, frein à main (lus par ton moteur via `VehicleInput.Controls`) |
 | W + S (+ A / D) | gaz + frein (+ stick) | arrêté : **burn** (roues motrices qui patinent sur place) ; avec la direction : **donut** |
 | Maj / Ctrl | croix haut / X | rapport + / − (`Input.Action`) |
+| **V** | — | vue suivante : poursuite proche → poursuite → capot → cockpit (`VehicleCamera`) |
+| C | R3 | regarder derrière (toutes les vues) |
+| clic droit + souris | stick droit | regarder autour (poursuite, capot) ; recentrage auto en roulant |
+| **B** | — | rétroviseur virtuel en haut de l'écran (`VehicleMirror`) |
 
 Mobile : les invites s'affichent en bouton ; à bord, bouton « Descendre ».
+
+## Caméra façon Assetto Corsa (`VehicleCamera`) et rétroviseur (`VehicleMirror`)
+
+Client de l'occupant. Quatre vues, cycle par **V** : `ChaseNear` (poursuite proche), `Chase` (poursuite), `Bonnet`
+(capot), `Cockpit` (œil GTA du siège, l'ancienne « vue intérieure »). En montant : cockpit si le joueur était en
+première personne, sinon la dernière vue extérieure (`DefaultView` au début).
+
+**Poursuite** — comportement relevé sur DynaCam (chase cam CSP d'Assetto Corsa, kirbyguy22 ; licence : modification
+sur permission → comportement réécrit, aucun code repris) et sa version « Imagined Visuals » :
+- réglages en **mètres / degrés** (`Distance`, `Height`, `Pitch`), convertis par le `StudsPerMeter` du véhicule ;
+  distance comptée depuis l'essieu arrière (centre des roues + ¼ d'empattement + 1,5 demi-empattement) ;
+  `Height` = hauteur de la caméra au-dessus du centre des roues + 0,15 m (≈ centre de gravité), `Pitch` penche la vue ;
+- suit la **direction de la vitesse** dès ~1 m/s (`VelocityFollow`), lissée (10/s), angle de glisse exagéré
+  (`SlipExaggerate` : 0,32 rad max) ; en marche arrière (vitesse·capot < −0,25) pas d'orbite ;
+- suit la pente (composante verticale lissée 4/s) ; `AccelFx` (recul à l'accélération / rapprochement au freinage,
+  saturé, ∝ empattement), `BrakeDip` (plongée ≤ 7°), `RollFx` (≤ 3,4°, zone morte), `BumpFx` (ressort amorti sur
+  l'à-coup vertical), `SpeedShake` (sigmoïde de la vitesse, centre `ShakeSpeed` m/s), `Impact` (secousse aux chocs) ;
+- `FovDynamic` + `FovGain` : FOV vertical + gain × sin(atan(v/36)) ; la distance est corrigée pour garder la
+  voiture à la même taille (« dolly zoom ») ;
+- `Collide` : un obstacle entre le toit et la caméra la rapproche.
+Presets (`Camera.ApplyPreset`) : **Calm** = Imagined Visuals (FOV 72 fixe, sans recul / plongée / roulis) ;
+**Dynamic** = DynaCam (FOV 55 → ~80, tous les effets). Réglages d'origine fournis par l'utilisateur : *cinématique*
+2,4 m / 1,15 m / 13° (`ChaseNear`), *jouable* 2,8 m / 1,25 m / 15° (`Chase`).
+
+API : `Camera.SetSettings(partial)` (fusion profonde), `GetSettings()`, `ApplyPreset(name)`, `SetView`, `CycleView`,
+`GetView`, `IsPov` (cockpit), `Changed(settings, view)`. Attributs du véhicule : `ChaseCamera = false` (caméra de Roblox
+pivotant sur l'œil), `PovCamera = false` (pas de cockpit).
+
+Mesures (Studio, m422, 2026-11-16) : en ligne droite caméra alignée (0°) ; en glisse de 53° la caméra est à 72° du
+capot (suit la trajectoire + ~18°) ; Dynamic : FOV 55° à l'arrêt → 80° à 120 km/h. Cadrage ChaseNear comparé aux
+vidéos de référence : voiture en bas au centre, ≈ 25 % de la largeur, horizon vers le tiers haut.
+
+**Rétroviseur** (`VehicleMirror`, touche **B**, bouton « Rétro » sur mobile) : rectangle en haut au centre (27 % de
+la largeur, 4:1), `ViewportFrame` + `WorldModel` de **copies** (Roblox ne rend pas le monde deux fois) :
+véhicules tagués derrière (≤ `Range` studs, `MaxPartsPerVehicle` plus grosses pièces, `BulkMoveTo` à chaque image),
+décor (`GetPartBoundsInBox` derrière le véhicule, budget `MaxDecorParts`, `NewPerRefresh` par relevé),
+**terrain relevé en dalles** (grille `TerrainCell` studs, hauteur et couleur de la matière : les routes en terrain
+apparaissent), ciel / lumière de `Lighting`. Effet miroir : monde copié **et** caméra reflétés (x → −x, rotations
+M·R·M), gauche et droite inversées comme un vrai rétro, objets non retournés.
+Coût mesuré (Studio PC, ville en terrain + pièces) : 0,5 ms/image à l'arrêt, 0,9 ms en moyenne et 1,5 ms au pire
+en roulant à 73 km/h (364 dalles, ~30 pièces de décor, 1 véhicule). Non mesuré sur téléphone.
 
 ## Hitbox : passages de roues creusés (`VehicleCollision.CarveWheelWells`)
 
