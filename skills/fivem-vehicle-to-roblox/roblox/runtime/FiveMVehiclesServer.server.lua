@@ -52,8 +52,41 @@ local function customAllowed(player)
 	return true
 end
 
+-- Débit des autres actions, par joueur et par action (audit multijoueur 2026-11-16 : télémétrie, bascules, vitres
+-- et ajustement de siège n'avaient aucune limite ; chaque envoi devient des attributs répliqués à tous les joueurs).
+-- Au-delà, la demande est ignorée sans bruit (une mauvaise connexion ressemble à un tricheur).
+local RATES = {
+	telemetry = { 15, 20 }, -- le client en envoie 10 par seconde
+	set = { 8, 12 }, -- phares, clignotants, klaxon, sirène, moteur
+	window = { 4, 6 },
+	fit = { 2, 3 },
+}
+local buckets = {}
+local function allowed(player, action)
+	local r = RATES[action]
+	local now = os.clock()
+	local per = buckets[player]
+	if not per then
+		per = {}
+		buckets[player] = per
+	end
+	local b = per[action]
+	if not b then
+		b = { tokens = r[2], t = now }
+		per[action] = b
+	end
+	b.tokens = math.min(r[2], b.tokens + (now - b.t) * r[1])
+	b.t = now
+	if b.tokens < 1 then
+		return false
+	end
+	b.tokens -= 1
+	return true
+end
+
 Players.PlayerRemoving:Connect(function(player)
 	customBuckets[player] = nil
+	buckets[player] = nil
 end)
 
 local function humanoidOf(player)
@@ -131,7 +164,10 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 	end
 	if action == "Set" then
 		local t = TOGGLES[key]
-		if not t or typeof(value) ~= t or not isDriver(player, model) then
+		if not t or typeof(value) ~= t or not isDriver(player, model) or not allowed(player, "set") then
+			return
+		end
+		if t == "number" and (value ~= value or math.abs(value) == math.huge) then
 			return
 		end
 		if VALID[key] and not VALID[key][value] then
@@ -165,7 +201,9 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		model:SetAttribute("Door_" .. key, cur > 0.5 and 0 or 1)
 	elseif action == "Fit" then
 		-- corps de l'occupant adapté à l'habitacle (VehicleSeatFit) ; validé et borné côté serveur
-		SeatFit.Apply(player, model, key, value, ...)
+		if allowed(player, "fit") then
+			SeatFit.Apply(player, model, key, value, ...)
+		end
 	elseif action == "Exit" then
 		Access.Exit(player)
 	elseif action == "Recover" then
@@ -191,7 +229,17 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		-- réponse au menu (notification) : op, appliquée ?, raison du refus ou détail (texte de plaque…)
 		remote:FireClient(player, "CustomResult", model, key, applied == true, why)
 	elseif action == "Window" then
-		if type(key) ~= "string" or not isOccupantOrNear(player, model, 6) then
+		-- seulement une vraie vitre de ce modèle (avant 2026-11-16 : n'importe quel nom devenait un attribut
+		-- WindowDown_<nom> répliqué à tous et gardé dans les sauvegardes) ; verrouillé : occupants seulement
+		if type(key) ~= "string" or #key > 32 or not isOccupantOrNear(player, model, 6) or not allowed(player, "window") then
+			return
+		end
+		if not table.find(Custom.WindowBones(model), key) then
+			return
+		end
+		local hum = humanoidOf(player)
+		local inside = hum and hum.SeatPart and hum.SeatPart:IsDescendantOf(model)
+		if model:GetAttribute("Locked") == true and not inside then
 			return
 		end
 		if model:GetAttribute("WindowBroken_" .. key) == true then
@@ -212,15 +260,18 @@ telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, br
 	if rpm ~= rpm or throttle ~= throttle or steer ~= steer then
 		return -- NaN
 	end
-	if not isDriver(player, model) then
+	if not isDriver(player, model) or not allowed(player, "telemetry") then
 		return
 	end
-	model:SetAttribute("Rpm", math.clamp(rpm, 0, 20000))
-	model:SetAttribute("Throttle", math.clamp(throttle, 0, 1))
-	model:SetAttribute("Steer", math.clamp(steer, -1, 1))
+	-- valeurs arrondies : moins de changements répliqués à tous les joueurs (Roblox n'envoie que ce qui change)
+	model:SetAttribute("Rpm", math.round(math.clamp(rpm, 0, 20000) / 25) * 25)
+	model:SetAttribute("Throttle", math.round(math.clamp(throttle, 0, 1) * 32) / 32)
+	-- braquage EFFECTIF des roues (fraction de la butée mécanique), pas la touche brute : à vitesse le moteur de
+	-- conduite réduit l'angle ; avec la touche brute les autres voyaient les roues braquées à fond (audit 2026-11-16)
+	model:SetAttribute("Steer", math.round(math.clamp(steer, -1, 1) * 64) / 64)
 	model:SetAttribute("Brake", brake == true)
 	model:SetAttribute("Reverse", reverse == true)
-	if type(gear) == "number" then
+	if type(gear) == "number" and gear == gear and math.abs(gear) ~= math.huge then
 		model:SetAttribute("Gear", math.clamp(math.floor(gear), -1, 12))
 	end
 	-- traces et fumée par roue (VehicleTyreFx : 4 bits par roue), purement visuelles
@@ -318,6 +369,12 @@ local function setupVehicle(model)
 					model:SetAttribute("Throttle", 0)
 					model:SetAttribute("Steer", 0)
 					model:SetAttribute("TyreFx", 0)
+					-- sans ça le régime, le rapport et la marche arrière du dernier envoi restaient figés pour tout le
+					-- monde (mesuré 2026-11-16 : 5750 tr/min, feux de recul allumés) ; sans Rpm, le rendu l'estime
+					model:SetAttribute("Rpm", nil)
+					model:SetAttribute("Gear", nil)
+					model:SetAttribute("Reverse", false)
+					model:SetAttribute("Cruise", nil)
 					Access.OnDriverChanged(model, nil)
 				end
 			end

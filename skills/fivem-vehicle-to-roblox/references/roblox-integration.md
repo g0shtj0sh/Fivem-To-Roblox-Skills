@@ -62,7 +62,7 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | `Backfire` | bool | retours de flamme : true toujours, false jamais, absent = seulement avec un échappement amélioré (`Mod_Exhaust` > 0), comme GTA |
 | `BackfireSoundId` | string | son d'une détonation (aussi sur `ReplicatedStorage.FiveMVehicles`) ; vide = flamme muette |
 | `TyreSmokeColor` | Color3 | couleur de la fumée de pneus (comme dans GTA ; défaut gris clair) |
-| `TyreFx` = false | bool | sur le véhicule : coupe traces et fumée (l'attribut numérique ci-dessus est alors ignoré) |
+| `TyreFxEnabled` = false | bool | sur le véhicule : coupe traces et fumée (avant le 2026-11-16 : `TyreFx = false`, écrasé par l'attribut numérique dès qu'on conduisait) |
 | `Door_<os>` | 0..1 | ouverture porte / capot / coffre |
 | `Mod_<Slot>`, `Color_<Couche>`, `Livery`, `Extra_<n>`, `WindowTint`, `Neon`, `NeonColor`, `XenonColor`, `PlateText`, `Perf_<Slot>` | | custom (voir API) |
 
@@ -157,6 +157,22 @@ ne conduit pas sonde lui-même le sol sous chaque roue avec la géométrie du mo
 `Dyn.new(cfg).P.wheels`), lissé 25/s, pour les véhicules à moins de `SuspensionEstimateDistance` (200 studs) de sa
 caméra. Mesuré (passager, voiture lâchée de 3 studs) : roues pendantes −18 cm en l'air, compression à l'impact,
 retour au repos en ~0,4 s.
+
+**Multijoueur (audit 2026-11-16, test à 2 joueurs + revue du code)** : débit limité par joueur et par action côté
+serveur (télémétrie 15/s, bascules 8/s, vitres 4/s, siège 2/s) ; vitres : seulement les vraies vitres du modèle
+(`Custom.WindowBones`), verrouillé = occupants seulement, `Serialize`/`Apply` ne gardent que les clés connues ;
+télémétrie arrondie (régime /25, braquage /64) ; le conducteur envoie le braquage EFFECTIF (fraction de la butée
+mécanique), pas la touche ; feux stop maintenus sur l'envoi ; à la sortie du conducteur `Rpm`, `Gear` effacés et
+`Reverse` remis à faux ; braquage et régime lissés chez les autres ; clignotants et sirène sur le temps serveur ;
+feux des véhicules lointains mis à jour 5 fois/s ; contrôle de rotation (> 20 rad/s pendant 0,5 s) et compteur
+d'infractions par joueur (`F2R_DriveStrikes`, journalisé, sans sanction) ; vitesse permise selon Perf_/Tune_.
+Clignotants : pièces `indicator` allumées en Neon entier (`Runtime.NeonFamilies`) — la zone des clignotants est
+sombre dans le masque d'émission des feux de la m422, ils étaient invisibles ; extinction automatique après le
+virage (volant > 35 % du côté du clignotant puis < 8 %). Nouveau : régulateur (`Y`, `Drive.ToggleCruise("cruise")`,
+coupé par frein / frein à main / marche arrière, PI sur l'accélérateur) et limiteur (`U`, "limit"), signal
+`Drive.CruiseChanged(mode, kmh, raison)`, champs `Cruise`/`CruiseSpeed`/`Blink` de `VehicleDashboard.Read` ; vitres
+avant (`K`) ; `VehicleInput.Labels` (libellés pour un panneau des touches). Mesuré : régulateur 57–58 km/h pour
+57,9 ; limiteur 55–56 km/h accélérateur à fond ; 200 envois de télémétrie en 1 s → 34 écritures du régime.
 
 **Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
 Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).

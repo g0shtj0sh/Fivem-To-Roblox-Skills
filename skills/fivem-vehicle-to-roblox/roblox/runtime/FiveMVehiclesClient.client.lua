@@ -94,6 +94,29 @@ Input.Action.Event:Connect(function(name, value)
 		set("SirenSound", order[cur % #order + 1])
 	elseif name == "Engine" then
 		set("Engine", not m:GetAttribute("Engine"))
+	elseif name == "Cruise" then
+		Drive.ToggleCruise("cruise")
+	elseif name == "Limiter" then
+		Drive.ToggleCruise("limit")
+	elseif name == "Windows" then
+		-- vitres avant : toutes deux baissées ou toutes deux montées (vitres cassées ignorées par le serveur)
+		local front, seen = {}, {}
+		for _, d in ipairs(m:GetDescendants()) do
+			local bone = d:IsA("BasePart") and d:GetAttribute("Kind") == "glass" and d:GetAttribute("Window")
+			if bone and not seen[bone] and string.match(bone, "_[lr]f$") then
+				seen[bone] = true
+				table.insert(front, bone)
+			end
+		end
+		local anyUp = false
+		for _, bone in ipairs(front) do
+			if m:GetAttribute("WindowDown_" .. bone) ~= true then
+				anyUp = true
+			end
+		end
+		for _, bone in ipairs(front) do
+			remote:FireServer(m, "Window", bone, anyUp)
+		end
 	end
 	-- "GearUp", "GearDown", "LookBack"... : à écouter par ton moteur physique via Input.Action
 end)
@@ -267,6 +290,8 @@ player.CharacterAdded:Connect(hookCharacter)
 local TyreFx = require(folder:WaitForChild("VehicleTyreFx"))
 local sendAcc = 0
 local tyrePeak = {} -- intensité max de chaque roue depuis le dernier envoi (un patinage bref n'est pas perdu)
+local brakeHeld = false
+local cancelArmed, cancelFor = false, nil
 RunService.Heartbeat:Connect(function(dt)
 	local m = driving
 	if not m then
@@ -286,12 +311,34 @@ RunService.Heartbeat:Connect(function(dt)
 	for bone, k in pairs((tele and tele.TyreFx) or {}) do
 		tyrePeak[bone] = math.max(tyrePeak[bone] or 0, k)
 	end
+	brakeHeld = brakeHeld or brake -- un coup de frein plus court qu'un envoi reste visible des autres
+	-- clignotant qui s'éteint tout seul après le virage, comme sur une vraie voiture : volant tourné du côté du
+	-- clignotant (> 35 %), puis revenu presque au centre
+	local ind = m:GetAttribute("Indicator")
+	local dir = (ind == "Left" and -1) or (ind == "Right" and 1) or 0
+	if dir == 0 or ind ~= cancelFor then
+		cancelArmed, cancelFor = false, ind
+	end
+	if dir ~= 0 then
+		if c.Steer * dir > 0.35 then
+			cancelArmed = true
+		elseif cancelArmed and c.Steer * dir < 0.08 then
+			cancelArmed = false
+			set("Indicator", "Off")
+		end
+	end
 	sendAcc += dt
 	if sendAcc >= 0.1 then
 		sendAcc = 0
 		local packed = r and TyreFx.Pack(tyrePeak, TyreFx.Bones(r.Config)) or 0
 		table.clear(tyrePeak)
+		-- braquage EFFECTIF des roues en fraction de la butée mécanique (le moteur de conduite le réduit avec la
+		-- vitesse) : envoyer la touche brute faisait voir aux autres des roues braquées à fond (audit 2026-11-16)
+		local hd = (r and r.Config.Handling) or {}
+		local mech = hd.SteeringLockRad or math.rad(hd.SteeringLockDeg or 35)
+		local steerEff = (st.Steer or c.Steer) * (st.WheelSteer or mech) / math.max(mech, 1e-3)
 		-- accélérateur effectif (télémétrie : S en marche arrière), pour que les autres entendent la même charge
-		telemetry:FireServer(m, st.Rpm or 0, st.Throttle or c.Throttle, c.Steer, brake, reverse, st.Gear, packed)
+		telemetry:FireServer(m, st.Rpm or 0, st.Throttle or c.Throttle, steerEff, brakeHeld, reverse, st.Gear, packed)
+		brakeHeld = false
 	end
 end)

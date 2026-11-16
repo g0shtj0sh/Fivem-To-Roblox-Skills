@@ -34,6 +34,20 @@ Input.Bindings = {
 	GearUp = { Enum.KeyCode.LeftShift, Enum.KeyCode.DPadUp }, -- Y (manette) = monter / descendre
 	GearDown = { Enum.KeyCode.LeftControl, Enum.KeyCode.ButtonX },
 	LookBack = { Enum.KeyCode.C, Enum.KeyCode.ButtonR3 },
+	-- RP (2026-11-16) : régulateur et limiteur de vitesse, vitres avant
+	Cruise = { Enum.KeyCode.Y },
+	Limiter = { Enum.KeyCode.U },
+	Windows = { Enum.KeyCode.K },
+}
+-- Libellés des actions (panneau des touches du jeu, menus) : même ordre d'affichage que la liste
+Input.Labels = {
+	{ "Throttle", "Accélérer" }, { "Brake", "Freiner / marche arrière" }, { "SteerLeft", "Tourner à gauche" },
+	{ "SteerRight", "Tourner à droite" }, { "Handbrake", "Frein à main" }, { "GearUp", "Monter un rapport" },
+	{ "GearDown", "Descendre un rapport" }, { "Cruise", "Régulateur de vitesse" }, { "Limiter", "Limiteur de vitesse" },
+	{ "Headlights", "Phares (code / route / éteints)" }, { "IndicatorLeft", "Clignotant gauche" },
+	{ "IndicatorRight", "Clignotant droit" }, { "Hazard", "Warnings" }, { "Horn", "Klaxon" },
+	{ "Engine", "Moteur (couper / démarrer)" }, { "Windows", "Vitres avant (baisser / monter)" },
+	{ "Siren", "Sirène (véhicules d'urgence)" }, { "SirenTone", "Son de la sirène" }, { "LookBack", "Regarder derrière" },
 }
 Input.SteerSpeed = 4.0 -- vitesse de braquage clavier (unités/s)
 Input.SteerReturn = 6.0 -- vitesse de retour au centre

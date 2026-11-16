@@ -42,6 +42,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Runtime = require(script.Parent:WaitForChild("VehicleRuntime"))
+local driveModule = nil -- VehicleDrive, chargé à la première lecture (régulateur du conducteur local)
 
 local Dashboard = {}
 
@@ -74,6 +75,13 @@ function Dashboard.Read(model, dt)
 	local h = cfg.Handling or {}
 	local a = cfg.Audio or {}
 	local s = r.State or {}
+	if driveModule == nil then
+		local ok, mod = pcall(function()
+			return require(script.Parent:WaitForChild("VehicleDrive"))
+		end)
+		driveModule = ok and mod or false
+	end
+	local cruise = driveModule and driveModule.Active and driveModule.Active.car == model and driveModule.Cruise or nil
 	local mph = string.lower(tostring(folderAttr(model, "SpeedUnit") or "kmh")) == "mph"
 	local k = mph and MPH or KMH
 
@@ -129,6 +137,9 @@ function Dashboard.Read(model, dt)
 		Engine = engine,
 		Headlights = model:GetAttribute("Headlights") or 0,
 		Indicator = model:GetAttribute("Indicator") or "Off",
+		Blink = r.BlinkState == true, -- phase allumée des clignotants (même horloge pour tous : temps serveur)
+		Cruise = cruise and cruise.mode or nil, -- "cruise" (régulateur) | "limit" (limiteur), conducteur local
+		CruiseSpeed = cruise and math.floor(cruise.target * k + 0.5) or nil,
 		Brake = s.Brake == true,
 		Reverse = reverse,
 		DashboardType = cfg.DashboardType or "",

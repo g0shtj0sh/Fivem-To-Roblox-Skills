@@ -161,12 +161,34 @@ local function applyPaint(part, color)
 	end
 end
 
+-- Décoloration de la peinture (vMenu « Décoloration de la peinture », 0 = neuve, 1 = très passée) : la couleur
+-- perd sa saturation, s'éclaircit vers un gris crayeux et la carrosserie perd son brillant. Attribut PaintFade ;
+-- la couleur choisie (Color_<couche>) reste intacte, seule la couleur affichée est passée.
+Custom.PaintFadeLook = { Saturation = 0.65, Lighten = 0.35, Chalk = 0.78, Reflectance = 0.85 }
+
+local function fadeAmount(model)
+	local f = model:GetAttribute("PaintFade")
+	return type(f) == "number" and math.clamp(f, 0, 1) or 0
+end
+
+local function fadedColor(model, color)
+	local f = fadeAmount(model)
+	if f <= 0 then
+		return color
+	end
+	local L = Custom.PaintFadeLook
+	local h, sat, v = color:ToHSV()
+	local target = Color3.fromHSV(h, sat * (1 - L.Saturation * f), v + (L.Chalk - v) * L.Lighten * f)
+	return target
+end
+
 function Custom.SetColor(model, layer, color)
 	assert(table.find(PAINT_LAYERS, layer), "Couche de peinture inconnue : " .. tostring(layer))
 	model:SetAttribute("Color_" .. layer, color)
+	local shown = fadedColor(model, color)
 	for _, part in ipairs(visualParts(model)) do
 		if part:GetAttribute("PaintLayer") == layer then
-			applyPaint(part, color)
+			applyPaint(part, shown)
 		end
 	end
 end
@@ -205,10 +227,44 @@ function Custom.SetFinish(model, layer, finish)
 	local look = Custom.FinishLooks[finish]
 	assert(look, "Finition inconnue : " .. tostring(finish))
 	model:SetAttribute("Finish_" .. layer, finish)
+	local dull = 1 - Custom.PaintFadeLook.Reflectance * fadeAmount(model)
 	for _, part in ipairs(visualParts(model)) do
 		if part:GetAttribute("PaintLayer") == layer and not part:FindFirstChildOfClass("SurfaceAppearance") then
 			part.Material = look.Material
-			part.Reflectance = look.Reflectance
+			part.Reflectance = look.Reflectance * dull
+		end
+	end
+end
+
+-- Décoloration 0..1 (0 ou nil = peinture neuve) ; réapplique la couleur et la finition de chaque couche peinte.
+function Custom.SetPaintFade(model, amount)
+	amount = math.clamp(tonumber(amount) or 0, 0, 1)
+	model:SetAttribute("PaintFade", amount > 0.001 and amount or nil)
+	for layer in pairs(Custom.LayersPresent(model)) do
+		local c = model:GetAttribute("Color_" .. layer)
+		if typeof(c) == "Color3" then
+			Custom.SetColor(model, layer, c)
+		end
+		local finish = model:GetAttribute("Finish_" .. layer)
+		if Custom.FinishLooks[finish] then
+			Custom.SetFinish(model, layer, finish)
+		elseif fadeAmount(model) > 0 then
+			local dull = 1 - Custom.PaintFadeLook.Reflectance * fadeAmount(model)
+			for _, part in ipairs(visualParts(model)) do
+				if part:GetAttribute("PaintLayer") == layer and not part:FindFirstChildOfClass("SurfaceAppearance") then
+					if part:GetAttribute("FadeBaseReflectance") == nil then
+						part:SetAttribute("FadeBaseReflectance", part.Reflectance)
+					end
+					part.Reflectance = part:GetAttribute("FadeBaseReflectance") * dull
+				end
+			end
+		else
+			for _, part in ipairs(visualParts(model)) do
+				local base = part:GetAttribute("FadeBaseReflectance")
+				if base ~= nil and part:GetAttribute("PaintLayer") == layer then
+					part.Reflectance = base
+				end
+			end
 		end
 	end
 end
@@ -755,18 +811,38 @@ local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_"
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
 local SAVE_KEYS = {
 	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
-	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound",
+	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade",
 }
+
+-- Clé gardée dans une sauvegarde / acceptée à la restauration. Vitres : seulement les vraies vitres du modèle (une
+-- clé WindowDown_<n'importe quoi> pouvait venir d'un client avant le 2026-11-16).
+local function savable(model, k, windows)
+	if table.find(SAVE_KEYS, k) ~= nil then
+		return true
+	end
+	if string.sub(k, 1, 11) == "WindowDown_" then
+		return windows[string.sub(k, 12)] == true
+	end
+	for _, p in ipairs(SAVE_PREFIXES) do
+		if string.sub(k, 1, #p) == p then
+			return true
+		end
+	end
+	return false
+end
+local function windowSet(model)
+	local set = {}
+	for _, w in ipairs(Custom.WindowBones(model)) do
+		set[w] = true
+	end
+	return set
+end
 
 function Custom.Serialize(model)
 	local out = {}
+	local windows = windowSet(model)
 	for k, v in pairs(model:GetAttributes()) do
-		local keep = table.find(SAVE_KEYS, k) ~= nil
-		for _, p in ipairs(SAVE_PREFIXES) do
-			if string.sub(k, 1, #p) == p then
-				keep = true
-			end
-		end
+		local keep = savable(model, k, windows)
 		if keep then
 			if typeof(v) == "Color3" then
 				out[k] = { "Color3", v.R, v.G, v.B }
@@ -782,7 +858,7 @@ end
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound" }
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade" }
 
 function Custom.Apply(model, data)
 	data = data or {}
@@ -800,11 +876,16 @@ function Custom.Apply(model, data)
 			end
 		end
 	end
+	local windows = windowSet(model)
 	for k, v in pairs(data) do
-		if type(v) == "table" and v[1] == "Color3" then
-			v = Color3.new(v[2], v[3], v[4])
+		if type(k) == "string" and #k <= 64 and savable(model, k, windows) then
+			if type(v) == "table" and v[1] == "Color3" then
+				v = Color3.new(v[2], v[3], v[4])
+			end
+			if type(v) ~= "table" then
+				model:SetAttribute(k, v)
+			end
 		end
-		model:SetAttribute(k, v)
 	end
 	for _, layer in ipairs(PAINT_LAYERS) do
 		local c = model:GetAttribute("Color_" .. layer)
@@ -824,6 +905,7 @@ function Custom.Apply(model, data)
 		Custom.SetWindowTintPreset(model, tint)
 	end
 	paintNeons(model)
+	Custom.SetPaintFade(model, model:GetAttribute("PaintFade") or 0)
 	if model:GetAttribute("PlateText") then
 		Custom.SetPlate(model, model:GetAttribute("PlateText"))
 	end
@@ -1416,6 +1498,17 @@ OPS.KickOut = function(model)
 	if Custom.KickOccupants(model) == 0 then
 		return false, "empty"
 	end
+	return true
+end
+
+OPS.PaintFade = function(model, amount)
+	if not finite(amount) then
+		return false, "invalid"
+	end
+	if next(Custom.LayersPresent(model)) == nil then
+		return false, "absent"
+	end
+	Custom.SetPaintFade(model, amount)
 	return true
 end
 

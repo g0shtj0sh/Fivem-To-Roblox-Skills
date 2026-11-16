@@ -463,7 +463,9 @@ function Fx.Update(r, dt, s)
 		r.TyreFxState = st
 	end
 	ageMarks()
-	local enabled = model:GetAttribute("TyreFx") ~= false
+	-- interrupteur : TyreFxEnabled = false (l'attribut TyreFx porte les intensités envoyées par le conducteur et
+	-- écrasait l'ancien interrupteur TyreFx = false dès que quelqu'un conduisait, audit 2026-11-16)
+	local enabled = model:GetAttribute("TyreFxEnabled") ~= false
 	local fx = (enabled and s.TyreFx) or {}
 	local spm = r.Spm
 	local smokeColor = model:GetAttribute("TyreSmokeColor")

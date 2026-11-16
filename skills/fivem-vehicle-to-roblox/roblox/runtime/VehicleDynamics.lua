@@ -336,6 +336,17 @@ Dyn.Tuning = {
 	-- Réglages de menu admin (Dyn.SetTune) : plafond du multiplicateur de force motrice, adhérence des pneus de drift.
 	MaxForceMult = 16,
 	DriftTyreGrip = 0.7,
+	-- Améliorations du garage dont l'effet doit se SENTIR à chaque niveau (demande de l'utilisateur, 2026-11-16 :
+	-- mesuré avant, freins ×2 = 20,5 → 20,4 m au 100-0, suspension +11 % = roulis 1,39 → 1,26° : rien de perceptible).
+	-- Freins : le 100-0 est limité par l'adhérence, pas par la force ; chaque niveau ajoute de l'adhérence PENDANT
+	-- le freinage (part de l'adhérence de base, au prorata de la pédale).
+	BrakeGripPerLevel = { 0.07, 0.14, 0.22 },
+	-- Suspension : caisse abaissée (m) à chaque niveau, comme les suspensions Abaissée / Rue / Sport / Compétition de
+	-- GTA, et barres anti-roulis renforcées (× (1 + SuspensionArbPerLevel × niveau)).
+	SuspensionLowerM = { 0.015, 0.03, 0.045, 0.06 },
+	SuspensionArbPerLevel = 0.2,
+	-- Transmission : vitesse de l'embrayage au passage × ce facteur (au moins), par niveau.
+	TransmissionClutchMult = { 1.5, 2.25, 3.0 },
 }
 
 -- ------------------------------------------------------------------ améliorations (garage)
@@ -343,9 +354,11 @@ Dyn.Tuning = {
 -- viennent des `statMods` du carcols du véhicule (cfg.StatMods) ; à défaut, ces valeurs.
 --   Engine       DriveForce × (1 + 0,2 × modifier / 100). DATAMINÉ (wiki carcols, gtacars : Adder 100 → ×1,2).
 --   Transmission +1 rapport dès le niveau 1 (GTA : « toutes ajoutent un rapport ») et passages plus rapides :
---                ClutchChangeRate × (1 + modifier / 100). Le gain de vitesse des passages n'est pas documenté.
---   Brakes       BrakeForce × (1 + modifier / 100). Loi posée (GTA : « plus de force de freinage »).
---   Suspension   raideur et anti-roulis × (1 + 0,5 × modifier / 100). Loi posée ; la caisse n'est pas abaissée.
+--                ClutchChangeRate × max(1 + modifier / 100, Tuning.TransmissionClutchMult[niveau]). Loi posée.
+--   Brakes       BrakeForce × (1 + modifier / 100) ET adhérence au freinage + Tuning.BrakeGripPerLevel[niveau]
+--                (sans elle, plus de force ne raccourcit rien : le freinage plafonne à l'adhérence). Loi posée.
+--   Suspension   raideur × (1 + 0,5 × modifier / 100), anti-roulis × (1 + SuspensionArbPerLevel × niveau),
+--                caisse abaissée de Tuning.SuspensionLowerM[niveau] (P.raise ; roues dessinées en conséquence).
 --   Turbo        niveau 1 : + TurboGain de couple une fois chargé (voir Dyn.Tuning).
 --   Unlimited    niveau 1 : débridage, le limiteur de vitesse (cfg.Performance.LimiterKmh) est levé.
 --   Armor        aucun effet sur la conduite (GTA non plus).
@@ -437,11 +450,20 @@ function Dyn.SetUpgrades(sim, levels)
 			S.gear = nGears
 		end
 	end
-	local clutchK = 1 + upgradeModifier(cfg, "Transmission", tr) / 100
+	local function perLevel(list, level)
+		return (level > 0 and list and #list > 0) and list[math.min(level, #list)] or nil
+	end
+	local clutchK = math.max(1 + upgradeModifier(cfg, "Transmission", tr) / 100, perLevel(T.TransmissionClutchMult, tr) or 1)
 	P.clutchUp, P.clutchDown = B.clutchUp * clutchK, B.clutchDown * clutchK
-	P.brake = B.brake * (1 + upgradeModifier(cfg, "Brakes", lvl("Brakes")) / 100)
-	local suspK = 1 + 0.5 * upgradeModifier(cfg, "Suspension", lvl("Suspension")) / 100
-	P.kF, P.kR, P.arbF, P.arbR = B.kF * suspK, B.kR * suspK, B.arbF * suspK, B.arbR * suspK
+	local br = lvl("Brakes")
+	P.brake = B.brake * (1 + upgradeModifier(cfg, "Brakes", br) / 100)
+	P.brakeGrip = perLevel(T.BrakeGripPerLevel, br) or 0
+	local su = lvl("Suspension")
+	local suspK = 1 + 0.5 * upgradeModifier(cfg, "Suspension", su) / 100
+	local arbK = suspK * (1 + (T.SuspensionArbPerLevel or 0) * math.max(su, 0))
+	P.kF, P.kR, P.arbF, P.arbR = B.kF * suspK, B.kR * suspK, B.arbF * arbK, B.arbR * arbK
+	P.lowering = perLevel(T.SuspensionLowerM, su) or 0
+	P.raise = (B.raise or 0) - P.lowering
 	for _, w in ipairs(P.wheels or {}) do
 		w.k = w.front and P.kF or P.kR
 	end
@@ -642,7 +664,7 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 	P.cfg = cfg
 	P.base = {
 		driveForce = P.driveForce, nGears = P.nGears, clutchUp = P.clutchUp, clutchDown = P.clutchDown,
-		brake = P.brake, kF = P.kF, kR = P.kR, arbF = P.arbF, arbR = P.arbR,
+		brake = P.brake, kF = P.kF, kR = P.kR, arbF = P.arbF, arbR = P.arbR, raise = P.raise,
 		limiter = (limKmh and limKmh > 0) and limKmh / 3.6 or nil,
 		muMax = P.muMax, muMin = P.muMin,
 	}
@@ -1050,6 +1072,9 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				S.slipLat[i] = vLat
 				local grip = 1 - (1 - (c.grip or 1)) * P.lossMult
 				local fmax = (N[i] * muOf(P, sFall) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
+				if (P.brakeGrip or 0) > 0 and brakeIn > 0 and not hand then
+					fmax *= 1 + P.brakeGrip * math.min(brakeIn, 1) -- freins améliorés : plus d'adhérence au freinage
+				end
 				if burnout and w.burnSpin then
 					fmax *= T.BurnoutGrip -- la roue décroche et patine même sur un moteur modeste (GTA force le patinage)
 				end
@@ -1191,7 +1216,8 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			grounded = contacts[i] ~= nil and contacts[i].grounded == true,
 		}
 		out.omega[i] = S.omega[i]
-		out.travel[i] = (contacts[i] and contacts[i].grounded) and (x - w.x0) or (-w.x0)
+		-- caisse abaissée (suspension améliorée) : la roue remonte d'autant dans la caisse
+		out.travel[i] = ((contacts[i] and contacts[i].grounded) and (x - w.x0) or (-w.x0)) + (P.lowering or 0)
 	end
 	-- traînée (omnidirectionnelle, au centre de gravité)
 	out.body = -vBody * (P.dragK * speed)

@@ -28,6 +28,45 @@ Drive.Active = nil -- { car, cfg, sim, root, spm, wheels, ... }
 Drive.Override = nil
 Drive.StepMode = nil -- "BindToSimulation" | "PreSimulation"
 
+-- Régulateur (« cruise ») et limiteur (« limit ») de vitesse, pour le RP (2026-11-16). Régulateur : garde la vitesse
+-- choisie, l'accélérateur du joueur passe par-dessus, frein / frein à main / marche arrière le coupent. Limiteur :
+-- plafonne l'accélérateur à la vitesse choisie. Un correcteur PI agit sur l'accélérateur seulement.
+Drive.Cruise = nil -- { mode, target (m/s), i }
+Drive.CruiseChanged = Instance.new("BindableEvent") -- (mode | nil, km/h | nil, raison | nil)
+Drive.CruiseMinKmh = 20
+Drive.LimiterDefaultKmh = 50
+
+local function cruiseOff(reason)
+	if Drive.Cruise then
+		Drive.Cruise = nil
+		Drive.CruiseChanged:Fire(nil, nil, reason)
+	end
+end
+
+-- Active / coupe le régulateur ("cruise") ou le limiteur ("limit") à la vitesse actuelle. Renvoie true si actif.
+function Drive.ToggleCruise(mode)
+	local a = Drive.Active
+	if not a then
+		return false
+	end
+	if Drive.Cruise and Drive.Cruise.mode == mode then
+		cruiseOff("off")
+		return false
+	end
+	local v = (a.out and a.out.speed) or 0
+	local kmh = v * 3.6
+	if mode == "cruise" and (kmh < Drive.CruiseMinKmh or (a.out and a.out.reverse)) then
+		Drive.CruiseChanged:Fire(nil, nil, "too_slow")
+		return false
+	end
+	if mode == "limit" then
+		kmh = kmh >= 10 and math.floor(kmh / 5 + 0.5) * 5 or Drive.LimiterDefaultKmh
+	end
+	Drive.Cruise = { mode = mode, target = kmh / 3.6, i = (a.lastThrottle or 0.3) }
+	Drive.CruiseChanged:Fire(mode, math.floor(kmh + 0.5), nil)
+	return true
+end
+
 local function findOrMake(parent, className, name)
 	local o = parent:FindFirstChild(name)
 	if o and o.ClassName == className then
@@ -65,6 +104,7 @@ end
 
 function Drive.Stop()
 	local a = Drive.Active
+	cruiseOff("exit")
 	Drive.Active = nil
 	if not a then
 		return
@@ -166,6 +206,25 @@ local function step(a, dt)
 	for k, v in pairs(Drive.Override or {}) do
 		inp[k] = v
 	end
+	local cr = Drive.Cruise
+	if cr then
+		local v = (a.out and a.out.speed) or 0
+		if cr.mode == "cruise" and ((inp.Brake or 0) > 0.1 or inp.Handbrake or (a.out and a.out.reverse) or not inp.Engine) then
+			cruiseOff("brake")
+		else
+			local err = cr.target - v
+			local u = math.clamp(0.35 * err + cr.i, 0, 1)
+			if u > 0 and u < 1 then
+				cr.i = math.clamp(cr.i + 0.12 * err * dt, 0, 1)
+			end
+			if cr.mode == "cruise" then
+				inp.Throttle = math.max(inp.Throttle or 0, u)
+			else
+				inp.Throttle = math.min(inp.Throttle or 0, u)
+			end
+		end
+	end
+	a.lastThrottle = inp.Throttle
 
 	local vWorld = root.AssemblyLinearVelocity
 	local ctx = {

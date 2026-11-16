@@ -616,6 +616,13 @@ end
 -- le serveur reprend la physique, remet le véhicule à sa dernière position valide, puis la rend.
 Access.SpeedMargin = 1.35
 Access.TeleportSlack = 8 -- studs
+-- rotation : une voiture qui tourne sur elle-même plus vite que ça pendant SpinHold secondes est reprise (toupie
+-- forcée pour projeter les autres ; un tête-à-queue réel reste sous ~6 rad/s, un tonneau bref est toléré)
+Access.SpinMax = 20 -- rad/s
+Access.SpinHold = 0.5 -- s
+-- infractions par joueur : comptées et journalisées (mode observation, aucune sanction automatique : une seule
+-- détection ne suffit jamais à punir, voir roblox-anti-exploit-review)
+Access.StrikeLogEvery = 5
 function Access.CheckPlausibility(model)
 	local st = plausibility[model]
 	local root = model.PrimaryPart
@@ -630,13 +637,31 @@ function Access.CheckPlausibility(model)
 	local cfg = config(model)
 	local spm = cfg.StudsPerMeter or 3.571
 	local h = cfg.Handling or {}
-	local vmax = ((h.RedlineTopGearKmh or 250) / 3.6) * spm * Access.SpeedMargin + 10
+	-- améliorations et réglages du jeu (Perf_ / Tune_) : la vitesse permise suit la voiture réellement préparée
+	local boost = 1 + 0.05 * ((model:GetAttribute("Perf_Engine") or 0) + (model:GetAttribute("Perf_Turbo") or 0))
+	local tunePower = model:GetAttribute("Tune_PowerMult")
+	if type(tunePower) == "number" and tunePower > 1 then
+		boost *= math.sqrt(tunePower)
+	end
+	local vmax = ((h.RedlineTopGearKmh or 250) / 3.6) * spm * Access.SpeedMargin * boost + 10
 	local now = os.clock()
 	local dt = math.max(now - st.t, 1e-3)
 	local moved = (root.Position - st.pos).Magnitude
 	local speed = root.AssemblyLinearVelocity.Magnitude
-	if speed > vmax or moved > vmax * dt * 1.5 + Access.TeleportSlack then
+	local spin = root.AssemblyAngularVelocity.Magnitude
+	st.spinTime = spin > Access.SpinMax and (st.spinTime or 0) + dt or 0
+	if speed > vmax or moved > vmax * dt * 1.5 + Access.TeleportSlack or st.spinTime > Access.SpinHold then
+		st.spinTime = 0
 		model:SetAttribute("DriveViolations", (model:GetAttribute("DriveViolations") or 0) + 1)
+		local pl = st.player
+		if pl and pl.Parent then
+			local n = (pl:GetAttribute("F2R_DriveStrikes") or 0) + 1
+			pl:SetAttribute("F2R_DriveStrikes", n)
+			if n % Access.StrikeLogEvery == 0 then
+				warn(string.format("[FiveMVehicles] %d contrôles de conduite refusés pour %s (%d) : vitesse %.0f/%.0f, rotation %.1f rad/s",
+					n, pl.Name, pl.UserId, speed, vmax, spin))
+			end
+		end
 		local last = st.cf
 		pcall(function()
 			root:SetNetworkOwner(nil)

@@ -473,7 +473,41 @@ local function emissiveFamily(part, color)
 	return family
 end
 
+-- Familles allumées en Neon (pièce entière) même quand leur optique est à émission masquée : la zone des clignotants
+-- est sombre dans le masque d'émission des feux de la m422, ils ne se voyaient pas du tout (constaté de jour et de
+-- nuit, 2026-11-16) ; les pièces de clignotant GTA sont des lentilles séparées, la pièce entière est la bonne forme.
+Runtime.NeonFamilies = { indicator = true }
+local stashedSA = setmetatable({}, { __mode = "k" }) -- pièce -> SurfaceAppearance retirée pendant l'allumage
+
 local function setPart(part, on, color)
+	local family = string.match(part:GetAttribute("LightRole") or "", "^(%a+)")
+	if family and Runtime.NeonFamilies[family] and (part:GetAttribute("EmissiveLit") or stashedSA[part]) then
+		if on then
+			local sa = part:FindFirstChildOfClass("SurfaceAppearance")
+			if sa then
+				stashedSA[part] = sa
+				sa.Parent = nil
+			end
+			part.Material = Enum.Material.Neon
+			part.Color = color or Color3.fromRGB(255, 120, 0)
+			if part:GetAttribute("Visible") ~= false then
+				part.Transparency = 0
+			end
+		else
+			local sa = stashedSA[part]
+			if sa then
+				stashedSA[part] = nil
+				sa.EmissiveStrength = 0
+				sa.Parent = part
+			end
+			part.Material = Enum.Material[part:GetAttribute("OffMaterial") or "Glass"]
+			part.Color = part:GetAttribute("OffColor") or Color3.new(0.6, 0.6, 0.6)
+			if part:GetAttribute("Visible") ~= false then
+				part.Transparency = part:GetAttribute("OffTransparency") or 0
+			end
+		end
+		return
+	end
 	local sa = part:GetAttribute("EmissiveLit") and part:FindFirstChildOfClass("SurfaceAppearance")
 	if sa then
 		local S = Runtime.EmissiveStrength
@@ -570,7 +604,8 @@ function Runtime:_updateLights(s)
 		end
 		return
 	end
-	local now = os.clock()
+	-- temps serveur : les clignotants et la sirène battent en même temps chez tous les joueurs (os.clock déphasait)
+	local now = Workspace:GetServerTimeNow()
 	local blink = (now % 0.75) < 0.4
 	if blink ~= self.BlinkState then
 		self.BlinkState = blink
@@ -1024,6 +1059,7 @@ function Runtime:_estimateSuspension(dt)
 		local comLocal = root.CFrame:PointToObjectSpace(root.AssemblyCenterOfMass) / self.Spm
 		local ok, sim = pcall(Dyn.new, self.Config, comLocal)
 		self.SuspP = (ok and sim and sim.P) or false
+		self.SuspSim = ok and sim or nil
 		self.SuspEst = {}
 		self.SuspParams = RaycastParams.new()
 		self.SuspParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -1033,6 +1069,12 @@ function Runtime:_estimateSuspension(dt)
 	local P = self.SuspP
 	if not P then
 		return nil
+	end
+	-- suspension améliorée (Perf_Suspension) : même caisse abaissée que chez le conducteur
+	local suspLevel = self.Model:GetAttribute("Perf_Suspension") or 0
+	if self.SuspSim and suspLevel ~= self.SuspLevel then
+		self.SuspLevel = suspLevel
+		pcall(Dyn.SetUpgrades, self.SuspSim, { Suspension = suspLevel })
 	end
 	local cam = Workspace.CurrentCamera
 	if cam and (cam.CFrame.Position - self.Root.Position).Magnitude > Runtime.SuspensionEstimateDistance then
@@ -1065,15 +1107,33 @@ function Runtime:_estimateSuspension(dt)
 				target = (travelSt - math.max(d, -travelSt)) / spm - w.x0
 			end
 		end
+		target += P.lowering or 0
 		local cur = self.SuspEst[w.bone] or target
 		self.SuspEst[w.bone] = cur + (target - cur) * k
 	end
 	return self.SuspEst
 end
 
+-- Véhicule conduit par un AUTRE joueur : braquage et régime arrivent par attributs 10 fois par seconde ; lissés ici,
+-- sinon roues, volant et son du moteur avancent par paliers (audit 2026-11-16). `Steer` est le braquage effectif en
+-- fraction de la butée mécanique : WheelSteer = butée mécanique.
+function Runtime:_smoothRemote(dt, s)
+	local hd = self.Config.Handling or {}
+	s.WheelSteer = s.WheelSteer or hd.SteeringLockRad or math.rad(hd.SteeringLockDeg or 35)
+	local k = 1 - math.exp(-dt * 14)
+	self.SmSteer = (self.SmSteer or s.Steer or 0) + ((s.Steer or 0) - (self.SmSteer or s.Steer or 0)) * k
+	s.Steer = self.SmSteer
+	if s.Rpm then
+		local kr = 1 - math.exp(-dt * 10)
+		self.SmRpm = (self.SmRpm or s.Rpm) + (s.Rpm - (self.SmRpm or s.Rpm)) * kr
+		s.Rpm = self.SmRpm
+	end
+end
+
 function Runtime:Update(dt)
 	local s = self:_state()
 	if not s.Suspension then
+		self:_smoothRemote(dt, s)
 		s.Suspension = self:_estimateSuspension(dt) -- pas de télémétrie : ce client ne conduit pas ce véhicule
 	end
 	self.State = s
@@ -1107,6 +1167,10 @@ RunService.RenderStepped:Connect(function(dt)
 			if near or r.IsLocalOccupant then
 				r:Update(dt)
 			elseif slowTick then
+				-- au loin : sons et effets coupés, mais les feux restent à jour (phares d'une voiture qui approche)
+				pcall(function()
+					r:_updateLights(r:_state())
+				end)
 				r:_stopAllSounds()
 				local fxMod = tyreFxModule()
 				if fxMod then
