@@ -170,6 +170,7 @@ local function build(model)
 		local hp = model:FindFirstChild(name, true)
 		if hp and hp:IsA("BasePart") then
 			hidden[hp] = hp.LocalTransparencyModifier
+			hp:SetAttribute("F2R_ScreenHidden", true) -- respecté par les niveaux de détail (VehicleRuntime)
 			hp.LocalTransparencyModifier = 1
 		end
 	end
@@ -195,6 +196,7 @@ local function stop()
 	if active then
 		for hp, v in pairs(active.hidden or {}) do
 			if hp.Parent then
+				hp:SetAttribute("F2R_ScreenHidden", nil)
 				hp.LocalTransparencyModifier = v
 			end
 		end

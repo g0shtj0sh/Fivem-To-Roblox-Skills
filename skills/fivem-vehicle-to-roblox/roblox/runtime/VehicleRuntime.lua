@@ -564,7 +564,7 @@ function Runtime:_setRole(role, on, color, brightness)
 		setPart(p, on, color)
 	end
 	for _, l in ipairs(self.LightObjects[role] or {}) do
-		l.Enabled = on
+		l.Enabled = on and l:GetAttribute("LodOff") ~= true
 		if color then
 			l.Color = color
 		end
@@ -636,6 +636,7 @@ function Runtime:_cabinLight(kind, on)
 		att.Parent = self.Root
 		self.CabinLightObjs[kind] = l
 	end
+	on = on and (self.LodTier or 0) < 2
 	if l and l.Enabled ~= on then
 		l.Enabled = on
 	end
@@ -1315,6 +1316,74 @@ function Runtime:Update(dt)
 	end
 end
 
+-- Niveaux de détail selon la distance, comme les LOD de GTA (demande de l'utilisateur, 2026-11-16 : « plus on est loin,
+-- moins c'est détaillé », pour tous les joueurs). Roblox simplifie déjà chaque maillage (RenderFidelity Automatic) ;
+-- ici on masque LOCALEMENT (LocalTransparencyModifier) des familles de pièces qu'on ne distingue plus de loin :
+--   palier 1 (> Mid studs)  : intérieur (habitacle, volant, écrans, icônes), suspensions, pièces minuscules ;
+--   palier 2 (> Far studs)  : + décalques, logos, moyeux, lumières des petits feux (les phares restent).
+-- Le véhicule où l'on est assis reste complet. Au-delà de RenderDistance, seuls les feux sont tenus à jour.
+Runtime.Lod = { Mid = 80, Far = 200, TinySize = 0.6 }
+local function lodClass(p)
+	local n = string.lower(p.Name)
+	local kind = p:GetAttribute("Kind")
+	if kind == "light" or kind == "glass" or kind == "plate" or kind == "paint" or kind == "collision" or kind == "tire" then
+		return nil
+	end
+	if kind == "interior" or kind == "emissive" or string.find(n, "steeringwheel", 1, true)
+		or string.find(n, "dash", 1, true) or string.find(n, "icons", 1, true) or string.find(n, "seat", 1, true)
+		or string.find(n, "suspension", 1, true) then
+		return 1
+	end
+	if p.Size.Magnitude < Runtime.Lod.TinySize then
+		return 1
+	end
+	if kind == "decal" or string.find(n, "badge", 1, true) or string.find(n, "emblem", 1, true) or string.find(n, "hub_", 1, true) then
+		return 2
+	end
+	return nil
+end
+
+function Runtime:_applyLod(tier)
+	if self.LodTier == tier then
+		return
+	end
+	self.LodTier = tier
+	if not self.LodParts then
+		self.LodParts = { {}, {} }
+		for _, p in ipairs(self.Model:GetDescendants()) do
+			if p:IsA("BasePart") and p.Transparency < 1 then
+				local c = lodClass(p)
+				if c then
+					table.insert(self.LodParts[c], p)
+				end
+			end
+		end
+	end
+	for c = 1, 2 do
+		local hide = tier >= c
+		for _, p in ipairs(self.LodParts[c]) do
+			if p.Parent then
+				-- une pièce masquée par l'écran du combiné (VehicleScreen) le reste
+				p.LocalTransparencyModifier = (hide or p:GetAttribute("F2R_ScreenHidden") == true) and 1 or 0
+			end
+		end
+	end
+	-- petites lumières (feux arrière, stop, recul, clignotants, plafonnier, plaque) : coupées au palier 2
+	for role, list in pairs(self.LightObjects or {}) do
+		if not string.find(role, "^headlight") then
+			for _, l in ipairs(list) do
+				l:SetAttribute("LodOff", tier >= 2 or nil)
+				if tier >= 2 then
+					l.Enabled = false
+				end
+			end
+		end
+	end
+	if tier < 2 then
+		self.LastLightState = {} -- les feux reprennent leur état réel à la prochaine mise à jour
+	end
+end
+
 local accum = 0
 RunService.RenderStepped:Connect(function(dt)
 	local cam = Workspace.CurrentCamera
@@ -1328,7 +1397,12 @@ RunService.RenderStepped:Connect(function(dt)
 		if model.Parent == nil or not r.Root.Parent then
 			Runtime.Detach(model)
 		else
-			local near = (r.Root.Position - camPos).Magnitude < Runtime.RenderDistance
+			local dist = (r.Root.Position - camPos).Magnitude
+			local near = dist < Runtime.RenderDistance
+			if slowTick or r.LodTier == nil then
+				local L = Runtime.Lod
+				r:_applyLod(r.IsLocalOccupant and 0 or (dist > L.Far and 2) or (dist > L.Mid and 1) or 0)
+			end
 			if near or r.IsLocalOccupant then
 				r:Update(dt)
 			elseif slowTick then
