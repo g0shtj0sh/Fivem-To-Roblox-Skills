@@ -410,6 +410,9 @@ for name, info in pairs(PARTS) do
 				p:SetAttribute("EmissiveMask", SOUND_IDS[info.EmissiveMask])
 			end
 			local role = info.Light or ("siren" .. tostring(info.Siren))
+			if info.LightOverlay then
+				p:SetAttribute("LightOverlay", true) -- couche posée sur un autre feu (VehicleRuntime.HideWhenOff)
+			end
 			if kind == "light" then
 				p:SetAttribute("LightRole", role)
 			else

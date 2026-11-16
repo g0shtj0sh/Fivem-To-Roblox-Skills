@@ -528,6 +528,24 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                 info["GlassTexture"] = gpng.name
         parts_cfg[p.name] = info
 
+    # Feux posés EXACTEMENT sur un autre feu (m422 : 81 % des sommets du clignotant avant sont ceux du feu de jour) :
+    # les deux couches se battent à l'écran ; marquées LightOverlay, le runtime masque la couche du dessus éteinte et
+    # efface le feu de jour pendant qu'elle clignote (VehicleRuntime.HideWhenOff, 2026-11-16)
+    light_parts = {pp.name: pp for pp in vb.parts if pp.name in parts_cfg and parts_cfg[pp.name].get("Light")}
+    bases = [pp for n, pp in light_parts.items() if parts_cfg[n]["Light"] == "always_on"]
+    for n, pp in light_parts.items():
+        if not str(parts_cfg[n]["Light"]).startswith("indicator") or not bases or len(pp.pos) == 0:
+            continue
+        P = np.asarray(pp.pos, dtype=float)
+        near = np.zeros(len(P), dtype=bool)
+        for bp in bases:
+            B = np.asarray(bp.pos, dtype=float)
+            for i0 in range(0, len(P), 256):
+                d = np.min(np.linalg.norm(P[i0:i0 + 256, None, :] - B[None, :, :], axis=2), axis=1)
+                near[i0:i0 + 256] |= d < 0.005
+        if near.mean() >= 0.5:
+            parts_cfg[n]["LightOverlay"] = True
+            report.info(f"Feu {n} posé sur le feu de jour ({near.mean():.0%} de sommets communs) : couche masquée éteinte.")
     if veiled:
         report.warn(f"{len(veiled)} pièce(s) opaque(s) gardent une alpha uniforme : Roblox les mélangera à leur couleur "
                     "(aspect délavé, ex. écrans). À aplatir dans make_material : " + ", ".join(veiled[:12]))
@@ -605,7 +623,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
 
     # ---- configuration Roblox
     config = build_config(name, vinfo, variation, carcols, handling, vb, parts_cfg, mods_cfg, stat_cfg,
-                          mod_count, carriers, livery_names, audio, is_emergency, args)
+                          mod_count, carriers, livery_names, audio, is_emergency, args, report)
     if naming is not None:
         config["Make"] = naming.brand.brolver if naming.brand else ""
         config["Brand"] = config["Make"]
@@ -771,7 +789,7 @@ def plates_config(vb: VehicleBuilder, vinfo: dict, variation: dict, parts_cfg: d
 
 
 def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, parts_cfg, mods_cfg, stat_cfg,
-                 mod_count, carriers, livery_names, audio, is_emergency, args) -> dict:
+                 mod_count, carriers, livery_names, audio, is_emergency, args, report) -> dict:
     lo, hi = vb.bounds()
     bones = vb.bones_info()
     owners = sorted({i["Owner"] for i in parts_cfg.values() if i["Kind"] != "collision"} - {vb.skel.root_name})

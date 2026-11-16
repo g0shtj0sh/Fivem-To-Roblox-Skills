@@ -498,12 +498,24 @@ end
 -- Familles allumées en Neon (pièce entière) même quand leur optique est à émission masquée : la zone des clignotants
 -- est sombre dans le masque d'émission des feux de la m422, ils ne se voyaient pas du tout (constaté de jour et de
 -- nuit, 2026-11-16) ; les pièces de clignotant GTA sont des lentilles séparées, la pièce entière est la bonne forme.
-Runtime.NeonFamilies = { indicator = true }
+Runtime.NeonFamilies = { indicator = true } -- clignotants à lentille séparée (feux arrière m422) : Neon entier
+-- Clignotants posés EXACTEMENT sur un autre feu (m422 : la couche orange à traits du clignotant avant recouvre la
+-- couche blanche à traits du feu de jour, même géométrie) : les deux couches se battaient à l'écran (traits orange
+-- visibles sans clignoter, signalé par l'utilisateur 2026-11-16, et clignotant invisible). Ces familles sont MASQUÉES
+-- éteintes et s'allument par leur masque d'émission (les traits de la texture, comme GTA) ; le feu de jour avant est
+-- masqué tant qu'un clignotant est actif (comme la vraie voiture : le feu de jour s'efface pendant le clignotement).
+Runtime.HideWhenOff = { indicator = true }
+Runtime.EmissiveStrength.indicator = 22
 local stashedSA = setmetatable({}, { __mode = "k" }) -- pièce -> SurfaceAppearance retirée pendant l'allumage
 
 local function setPart(part, on, color)
 	local family = string.match(part:GetAttribute("LightRole") or "", "^(%a+)")
-	if family and Runtime.NeonFamilies[family] and (part:GetAttribute("EmissiveLit") or stashedSA[part]) then
+	local overlay = part:GetAttribute("F2R_LightOverlay") == true -- posé sur un autre feu (voir Runtime.HideWhenOff)
+	if overlay then
+		-- masqué éteint ; allumé par son masque d'émission (les traits de sa texture)
+		part.LocalTransparencyModifier = on and 0 or 1
+	end
+	if not overlay and family and Runtime.NeonFamilies[family] and (part:GetAttribute("EmissiveLit") or stashedSA[part]) then
 		if on then
 			local sa = part:FindFirstChildOfClass("SurfaceAppearance")
 			if sa then
@@ -564,6 +576,49 @@ local function setPart(part, on, color)
 		part.Color = part:GetAttribute("OffColor") or Color3.new(0.6, 0.6, 0.6)
 		if part:GetAttribute("Visible") ~= false then
 			part.Transparency = part:GetAttribute("OffTransparency") or 0
+		end
+	end
+end
+
+-- Repère une fois les pièces de feu des familles HideWhenOff posées sur une pièce « always_on » (recouvrement > 15 %
+-- de la plus petite des deux boîtes) : attribut local F2R_LightOverlay.
+function Runtime:_markLightOverlays()
+	if self.OverlaysMarked then
+		return
+	end
+	self.OverlaysMarked = true
+	local base = self.LightParts["always_on"] or {}
+	local function box(p)
+		local h = p.Size / 2
+		return p.Position - h, p.Position + h
+	end
+	for role, parts in pairs(self.LightParts or {}) do
+		local family = string.match(role, "^(%a+)")
+		if family and Runtime.HideWhenOff[family] then
+			for _, p in ipairs(parts) do
+				-- repérage fiable : la conversion compare les sommets (attribut LightOverlay posé par le Setup)
+				if p:GetAttribute("LightOverlay") == true then
+					p:SetAttribute("F2R_LightOverlay", true)
+					self.HasLightOverlay = true
+				end
+				local a0, a1 = box(p)
+				for _, q in ipairs(base) do
+					local b0, b1 = box(q)
+					local lo, hi = a0:Max(b0), a1:Min(b1)
+					local inter = hi - lo
+					if inter.X > 0 and inter.Y > 0 and inter.Z > 0 then
+						-- comparé à la plus petite des deux boîtes : la pièce de clignotant avant de la m422 englobe aussi le
+						-- répétiteur du rétroviseur, sa boîte est bien plus grande que la zone partagée avec le feu de jour
+						local vi = inter.X * inter.Y * inter.Z
+						local va = (a1 - a0).X * (a1 - a0).Y * (a1 - a0).Z
+						local vb = (b1 - b0).X * (b1 - b0).Y * (b1 - b0).Z
+						if vi / math.max(math.min(va, vb), 1e-6) > 0.15 then
+							p:SetAttribute("F2R_LightOverlay", true)
+							self.HasLightOverlay = true
+						end
+					end
+				end
+			end
 		end
 	end
 end
@@ -813,6 +868,17 @@ function Runtime:_updateLights(s)
 	self:_setRole("brakelight_m", s.Brake, LIGHT_COLORS.brake, 0.6)
 	-- plafonnier : portière ouverte (comme une vraie voiture) ou interrupteur (touche I) ; éclairage de plaque avec les
 	-- feux de position et les phares (avant le 2026-11-16 : os interiorlight / platelight sans aucune lumière)
+	-- feu de jour avant effacé tant qu'un clignotant posé dessus est actif (voir Runtime.HideWhenOff)
+	self:_markLightOverlays()
+	local indicating = self.HasLightOverlay == true and s.Indicator ~= "Off" and s.Indicator ~= nil
+	if indicating ~= self.DrlHidden then
+		self.DrlHidden = indicating
+		for _, p in ipairs(self.LightParts["always_on"] or {}) do
+			if self.Root.CFrame:PointToObjectSpace(p.Position).Z < 0 then
+				p.LocalTransparencyModifier = indicating and 1 or 0
+			end
+		end
+	end
 	local doorOpen = false
 	for bone in pairs(self.Config.Hinges or {}) do
 		if string.find(bone, "door", 1, true) and (self.Model:GetAttribute("Door_" .. bone) or 0) > 0.5 then
