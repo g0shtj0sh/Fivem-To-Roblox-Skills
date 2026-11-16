@@ -130,6 +130,37 @@ function Custom.Refresh(model)
 		part.Transparency = visible and base or 1
 		part:SetAttribute("Visible", visible)
 	end
+	-- décalques, textures et écrans (plaque) posés sur une pièce masquée (coffre arraché…) : masqués avec elle
+	-- (signalé par l'utilisateur, 2026-11-16 : la plaque restait en l'air quand le coffre était parti)
+	for _, d in ipairs(model:GetDescendants()) do
+		-- hôte = la pièce visuelle la plus proche (la plaque est une SurfaceGui sur « PlateSurfaceRear », pièce
+		-- invisible posée DANS boot__licenseplate : c'est la visibilité de cette dernière qui compte)
+		local host = d.Parent
+		while host and host:IsA("BasePart") and host:GetAttribute("Visible") == nil and host.Parent and host.Parent:IsA("BasePart") do
+			host = host.Parent
+		end
+		if not invisible and host and host:IsA("BasePart") and (d:IsA("Decal") or d:IsA("SurfaceGui")) then
+			local hide = host:GetAttribute("Visible") == false
+			if d:IsA("Decal") then
+				if hide then
+					if d:GetAttribute("BaseTransparency") == nil then
+						d:SetAttribute("BaseTransparency", d.Transparency)
+					end
+					d.Transparency = 1
+				elseif d:GetAttribute("BaseTransparency") ~= nil then
+					d.Transparency = d:GetAttribute("BaseTransparency")
+				end
+			elseif hide then
+				if d:GetAttribute("WasEnabled") == nil then
+					d:SetAttribute("WasEnabled", d.Enabled)
+				end
+				d.Enabled = false
+			elseif d:GetAttribute("WasEnabled") ~= nil then
+				d.Enabled = d:GetAttribute("WasEnabled")
+				d:SetAttribute("WasEnabled", nil)
+			end
+		end
+	end
 	if Custom.RefreshNeons then
 		Custom.RefreshNeons(model)
 	end
@@ -998,7 +1029,7 @@ Custom.Seats = seatsOf
 
 -- Portière / capot / coffre arraché : ses pièces disparaissent jusqu'à la réparation. keepDebris : une copie
 -- de ses pièces tombe au sol et disparaît après DebrisLifetime s (comme dans GTA) ; sinon elle disparaît aussitôt.
-Custom.DebrisLifetime = 30
+Custom.DebrisLifetime = 60 -- s (demande de l'utilisateur, 2026-11-16 : « tomber puis disparaître 1 min après »)
 function Custom.RemoveDoor(model, bone, keepDebris)
 	local cfg = getConfig(model)
 	assert(cfg.Hinges and cfg.Hinges[bone], "Charnière inconnue : " .. tostring(bone))
@@ -1018,9 +1049,15 @@ function Custom.RemoveDoor(model, bone, keepDebris)
 			local first
 			for _, part in ipairs(pieces) do
 				local copy = part:Clone()
-				for _, d in ipairs(copy:GetChildren()) do
-					if d:IsA("JointInstance") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
+				-- TOUS les descendants : la plaque est une pièce enfant (PlateSurfaceRear) soudée à la pièce d'origine ;
+				-- sa soudure clonée garderait la copie accrochée au véhicule
+				local nested = {}
+				for _, d in ipairs(copy:GetDescendants()) do
+					if d:IsA("JointInstance") or d:IsA("WeldConstraint") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
 						d:Destroy()
+					elseif d:IsA("BasePart") then
+						d.Anchored, d.CanCollide, d.CanQuery, d.CanTouch, d.Massless = false, false, false, false, true
+						table.insert(nested, d)
 					end
 				end
 				copy.Anchored = false
@@ -1030,6 +1067,10 @@ function Custom.RemoveDoor(model, bone, keepDebris)
 				copy.CanTouch = false
 				copy:SetAttribute("F2RPart", nil)
 				copy.Parent = debris
+				for _, n in ipairs(nested) do
+					local w = Instance.new("WeldConstraint")
+					w.Part0, w.Part1, w.Parent = copy, n, n
+				end
 				if first then
 					local w = Instance.new("WeldConstraint")
 					w.Part0, w.Part1, w.Parent = first, copy, copy
@@ -1040,6 +1081,17 @@ function Custom.RemoveDoor(model, bone, keepDebris)
 			end
 			debris.PrimaryPart = first
 			debris.Parent = workspace
+			-- elle part avec l'élan du véhicule, un peu écartée de la caisse (sinon elle reste « posée » dessus)
+			local root = model.PrimaryPart
+			if root and first then
+				local away = (first.Position - root.Position) * Vector3.new(1, 0, 1)
+				away = away.Magnitude > 1e-3 and away.Unit or Vector3.zero
+				first.AssemblyLinearVelocity = root.AssemblyLinearVelocity + away * 8 + Vector3.new(0, 6, 0)
+				first.AssemblyAngularVelocity = root.AssemblyAngularVelocity
+				pcall(function()
+					first:SetNetworkOwner(nil)
+				end)
+			end
 			game:GetService("Debris"):AddItem(debris, Custom.DebrisLifetime)
 		end
 	end

@@ -1497,11 +1497,16 @@ function Runtime:_applyDirt()
 					t.Parent = p
 					table.insert(self.DirtTextures, t)
 				end
+				-- pièce masquée ou réaffichée (ouvrant arraché, réparation) : la crasse suit
+				p:GetPropertyChangedSignal("Transparency"):Connect(function()
+					self.DirtKey = nil
+				end)
 			end
 		end
 	end
 	for _, t in ipairs(self.DirtTextures) do
-		t.Transparency = 1 - (key / 20) * 0.92
+		local host = t.Parent
+		t.Transparency = (host and host:IsA("BasePart") and host.Transparency >= 0.99) and 1 or (1 - (key / 20) * 0.92)
 	end
 end
 

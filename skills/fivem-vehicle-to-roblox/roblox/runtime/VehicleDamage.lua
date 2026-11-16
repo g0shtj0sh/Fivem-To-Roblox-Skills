@@ -15,17 +15,24 @@
 --   une fois sur chaque client. Repair remet tout à neuf. NoDamage = invincible.
 
 local Damage = {}
-Damage.MinImpact = 4 -- m/s de variation de vitesse horizontale en un pas : en dessous, rien
+-- ROBUSTESSE (2026-11-16, demande de l'utilisateur : « les véhicules bien plus robustes, le but n'est pas d'aller
+-- au garage toutes les 2 min », pensé pour les courses-poursuites). Avant : MinImpact 4, BodyPerMs 26,
+-- EnginePerMs 20, feux dès le seuil, vitres 7, arrachage 16 — un mur à ~90 km/h (variation mesurée 26,6 m/s)
+-- ôtait ~450 points au moteur et faisait fumer dès le 1er choc. Maintenant, même mur : ~125 points au moteur,
+-- fumée après 4 à 5 gros chocs de face, moteur mort après ~8 ; un accrochage à 50 km/h (~14 m/s) : ~50 points.
+Damage.MinImpact = 6 -- m/s de variation de vitesse horizontale en un pas : en dessous, rien
 Damage.MaxImpact = 40
-Damage.BodyPerMs = 26 -- points de carrosserie par m/s au-delà du seuil
-Damage.EnginePerMs = 20
+Damage.BodyPerMs = 10 -- points de carrosserie par m/s au-delà du seuil
+Damage.EnginePerMs = 6.5
+Damage.LightMin = 9 -- m/s : un feu ne casse qu'au-delà
 Damage.SmokeBelow = 450
 Damage.HeavySmokeBelow = 220
 Damage.FireBelow = 60
 Damage.LightRadius = 0.55 -- m (+ 0,05 par m/s au-delà du seuil)
 Damage.WindowRadius = 0.7 -- m (+ 0,06 par m/s) ; une vitre ne casse qu'au-delà de WindowMin
-Damage.WindowMin = 7
-Damage.DetachAt = 16 -- m/s : un ouvrant du côté du choc est arraché
+Damage.WindowMin = 13
+Damage.DetachAt = 22 -- m/s (≈ 80 km/h dans un mur) : un ouvrant du côté du choc est arraché ; il TOMBE
+-- (copie physique) et disparaît après VehicleCustomization.DebrisLifetime s, comme les éclats de vitre
 Damage.DetachRadius = 1.0 -- m
 
 local function cfgOf(model)
@@ -106,7 +113,7 @@ function Damage.Apply(model, dir, strength)
 
 	-- feux au point d'impact
 	local lr = Damage.LightRadius + 0.05 * over
-	for role, pos in pairs(cfg.Lights or {}) do
+	for role, pos in pairs(strength >= Damage.LightMin and cfg.Lights or {}) do
 		if (v3(pos) - P).Magnitude < lr then
 			model:SetAttribute("LightBroken_" .. role, true)
 		end
@@ -136,7 +143,7 @@ function Damage.Apply(model, dir, strength)
 			local c = partCenters(model, cfg, bone .. "__")
 			if c and (Vector3.new(c.X, P.Y, c.Z) - P).Magnitude < Damage.DetachRadius and model:GetAttribute("DoorRemoved_" .. bone) ~= true then
 				if ok and Custom and Custom.RemoveDoor then
-					pcall(Custom.RemoveDoor, model, bone)
+					pcall(Custom.RemoveDoor, model, bone, true) -- la pièce tombe au sol
 				end
 			end
 		end
@@ -201,21 +208,31 @@ function Damage.UpdateFx(renderer)
 		smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(0.6, 0.6),
 			NumberSequenceKeypoint.new(1, 1) })
 		smoke.LightInfluence = 1
+		smoke.ZOffset = -1
 		smoke.Parent = att
 		local fire = Instance.new("ParticleEmitter")
 		fire.Texture = Damage.FireTexture
-		fire.Lifetime = NumberRange.new(0.4, 0.8)
-		fire.Speed = NumberRange.new(3, 6)
-		fire.SpreadAngle = Vector2.new(15, 15)
-		fire.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1.4), NumberSequenceKeypoint.new(1, 0.2) })
+		-- flammes DEVANT la fumée (ZOffset), plus grosses et plus vives : la fumée noire les cachait (capture de
+		-- l'utilisateur, 2026-11-16) ; la fumée s'éclaircit et ralentit quand le moteur brûle (stage 3)
+		fire.Lifetime = NumberRange.new(0.45, 0.9)
+		fire.Speed = NumberRange.new(4, 8)
+		fire.SpreadAngle = Vector2.new(22, 22)
+		fire.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.6), NumberSequenceKeypoint.new(0.5, 1.8),
+			NumberSequenceKeypoint.new(1, 0.3) })
+		fire.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(0.7, 0.3),
+			NumberSequenceKeypoint.new(1, 1) })
+		fire.Rotation = NumberRange.new(0, 360)
+		fire.RotSpeed = NumberRange.new(-90, 90)
+		fire.Brightness = 3
+		fire.ZOffset = 3
 		fire.LightEmission = 1
 		fire.Color = ColorSequence.new(Color3.fromRGB(255, 160, 60), Color3.fromRGB(255, 60, 20))
 		fire.Enabled = false
 		fire.Parent = att
 		local light = Instance.new("PointLight")
 		light.Color = Color3.fromRGB(255, 130, 50)
-		light.Range = 10
-		light.Brightness = 2
+		light.Range = 14
+		light.Brightness = 4
 		light.Enabled = false
 		light.Parent = att
 		att.Parent = renderer.Root
@@ -223,10 +240,14 @@ function Damage.UpdateFx(renderer)
 		renderer.DamageFx = fx
 	end
 	fx.smoke.Enabled = stage >= 1
-	fx.smoke.Rate = stage >= 2 and 24 or 9
+	fx.smoke.Rate = (stage >= 2 and 22) or 9
 	fx.smoke.Color = ColorSequence.new(stage >= 2 and Color3.fromRGB(40, 40, 42) or Color3.fromRGB(170, 170, 172))
+	-- en feu : la fumée reste derrière les flammes (ZOffset) et n'est presque plus éclairée par la lumière du feu
+	fx.smoke.LightInfluence = stage >= 3 and 0.3 or 1
+	fx.smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.6, 0.6), NumberSequenceKeypoint.new(1, 1) })
 	fx.fire.Enabled = stage >= 3
-	fx.fire.Rate = 30
+	fx.fire.Rate = 55
 	fx.light.Enabled = stage >= 3
 end
 
