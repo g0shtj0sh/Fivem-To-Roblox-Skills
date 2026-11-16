@@ -19,6 +19,11 @@ local Pose = require(folder:WaitForChild("VehiclePose"))
 Pose.Start() -- posture des occupants de tous les véhicules (sur chaque client)
 require(folder:WaitForChild("VehicleCamera")).Start() -- caméra de l'occupant local, vues façon Assetto Corsa (V)
 require(folder:WaitForChild("VehicleMirror")).Start() -- rétroviseur virtuel en haut de l'écran (B)
+-- combiné d'instruments vivant (VehicleConfig.ClusterScreen) ; absent d'un ancien runtime : ignoré
+local screenModule = folder:WaitForChild("VehicleScreen", 5)
+if screenModule then
+	require(screenModule).Start()
+end
 -- portières / capot / coffre : Alt gauche maintenu + clic, comme ox_target sur FiveM (invites gardées au tactile / manette)
 local targetModule = folder:WaitForChild("VehicleTarget", 10)
 if targetModule then

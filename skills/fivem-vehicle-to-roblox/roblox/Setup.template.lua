@@ -929,6 +929,7 @@ if SOURCES then
 	upsert(folder, "ModuleScript", "VehiclePose", SOURCES.VehiclePose)
 	upsert(folder, "ModuleScript", "VehicleCamera", SOURCES.VehicleCamera)
 	upsert(folder, "ModuleScript", "VehicleMirror", SOURCES.VehicleMirror)
+	upsert(folder, "ModuleScript", "VehicleScreen", SOURCES.VehicleScreen)
 	upsert(folder, "ModuleScript", "VehicleTyreFx", SOURCES.VehicleTyreFx)
 	upsert(folder, "ModuleScript", "VehicleBackfire", SOURCES.VehicleBackfire)
 	upsert(folder, "ModuleScript", "VehicleTarget", SOURCES.VehicleTarget)
