@@ -486,9 +486,9 @@ Améliorations : `Custom.SetPerformance(car, slot, niveau)` (serveur) borne le n
 | Slot | Niveaux | Effet (`VehicleDynamics`) |
 |---|---|---|
 | `Engine` | 1-4 | DriveForce × (1 + 0,2 × statMods / 100) — DATAMINÉ (100 % → +20 %) |
-| `Transmission` | 1-3 | +1 rapport dès le niveau 1, embrayage × (1 + statMods / 100) |
-| `Brakes` | 1-3 | BrakeForce × (1 + statMods / 100) |
-| `Suspension` | 1-4 | raideur et anti-roulis × (1 + 0,5 × statMods / 100) ; la caisse n'est pas abaissée |
+| `Transmission` | 1-3 | +1 rapport dès le niveau 1, embrayage × max(1 + statMods / 100, `Tuning.TransmissionClutchMult` 1,5 / 2,25 / 3) |
+| `Brakes` | 1-3 | BrakeForce × (1 + statMods / 100) **et** adhérence au freinage + `Tuning.BrakeGripPerLevel` (7 / 14 / 22 %) |
+| `Suspension` | 1-4 | caisse abaissée de `Tuning.SuspensionLowerM` (1,5 / 3 / 4,5 / 6 cm, roues dessinées en conséquence, aussi chez les autres joueurs), raideur × (1 + 0,5 × statMods / 100), anti-roulis × (1 + 0,2 × niveau) |
 | `Turbo` | 1 | + `Tuning.TurboGain` (10 %) de couple une fois chargé (`TurboSpool` 1,2 s) ; `out.turbo` pour un sifflement |
 | `Unlimited` | 1 | débridage : lève `Performance.LimiterKmh` (proposé seulement si le véhicule est bridé) |
 | `Armor` | 1-5 | aucun effet de conduite (comme GTA) |
@@ -496,6 +496,14 @@ Améliorations : `Custom.SetPerformance(car, slot, niveau)` (serveur) borne le n
 Les pourcentages (`statMods`) viennent du carcols du véhicule (`VehicleConfig.StatMods`), à défaut
 `VehicleDynamics.UpgradeDefaults` (Engine 25/50/75/100, Transmission 25/50/75, Brakes 20/40/60,
 Suspension 20/40/60/80). Seule la loi du moteur est documentée par GTA ; les autres sont posées.
+
+**Chaque niveau doit se sentir** (2026-11-16, mesuré sur le m422, piste `TestTrack` + `DriveBench`, PC Studio, une
+mesure par niveau). Avant : freins ×2 = 100-0 en 20,5 → 20,4 m (le freinage plafonne à l'adhérence, pas à la force),
+suspension +11 % = roulis 1,39 → 1,26°, transmission 1 ≈ 3. Après : **freins** 100-0 21,0 / 19,5 / 18,2 / 17,1 m ;
+**suspension** caisse 0,488 / 0,472 / 0,457 / 0,427 m (niveaux 0/1/2/4), roulis à 60 km/h 1,39 / 1,18 / 1,02 / 0,77°,
+centres des roues dessinées toujours à 0,328 m du sol ; **transmission** passage 0,147 / 0,095 / 0,067 / 0,051 s,
+0-100 3,54 / 3,42 / 3,32 / 3,28 s ; **moteur 4** 0-100 3,52 → 2,72 s. Piège : dans ce moteur `P.raise` REMONTE la roue
+dans la caisse (haut de course = rest + upper + raise) ; abaisser = augmenter `raise` (essai inverse : la caisse montait).
 
 ## Custom (côté serveur)
 
@@ -667,6 +675,7 @@ Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a a
    | `"KickOut"` | — | `KickOccupants` |
    | `"HornTune"` | — | `PlayHornTune` |
    | `"Seat"` | — | `CycleSeat` : le joueur passe au siège libre suivant |
+   | `"PaintFade"` | 0..1 | `SetPaintFade` : décoloration (couleur ternie, éclaircie, moins brillante ; attribut `PaintFade`, sauvegardé) ; refus `"absent"` sans pièce peinte |
    | `"EngineSound"` | nom d'un son du pack (`brolver_coupe_03`), `nil` = son d'origine | `SetEngineSound` : seulement un son de la **même catégorie** que le véhicule (raison `"other_category"` sinon), voir « Changer le son moteur en jeu » |
 
    Le serveur (`FiveMVehiclesServer`) limite le débit (8 par seconde, rafale 12, par joueur), appelle la règle

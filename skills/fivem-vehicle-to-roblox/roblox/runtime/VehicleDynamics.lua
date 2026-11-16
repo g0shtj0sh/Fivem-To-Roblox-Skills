@@ -463,7 +463,9 @@ function Dyn.SetUpgrades(sim, levels)
 	local arbK = suspK * (1 + (T.SuspensionArbPerLevel or 0) * math.max(su, 0))
 	P.kF, P.kR, P.arbF, P.arbR = B.kF * suspK, B.kR * suspK, B.arbF * arbK, B.arbR * arbK
 	P.lowering = perLevel(T.SuspensionLowerM, su) or 0
-	P.raise = (B.raise or 0) - P.lowering
+	-- ici `raise` remonte la roue dans la caisse (haut de course = rest + upper + raise) : la caisse descend d'autant
+	-- (mesuré 2026-11-16 : avec « raise − abaissement », la caisse MONTAIT de 0,488 à 0,547 m au niveau 4)
+	P.raise = (B.raise or 0) + P.lowering
 	for _, w in ipairs(P.wheels or {}) do
 		w.k = w.front and P.kF or P.kR
 	end

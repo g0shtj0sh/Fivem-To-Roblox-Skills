@@ -164,7 +164,7 @@ end
 -- Décoloration de la peinture (vMenu « Décoloration de la peinture », 0 = neuve, 1 = très passée) : la couleur
 -- perd sa saturation, s'éclaircit vers un gris crayeux et la carrosserie perd son brillant. Attribut PaintFade ;
 -- la couleur choisie (Color_<couche>) reste intacte, seule la couleur affichée est passée.
-Custom.PaintFadeLook = { Saturation = 0.65, Lighten = 0.35, Chalk = 0.78, Reflectance = 0.85 }
+Custom.PaintFadeLook = { Saturation = 0.45, Lighten = 0.25, Chalk = 0.78, Reflectance = 0.85 } -- 0.65 / 0.35 essayés : rouge 100 % passé = rose pastel, trop fort (observé, 2026-11-16)
 
 local function fadeAmount(model)
 	local f = model:GetAttribute("PaintFade")
