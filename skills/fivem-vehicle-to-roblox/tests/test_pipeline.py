@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import struct
 import subprocess
 import sys
@@ -34,7 +35,8 @@ def test_pipeline():
         tmp = Path(tmp)
         zpath = make_fixture.main(tmp / "fx")
         r = subprocess.run([sys.executable, str(ROOT / "scripts" / "convert_vehicle.py"), str(zpath),
-                            "-o", str(tmp / "out"), "--no-build", "--no-ogg"], capture_output=True, text=True)
+                            "-o", str(tmp / "out"), "--no-build", "--no-ogg"], capture_output=True, text=True,
+                           env={**os.environ, "F2R_TEXTURE_BASELINES": str(tmp / "baselines")})
         assert r.returncode == 0, r.stderr
         out = tmp / "out" / "testcar"
         gltf = read_glb(out / "testcar.glb")
@@ -139,8 +141,48 @@ def test_pipeline():
         assert abs(x - 0.043) < 1e-3 and abs(y - 0.38) < 1e-3 and abs(w - 0.902) < 1e-3 and abs(h - 0.461) < 1e-3
         assert cfg["PlateText"] == ""                                     # plaque unique générée en jeu
         assert "VehiclePlates" in (out / "studio" / "FiveMRuntime.lua").read_text()
+        # garde-fou textures : première conversion -> référence enregistrée, manifeste écrit
+        assert (tmp / "baselines" / "testcar.json").exists() and (out / "texture_manifest.json").exists()
         print(f"OK : {len(names)} nœuds, {len(gltf['images'])} images")
+
+
+def test_texture_guard():
+    """Une pièce qui perd sa texture ou sa transparence par rapport à la dernière conversion acceptée : code 3,
+    rapport en tête, référence inchangée ; --accept-texture-changes l'accepte (régression du 2026-11-16)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        zpath = make_fixture.main(tmp / "fx")
+        env = {**os.environ, "F2R_TEXTURE_BASELINES": str(tmp / "baselines")}
+
+        def run(*extra):
+            return subprocess.run([sys.executable, str(ROOT / "scripts" / "convert_vehicle.py"), str(zpath),
+                                   "-o", str(tmp / "out"), "--no-build", "--no-ogg", *extra],
+                                  capture_output=True, text=True, env=env)
+        assert run().returncode == 0
+        assert run().returncode == 0                                       # même résultat : aucune perte
+        bpath = tmp / "baselines" / "testcar.json"
+        base = json.loads(bpath.read_text(encoding="utf-8"))
+        parts = base["parts"]
+        plain = next(n for n, e in parts.items() if not e["tex"])
+        glass = next((n for n, e in parts.items() if e["blend"]), None)
+        parts[plain]["tex"] = True                                         # la référence avait une texture ici
+        if glass is None:
+            glass = next(n for n, e in parts.items() if n != plain)
+        parts[glass]["blend"] = True
+        parts["piece_disparue"] = {"kind": "generic", "tex": True, "normal": False, "blend": False, "emask": False}
+        bpath.write_text(json.dumps(base), encoding="utf-8")
+        r = run()
+        assert r.returncode == 3, r.stderr
+        report = (tmp / "out" / "testcar" / "report.md").read_text(encoding="utf-8")
+        assert "RÉGRESSION DES TEXTURES" in report.split("## Résultat")[0]
+        lost = json.loads((tmp / "out" / "testcar" / "texture_regression.json").read_text(encoding="utf-8"))
+        assert plain in lost["tex"] and lost["parts"] == ["piece_disparue"]
+        assert json.loads(bpath.read_text(encoding="utf-8"))["parts"][plain]["tex"] is True   # référence gardée
+        assert run("--accept-texture-changes").returncode == 0
+        assert run().returncode == 0                                       # nouvelle référence acceptée
+        print("OK : garde-fou textures")
 
 
 if __name__ == "__main__":
     test_pipeline()
+    test_texture_guard()

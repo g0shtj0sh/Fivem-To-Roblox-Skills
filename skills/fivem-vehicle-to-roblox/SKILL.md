@@ -58,6 +58,16 @@ brolver_super_03` (ou une catégorie, ex. `muscle`) force le choix ; `--no-engin
 Sans chemin, le pack est **téléchargé automatiquement** depuis la release GitHub `brolver-motor-sounds-v1` (une URL est aussi acceptée) ; le .rar est téléchargé et décompressé une seule fois (7-Zip, sinon `unrar`/`rar` du PATH) dans `%LOCALAPPDATA%/f2r/engine_pack` (`~/.cache/f2r/engine_pack` hors Windows).
 Code 2 = binaires sans extracteur : installer .NET 8 (ci-dessus) et relancer ; sinon export XML
 CodeWalker par l'utilisateur ; `dlc.rpf` chiffré → OpenIV.
+**Code 3 = régression des textures : NE PAS INSTALLER.** Chaque conversion compare, pièce par pièce, texture
+de couleur, transparence, normal map et masque d'émission à la **dernière conversion acceptée du même véhicule**
+(référence `~/.cache/f2r/texture_baselines/<nom>.json`, `%LOCALAPPDATA%` sous Windows ; `--texture-baselines` ou
+`F2R_TEXTURE_BASELINES` pour un autre dossier). Une pièce qui perd l'une d'elles ou disparaît = section
+« RÉGRESSION DES TEXTURES » en tête de `report.md`, `texture_regression.json`, code 3, référence inchangée.
+Chercher la cause dans le convertisseur (`git log` des fichiers `scripts/f2r/`) avant toute installation ;
+`--accept-texture-changes` seulement pour une perte voulue et expliquée à l'utilisateur. Première conversion
+d'un véhicule : la référence est créée (ligne « Textures : … référence enregistrée ») ; la créer depuis une
+conversion **approuvée par l'utilisateur**. Origine : le 2026-11-16 une règle trop large a retiré 48 textures
+(verre des phares, grilles ajourées, teintes sombres) sans aucun signal, et la voiture a été réinstallée ainsi.
 
 Lire `<sortie>/<nom>/report.md` : « Hitbox : collision officielle du véhicule » (sinon boîte
 englobante : le .yft n'avait pas de `Physics/Bounds`, le signaler), « texture(s) reprises du jeu de base », « vrai son du jeu »,

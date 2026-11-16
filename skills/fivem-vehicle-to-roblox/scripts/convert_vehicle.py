@@ -33,6 +33,7 @@ from f2r import __version__  # noqa: E402
 from f2r import audio as audio_mod  # noqa: E402
 from f2r import collision as collision_mod  # noqa: E402
 from f2r import sound_pack  # noqa: E402
+from f2r import texture_guard  # noqa: E402
 from f2r import brands, cabin, cwxml, gamelib, icon_atlas, inventory, meta, rebadge  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.performance import apply_real_performance  # noqa: E402
@@ -492,9 +493,11 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
             _alpha_cache[name.lower()] = np.asarray(img.convert("RGBA"))[..., 3] if img is not None else None
         return _alpha_cache[name.lower()]
     icon_atlas.split_icon_overlays(vb.parts, _atlas_alpha, report)
+    tex_manifest: dict = {}
     for p in vb.parts:
         flip_if_inverted(p)
         mat, has_tex = make_material(p, store, paint_default, livery_names)
+        tex_manifest[p.name] = texture_guard.entry(p.kind, mat, has_tex)
         glb.add_mesh(p.name, p.pos, p.nrm, p.uv, p.idx, mat)
         info = part_info(p, vb, store, has_tex)
         if mat.emissive_png is not None:
@@ -507,6 +510,12 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         parts_cfg[p.name] = info
 
     collision_cfg = add_collision(frag_path, vb, glb, parts_cfg, args, report)
+    # garde-fou : une pièce qui perd sa texture ou sa transparence par rapport à la dernière conversion acceptée
+    # de ce véhicule bloque la conversion (code 3) au lieu de passer inaperçue (texture_guard.py)
+    tex_guard = texture_guard.check(name, tex_manifest, out, report,
+                                    accept=getattr(args, "accept_texture_changes", False),
+                                    baseline_dir=Path(args.texture_baselines) if getattr(args, "texture_baselines", None)
+                                    else None)
 
     carriers = []
     for i, tex in enumerate(livery_names):
@@ -608,7 +617,8 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                  "real_model": naming.real_model, "model": naming.model,
                  "provisional": naming.model_provisional},
              "rebadge": getattr(naming, "summary", None),
-             "siren_source": audio.get("SirenSource")}
+             "siren_source": audio.get("SirenSource"),
+             "texture_guard": tex_guard}
     if tris > 300_000:
         report.warn(f"{tris} triangles : lourd pour Roblox. Essayez --lod med pour un modèle plus léger.")
     return stats
@@ -944,6 +954,11 @@ def main(argv=None) -> int:
     ap.add_argument("--no-real-specs", action="store_true",
                     help="garder le moteur et la boîte du mod (pas de calage sur les performances réelles)")
     ap.add_argument("--no-ogg", action="store_true", help="garder les .wav (ne pas convertir en .ogg)")
+    ap.add_argument("--accept-texture-changes", action="store_true",
+                    help="accepter des pièces qui perdent leur texture / transparence par rapport à la dernière "
+                         "conversion acceptée (sinon : régression signalée, code de sortie 3)")
+    ap.add_argument("--texture-baselines",
+                    help="dossier des références de textures (défaut : ~/.cache/f2r/texture_baselines)")
     ap.add_argument("--no-door-prompts", action="store_true")
     ap.add_argument("--extractor", help="commande gta-extract (sinon détection / compilation auto)")
     ap.add_argument("--no-build", action="store_true", help="ne pas compiler gta-extract automatiquement")
@@ -1047,12 +1062,26 @@ def main(argv=None) -> int:
             game.close()
     print(json.dumps({"vehicles": results, "warnings": report.warnings, "manual_steps": report.manual_steps},
                      indent=2, ensure_ascii=False))
-    return 0 if results else 1
+    if not results:
+        return 1
+    if any((r.get("texture_guard") or {}).get("status") == "regression" for r in results):
+        print("[ATTENTION] Régression des textures : voir report.md (section en tête). Version à ne pas installer.",
+              file=sys.stderr)
+        return texture_guard.EXIT_REGRESSION
+    return 0
 
 
 def write_report(out: Path, name: str, stats: dict | None, report: Report) -> None:
     out.mkdir(parents=True, exist_ok=True)
     lines = [f"# Conversion FiveM → Roblox : {name}", ""]
+    tg = (stats or {}).get("texture_guard") or {}
+    if tg.get("status") == "regression":
+        lines += ["## ⚠ RÉGRESSION DES TEXTURES — NE PAS INSTALLER", "",
+                  "Des pièces ont perdu leur texture ou leur transparence par rapport à la dernière conversion "
+                  "acceptée de ce véhicule :", ""]
+        lines += [f"- {d}" for d in texture_guard.describe(tg["lost"])]
+        lines += ["", f"Détail : `texture_regression.json` ; référence : `{tg['baseline']}`. Corriger le "
+                  "convertisseur, ou relancer avec `--accept-texture-changes` si la perte est voulue.", ""]
     if stats:
         lines += ["## Résultat", "",
                   f"- Pièces (MeshParts) : **{stats['parts']}** — triangles : **{stats['triangles']}**",

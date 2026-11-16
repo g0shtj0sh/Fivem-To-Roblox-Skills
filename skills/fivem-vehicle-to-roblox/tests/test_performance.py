@@ -7,6 +7,7 @@ que la conversion avertit et garde le handling du mod.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -49,7 +50,8 @@ def test_real_performance():
         specs.write_text(json.dumps({"vehicles": {"testcar": SPEC}}), encoding="utf-8")
         r = subprocess.run([sys.executable, str(ROOT / "scripts" / "convert_vehicle.py"), str(zpath),
                             "-o", str(tmp / "out"), "--no-build", "--no-ogg", "--specs", str(specs)],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True,
+                           env={**os.environ, "F2R_TEXTURE_BASELINES": str(tmp / "baselines")})
         assert r.returncode == 0, r.stderr
         cfg = json.loads((tmp / "out" / "testcar" / "vehicle_config.json").read_text(encoding="utf-8"))["roblox_config"]
         perf, h = cfg["Performance"], cfg["Handling"]
