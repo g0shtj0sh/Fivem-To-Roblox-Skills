@@ -324,6 +324,11 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
 
 # ------------------------------------------------------------------ conversion d'un véhicule
 
+# Taille standard des véhicules (choix de l'utilisateur, 2026-11-16, brolver-rp) : 1,2 x l'échelle physique de
+# Roblox (3,571 studs/m), la taille de la première Bavren N4 du jeu. Plus grand que réel : l'avatar y tient mieux
+# (corps adapté à 0,88 au lieu de 0,76 dans la m422). Le runtime lit StudsPerMeter dans la config de chaque véhicule.
+STANDARD_SPM = 4.2852
+
 CLASSES_FILE = HERE.parent / "classes" / "vehicle_classes.json"
 
 
@@ -877,8 +882,9 @@ def main(argv=None) -> int:
     ap.add_argument("-o", "--out", default="roblox_out", help="dossier de sortie")
     ap.add_argument("--vehicle", action="append", help="nom du modèle à convertir (défaut : tous)")
     ap.add_argument("--lod", default="high", choices=["high", "med", "low", "vlow"])
-    ap.add_argument("--studs-per-meter", type=float, default=3.571,
-                    help="échelle (1 m = 3.571 studs par défaut, convention physique Roblox 1 stud = 0.28 m)")
+    ap.add_argument("--studs-per-meter", type=float, default=STANDARD_SPM,
+                    help=f"échelle (défaut {STANDARD_SPM} studs/m = standard du jeu : 3,571 x 1,2 ; 3.571 = convention "
+                         "physique Roblox 1 stud = 0,28 m)")
     ap.add_argument("--max-tris", type=int, default=19000, help="triangles max par MeshPart (limite Roblox 20k)")
     ap.add_argument("--max-texture", type=int, default=2048,
                     help="taille max des textures (px) ; Roblox garde 2048 et réduit 4096 à 2048 (mesuré le 2026-11-15)")

@@ -376,6 +376,11 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   les gaz et au rupteur (burn compris). Comme GTA, seulement avec un échappement amélioré (`Mod_Exhaust` > 0) sauf
   attribut `Backfire`. Son : attribut `BackfireSoundId` (aucun son fourni : le son de GTA appartient à Rockstar).
   Seuils et rendu posés à l'œil.
+- **Taille standard (2026-11-16)** : `--studs-per-meter` vaut par défaut **4,2852** = 1,2 × l'échelle physique de Roblox
+  (3,571), la taille retenue par l'utilisateur pour tous les véhicules du jeu (voitures plus grandes que réelles, avatar
+  moins rétréci au volant). `--studs-per-meter 3.571` pour l'échelle réelle. **Véhicule déjà installé** : `model:ScaleTo(
+  model:GetScale() * k)`, `StudsPerMeter` de sa `VehicleConfig` multiplié par k (remplacer le ModuleScript par un clone
+  pour que `require` relise en Édition), `VehicleLights.Rig(model)`, reposer au sol (Verify « posé au sol »), `sync_catalog`.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
 
