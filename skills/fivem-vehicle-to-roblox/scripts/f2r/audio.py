@@ -244,7 +244,7 @@ def periodic_loop(seg: np.ndarray, sr: int, min_seconds: float = 0.4) -> np.ndar
         if c > best:
             best, best_e = c, e
     loop = x[a:best_e].copy()
-    F = min(int(sr * 0.01), len(loop) // 4)
+    F = min(int(sr * 0.01), len(loop) // 4, a)  # le fondu reprend les F échantillons AVANT a : jamais plus que a
     if F > 1:
         r = np.linspace(0.0, 1.0, F)
         loop[-F:] = loop[-F:] * (1 - r) + x[a - F:a] * r
