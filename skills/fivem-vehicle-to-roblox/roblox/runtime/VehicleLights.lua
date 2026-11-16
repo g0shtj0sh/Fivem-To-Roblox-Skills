@@ -90,7 +90,18 @@ end
 -- les traits du feu de jour et brillait plus fort que les autres feux), la pièce garde sa texture dans une
 -- SurfaceAppearance et un masque (EmissiveMaskContent, attribut `EmissiveMask` posé par le Setup) n'allume que
 -- ses parties claires ; le runtime règle EmissiveStrength / EmissiveTint. Éteinte : texture visible, sans Néon.
-Lights.EmissiveOffTint = 0.55
+Lights.EmissiveOffTint = 0.55 -- (ancien réglage unique, gardé pour compatibilité ; voir EmissiveOff)
+Lights.EmissiveOff = {
+	lens = { material = "SmoothPlastic", tint = 0.55 }, -- phares, feux de jour, recul : lentilles blanches
+	colored = { material = "Glass", tint = 0.85 }, -- feux arrière, stop, clignotants : verre coloré
+}
+function Lights.EmissiveOffKind(role)
+	role = role or ""
+	if string.match(role, "^tail") or string.match(role, "^brake") or string.match(role, "^indicator") then
+		return "colored"
+	end
+	return "lens"
+end
 
 function Lights.EmissiveSetup(part)
 	local mask = part:GetAttribute("EmissiveMask")
@@ -108,19 +119,20 @@ function Lights.EmissiveSetup(part)
 	sa.EmissiveMaskContent = Content.fromUri(mask)
 	sa.EmissiveTint = Color3.new(1, 1, 1)
 	sa.EmissiveStrength = 0
-	-- éteinte, la texture est assombrie : les lentilles des projecteurs sont dessinées blanches dans la texture GTA et
-	-- paraissaient allumées en plein jour (m422) ; allumée, le runtime remet la teinte à blanc
-	local off = Lights.EmissiveOffTint
-	sa.Color = Color3.new(off, off, off)
-	part:SetAttribute("EmissiveOffTint", off)
+	-- éteinte : deux rendus selon le verre. Lentilles blanches (phares, feux de jour, recul) assombries et mates, sinon
+	-- elles paraissent allumées en plein jour ; verres colorés (feux arrière, stop, clignotants) en Glass presque à
+	-- pleine teinte : assombris, ils devenaient un rouge terne peu visible (signalé 2026-11-16, m422).
+	local look = Lights.EmissiveOff[Lights.EmissiveOffKind(part:GetAttribute("LightRole"))]
+	sa.Color = Color3.new(look.tint, look.tint, look.tint)
+	part:SetAttribute("EmissiveOffTint", look.tint)
 	sa.Parent = part
 	part.TextureID = ""
 	part:SetAttribute("OffTexture", nil)
 	part:SetAttribute("EmissiveLit", true)
-	part:SetAttribute("OffMaterial", "SmoothPlastic")
+	part:SetAttribute("OffMaterial", look.material)
 	part:SetAttribute("OffTransparency", 0)
 	part:SetAttribute("OffColor", Color3.new(1, 1, 1))
-	part.Material = Enum.Material.SmoothPlastic
+	part.Material = Enum.Material[look.material]
 	part.Color = Color3.new(1, 1, 1)
 	if part:GetAttribute("Visible") ~= false then
 		part.Transparency = 0

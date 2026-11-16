@@ -153,7 +153,7 @@ aplats clairs ou vifs + traits fins plus clairs que leur voisinage, texture somb
 **L'importeur Roblox ignore la texture d'émission du GLB** (vérifié 2026-11-15) : mettre en ligne les fichiers
 de `emissive/` comme les sons (§ 2) et écrire leurs ids dans `emissive/emissive_ids.json` (ou dans le JSON des
 sons), puis reconvertir. Le Setup pose l'attribut `EmissiveMask`, `VehicleLights.EmissiveSetup` crée la
-`SurfaceAppearance` (texture, masque, teinte éteinte `EmissiveOffTint` 0,55) et le runtime règle
+`SurfaceAppearance` (texture, masque ; éteinte : lentilles blanches — phares, feux de jour, recul — mates à 0,55, verres colorés — arrière, stop, clignotants — en Glass à 0,85, `Lights.EmissiveOff`) et le runtime règle
 `EmissiveStrength` par famille (`Runtime.EmissiveStrength` : feux de jour 8, phares 10, arrière 4, stop 12,
 clignotants 12) et `EmissiveTint` = couleur du feu. Sans masque, l'ancien comportement (Néon) reste.
 Véhicule déjà installé : poser `OffTexture`/`TextureID` (texture agrandie) et `EmissiveMask` sur chaque optique, puis
