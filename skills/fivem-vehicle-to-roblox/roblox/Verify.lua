@@ -1040,6 +1040,7 @@ function groups.custom()
 		return
 	end
 	local snapshot = Custom.Serialize(model)
+	local hadChosen = model:GetAttribute("PlateStyleChosen") -- remis tel quel à la fin (tirage au sort des styles)
 	local opt = Custom.GetOptions(model)
 	-- couleur
 	local red = Color3.fromRGB(200, 10, 10)
@@ -1145,20 +1146,34 @@ function groups.custom()
 		-- style : un style de test, appliqué à toutes les plaques, puis retiré (Apply remet le style sauvé)
 		local probe = Color3.fromRGB(250, 205, 30)
 		local hadStyle = Plates.Styles[9999]
-		Plates.RegisterStyle(9999, { Name = "F2R Verify", BackgroundColor = probe })
+		-- zone de texte propre à l'image du style (TextRect), suivie par le texte de chaque plaque
+		local rect = { 0.11, 0.22, 0.66, 0.33 }
+		Plates.RegisterStyle(9999, { Name = "F2R Verify", BackgroundColor = probe, TextRect = rect, Weight = 0 })
 		local okS = pcall(Custom.SetPlateStyle, model, 9999)
-		local styled = 0
+		local styled, placed, framed = 0, 0, 0
 		for _, d in ipairs(model:GetDescendants()) do
 			if d:IsA("SurfaceGui") and d.Name == "Plate" then
 				local bg = d:FindFirstChild("Background")
 				if bg and bg.BackgroundColor3 == probe and bg.BackgroundTransparency == 0 then
 					styled += 1
 				end
+				local h = d:FindFirstChild("PlateText")
+				if h and h:IsA("Frame") then
+					framed += 1
+					if math.abs(h.Position.X.Scale - rect[1]) < 1e-4 and math.abs(h.Position.Y.Scale - rect[2]) < 1e-4
+						and math.abs(h.Size.X.Scale - rect[3]) < 1e-4 and math.abs(h.Size.Y.Scale - rect[4]) < 1e-4 then
+						placed += 1
+					end
+				end
 			end
 		end
 		Plates.Styles[9999] = hadStyle
-		check(okS and styled == labels and model:GetAttribute("PlateStyle") == 9999, "SetPlateStyle",
+		check(okS and styled == labels and model:GetAttribute("PlateStyle") == 9999
+			and model:GetAttribute("PlateStyleChosen") == true, "SetPlateStyle",
 			fmt("%d/%d plaque(s) au fond du style de test", styled, labels))
+		if framed > 0 then
+			check(placed == framed, "TextRect du style", fmt("%d/%d zone(s) de texte à la place de l'image", placed, framed))
+		end
 		-- plaque personnalisée : filtre de test qui masque « BADWORD »
 		local realFilter = Plates.FilterText
 		Plates.FilterText = function(_, t)
@@ -1182,6 +1197,7 @@ function groups.custom()
 	-- sauvegarde / restauration
 	local changed = Custom.Serialize(model)
 	local okA, errA = pcall(Custom.Apply, model, snapshot)
+	model:SetAttribute("PlateStyleChosen", hadChosen)
 	local after = Custom.Serialize(model)
 	local diffs = {}
 	local function same(a, b)

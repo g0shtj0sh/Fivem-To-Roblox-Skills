@@ -406,6 +406,7 @@ end
 function Custom.SetPlateStyle(model, index)
 	local Plates = getPlates()
 	model:SetAttribute("PlateStyle", index)
+	model:SetAttribute("PlateStyleChosen", true) -- plus de tirage au sort à la réapparition (Plates.UseStyles)
 	if Plates then
 		Plates.Render(model)
 	end
@@ -480,7 +481,10 @@ function Custom.GetOptions(model)
 end
 
 local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_", "WindowDown_" }
-local SAVE_KEYS = { "Livery", "WindowTint", "Neon", "NeonColor", "XenonColor", "PlateText", "PlateStyle" }
+-- PlateStyleChosen : style choisi par le joueur (SetPlateStyle) -> sauvegardé avec lui, pas de tirage au sort à la
+-- réapparition (VehiclePlates.UseStyles avec Random). Le serveur réapplique la config propre de chaque véhicule à
+-- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
+local SAVE_KEYS = { "Livery", "WindowTint", "Neon", "NeonColor", "XenonColor", "PlateText", "PlateStyle", "PlateStyleChosen" }
 
 function Custom.Serialize(model)
 	local out = {}
@@ -506,7 +510,7 @@ end
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor" }
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "PlateStyleChosen" }
 
 function Custom.Apply(model, data)
 	data = data or {}

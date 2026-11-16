@@ -18,6 +18,18 @@
 --   Plates.RegisterStyle(2, { Name = "Jaune", BackgroundColor = Color3.fromRGB(250, 205, 30),
 --       TextColor = Color3.fromRGB(15, 15, 15) })
 --   Plates.SetStore(Plates.DataStore("Plates_v1"))       -- plaques des véhicules possédés persistantes
+--
+-- PLAQUES DU JEU (images) — un jeu remplace les styles du skill par les siens, au démarrage du serveur :
+--   Plates.UseStyles({
+--       { Name = "Classique", Background = "rbxassetid://…", BackgroundColor = …, TextColor = …,
+--         TextRect = { 0.08, 0.36, 0.84, 0.42 }, Weight = 3 },
+--       …
+--   }, { Random = true })
+--   Background = image de TOUTE la plaque (étirée sur la surface, rapport largeur / hauteur ≈ 2:1 comme les
+--   plaques GTA) ; TextRect = zone libre de CETTE image où écrire le numéro (fractions x, y, largeur, hauteur de la
+--   plaque ; remplace la zone du shader GTA) ; Random = chaque véhicule qui apparaît reçoit un style tiré au sort
+--   (pondéré par Weight, stable pour une même plaque) tant qu'aucun style n'a été choisi (SetStyle,
+--   Custom.SetPlateStyle ; attribut PlateStyleChosen, gardé par Custom.Serialize / Apply).
 
 local Plates = {}
 
@@ -36,8 +48,7 @@ end
 
 -- Style par défaut : plaque neutre (fond clair, texte bleu foncé, police standard à chasse fixe).
 -- Il recouvre la texture d'origine du mod (souvent la plaque « San Andreas » de GTA).
-Plates.Styles = {
-	[1] = {
+local SKILL_STYLE = {
 		Name = "Standard",
 		BackgroundColor = Color3.fromRGB(242, 242, 236),
 		Background = nil, -- "rbxassetid://..." : image de fond de toute la plaque
@@ -46,8 +57,11 @@ Plates.Styles = {
 		Font = defaultFont(), -- police Roblox (Font) ; ignorée si Atlas est défini
 		Atlas = nil, -- planche de caractères : { Image, Chars, Columns, CellSize = Vector2 }
 		LetterFill = 0.92, -- part de la case occupée par le caractère
-	},
+		TextRect = nil, -- { x, y, w, h } (fractions de la plaque) : zone du texte propre à l'image Background
+		Weight = 1, -- poids du tirage au sort (UseStyles avec Random)
 }
+Plates.Styles = { [1] = table.clone(SKILL_STYLE) }
+Plates.RandomStyles = false
 
 function Plates.RegisterStyle(index, def)
 	assert(type(index) == "number" and type(def) == "table", "RegisterStyle(index, def)")
@@ -61,6 +75,33 @@ end
 
 function Plates.GetStyle(index)
 	return Plates.Styles[index or Plates.DefaultStyle] or Plates.Styles[Plates.DefaultStyle]
+end
+
+-- Style tiré au sort pour une plaque (pondéré par Weight, déterministe : même texte -> même style).
+function Plates.PickStyle(text)
+	local keys, total = {}, 0
+	for k, st in pairs(Plates.Styles) do
+		if type(k) == "number" and k > 0 and k < 1000 and (st.Weight or 1) > 0 then
+			table.insert(keys, k)
+			total += st.Weight or 1
+		end
+	end
+	if total <= 0 then
+		return Plates.DefaultStyle
+	end
+	table.sort(keys)
+	local h = 7
+	for i = 1, #(text or "") do
+		h = (h * 31 + string.byte(text, i)) % 2147483647
+	end
+	local r = (h % 100000) / 100000 * total
+	for _, k in ipairs(keys) do
+		r -= Plates.Styles[k].Weight or 1
+		if r < 0 then
+			return k
+		end
+	end
+	return keys[#keys]
 end
 
 -- ------------------------------------------------------------------ texte
@@ -166,6 +207,24 @@ function Plates.RenderGui(gui, text, style)
 	local holder = gui:FindFirstChild("PlateText", true)
 	if not holder then
 		return
+	end
+	-- zone du texte : celle de l'image du style (TextRect) sinon celle de la plaque (shader GTA), gardée en
+	-- attribut ZoneRect à la première fois pour pouvoir y revenir
+	if holder.Parent == gui and holder:IsA("Frame") then
+		local zone = holder:GetAttribute("ZoneRect")
+		if typeof(zone) ~= "Rect" then
+			zone = Rect.new(holder.Position.X.Scale, holder.Position.Y.Scale,
+				holder.Position.X.Scale + holder.Size.X.Scale, holder.Position.Y.Scale + holder.Size.Y.Scale)
+			holder:SetAttribute("ZoneRect", zone)
+		end
+		local r = style.TextRect
+		if r and not (style.KeepOriginal == true or gui:GetAttribute("NoBackground") == true) then
+			holder.Position = UDim2.fromScale(r[1], r[2])
+			holder.Size = UDim2.fromScale(r[3], r[4])
+		else
+			holder.Position = UDim2.fromScale(zone.Min.X, zone.Min.Y)
+			holder.Size = UDim2.fromScale(zone.Width, zone.Height)
+		end
 	end
 	-- véhicule installé AVANT les plaques à cases : « PlateText » y est un simple TextLabel. On lui donne le
 	-- texte tel quel (des cases dessinées dedans se superposaient à l'ancien texte : plaque illisible).
@@ -356,7 +415,9 @@ function Plates.Assign(model, text, info)
 		end)
 	end
 	model:SetAttribute("PlateText", text)
-	if not model:GetAttribute("PlateStyle") then
+	if info.PickStyle and Plates.RandomStyles and not model:GetAttribute("PlateStyleChosen") then
+		model:SetAttribute("PlateStyle", Plates.PickStyle(text))
+	elseif not Plates.Styles[model:GetAttribute("PlateStyle") or 0] then
 		model:SetAttribute("PlateStyle", Plates.DefaultStyle)
 	end
 	Plates.Render(model)
@@ -370,11 +431,40 @@ function Plates.Register(model)
 		return byModel[model]
 	end
 	local current = model:GetAttribute("PlateText")
-	local ok, text = Plates.Assign(model, current ~= "" and current or nil)
+	local ok, text = Plates.Assign(model, current ~= "" and current or nil, { PickStyle = true })
 	if not ok then
-		ok, text = Plates.Assign(model, nil)
+		ok, text = Plates.Assign(model, nil, { PickStyle = true })
 	end
 	return text
+end
+
+-- Remplace les styles du skill par ceux du jeu (liste 1..n, voir l'en-tête). opts = { Random = bool,
+-- Default = index }. Les véhicules déjà présents sont redessinés (et tirés au sort si Random, sauf style choisi).
+function Plates.UseStyles(list, opts)
+	assert(type(list) == "table" and #list > 0, "UseStyles(list, opts) : liste de styles non vide")
+	opts = opts or {}
+	local styles = {}
+	for i, def in ipairs(list) do
+		local st = table.clone(SKILL_STYLE)
+		for k, v in pairs(def) do
+			st[k] = v
+		end
+		styles[i] = st
+	end
+	Plates.Styles = styles
+	Plates.DefaultStyle = (opts.Default and styles[opts.Default]) and opts.Default or 1
+	Plates.RandomStyles = opts.Random == true
+	for model, text in pairs(byModel) do
+		if model.Parent ~= nil then
+			if Plates.RandomStyles and not model:GetAttribute("PlateStyleChosen") then
+				model:SetAttribute("PlateStyle", Plates.PickStyle(text))
+			elseif not styles[model:GetAttribute("PlateStyle") or 0] then
+				model:SetAttribute("PlateStyle", Plates.DefaultStyle)
+			end
+			Plates.Render(model)
+		end
+	end
+	return styles
 end
 
 function Plates.Lookup(text)
@@ -433,6 +523,7 @@ end
 
 function Plates.SetStyle(model, index)
 	model:SetAttribute("PlateStyle", index)
+	model:SetAttribute("PlateStyleChosen", true)
 	Plates.Render(model)
 end
 

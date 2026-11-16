@@ -471,6 +471,37 @@ rectangle de la plaque, zone de texte `TextRect`, avant / arrière). Le Setup po
 - `Custom.Serialize` / `Apply` sauvegardent `PlateText` et `PlateStyle`. La lampe de plaque (rôle `plate`,
   allumée avec les phares) est posée par `VehicleLights.Rig` au-dessus de la plaque arrière.
 
+### Plaques propres au jeu (images)
+
+Le skill ne fournit qu'une plaque neutre. Un jeu qui a ses propres plaques les donne au runtime **depuis son
+code serveur**, au démarrage (le runtime est installé dans la place : attendre `ReplicatedStorage.FiveMVehicles`) :
+
+```lua
+Plates.UseStyles({
+    { Name = "Classique", Background = "rbxassetid://…", BackgroundColor = Color3.fromRGB(52, 61, 68),
+      TextColor = Color3.fromRGB(27, 42, 74), TextRect = { 0.08, 0.371, 0.84, 0.4 }, Weight = 3 },
+    -- …
+}, { Random = true })
+```
+
+- `Background` : image de **toute** la plaque, étirée sur la surface ; préparer les images au rapport des plaques
+  GTA (≈ 2:1) et en 1024 × 512 au plus (Roblox plafonne à 1024 px). `BackgroundColor` est dessinée derrière : elle
+  se voit dans les coins arrondis transparents (prendre la couleur du bord de la plaque).
+- `TextRect` : zone libre de CETTE image où écrire le numéro (fractions x, y, largeur, hauteur), mesurée sur
+  l'image (bande unie entre titre et décor) ; sans `TextRect`, le texte reste dans la zone du shader GTA. La zone
+  d'origine est gardée en attribut `ZoneRect` du cadre `PlateText` (retour possible à un style sans image).
+- `Random = true` : chaque véhicule qui apparaît reçoit un style tiré au sort (pondéré par `Weight`, déterministe :
+  même plaque → même style, donc des copies différentes), sauf si un style a été **choisi** (`Plates.SetStyle`,
+  `Custom.SetPlateStyle` → attribut `PlateStyleChosen`, sauvegardé par `Custom.Serialize` et remis par `Apply`).
+  Le serveur réapplique la config de chaque véhicule à son apparition : un `PlateStyle` présent ne veut pas dire
+  « choisi ». Les véhicules déjà présents sont redessinés (et retirés au sort) à l'appel.
+- Police : celle du style par défaut (RobotoMono Bold, chasse fixe). Une police proportionnelle dans les 8 cases
+  donne des lettres de tailles inégales (chaque case est mise à l'échelle seule) : la garder à chasse fixe.
+- Index des styles = position dans la liste (1..n) : c'est ce qui est sauvegardé (`PlateStyle`) ; n'insérer de
+  nouveaux styles qu'à la fin.
+- Contrôle : Verify (groupe custom) vérifie `SetPlateStyle` (fond, `PlateStyleChosen`) et que le texte suit le
+  `TextRect` du style.
+
 ## Brancher un menu de custom (vMenu ou autre)
 
 Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a accès) appartient au jeu.
