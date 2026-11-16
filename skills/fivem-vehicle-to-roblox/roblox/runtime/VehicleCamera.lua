@@ -141,7 +141,8 @@ Camera.Settings = {
 		YawRate = 3, -- 1/s : vitesse de rattrapage à pleine vitesse (×0,25 à l'arrêt)
 		ZoomMin = 0.7, ZoomMax = 1.8, -- molette : facteur de distance
 		-- effets doux : fluide, sans secousses
-		Fx = { Fov = 70, FovDynamic = true, FovGain = 8, BrakeZoom = 0, AccelFx = 0.35, BrakeDip = 0.3,
+		-- FovAccel 3 : avec les 20 de DynaCam le champ passait de 70 à 87° en accélérant (mesuré 2026-11-16)
+		Fx = { Fov = 70, FovDynamic = true, FovGain = 8, FovAccel = 3, BrakeZoom = 0, AccelFx = 0.35, BrakeDip = 0.3,
 			RollFx = 0.25, BumpFx = 0.4, SpeedShake = 0.3, ShakeSpeed = 30 },
 	},
 	SlipExaggerate = 0,
@@ -625,7 +626,8 @@ local function chaseCFrame(model, root, dt, viewSettings)
 	if E.FovDynamic then
 		local az = state.accSlow.Z
 		local accelPart = az > 0 and softsat(az) or (E.BrakeZoom or 0) * 0.5 * softsat(2 * az)
-		state.fovAdd += ((E.FovGain or 0) * softsat(state.speed / 36) + accelPart * 20 - state.fovAdd) * lerpK(5, dt)
+		state.fovAdd += ((E.FovGain or 0) * softsat(state.speed / 36) + accelPart * (E.FovAccel or 20) - state.fovAdd)
+			* lerpK(5, dt)
 	else
 		state.fovAdd += (0 - state.fovAdd) * lerpK(5, dt)
 	end
@@ -837,7 +839,8 @@ local function neckPose(model, root, dt)
 	pitch, yaw, roll = pitch * rs, yaw * rs, roll * rs
 	-- pivots : avancer fait hocher, glisser de côté penche et tourne la tête
 	if (N.ForwardPitchPivot or 0) ~= 0 then
-		pitch += dz / N.ForwardPitchPivot
+		-- tête en arrière (accélération) : la vue se lève moitié moins (mesuré 2026-11-16 : +5,7° à fond, trop)
+		pitch += dz / N.ForwardPitchPivot * (dz > 0 and (N.ForwardPitchAccel or 0.5) or 1)
 	end
 	if (N.SideRollPivot or 0) ~= 0 then
 		roll += dx / N.SideRollPivot

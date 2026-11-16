@@ -140,6 +140,15 @@ dérivées d'une vitesse lissée puis lissées (6/s) ; seules les rotations lent
 (passage par zéro sur un demi-tour). Mesuré (m422) : caméra à 3–6° de la trajectoire en drift et en toupie jusqu'à
 164° de glisse ; revient derrière la voiture à l'arrêt ; reste derrière le capot en vraie marche arrière.
 
+**Deux poursuites (2026-11-16)** : `ChaseMode = "Dynamic"` (défaut, façon GTA V : derrière le capot avec retard,
+3/s à pleine vitesse et ×0,25 à l'arrêt, 30 % de trajectoire en glisse ; regard libre qui reste en place et ne revient
+qu'en roulant après `RecenterDelay` ; molette = zoom ×0,7–1,8 ; vue plus haute `Dynamic.ChaseNear/Chase` ; effets
+doux `Dynamic.Fx`, FOV +6° à 108 km/h) ou `"Fixed"` (Assetto Corsa : garde la trajectoire, `FollowRate` 3/s, point
+visé avancé le long de la vue). Capot et cockpit communs. Mesuré (m422) : dynamique 6–7° de retard en virage normal,
+retour du regard en ~2 s en roulant ; fixe 0–8° de la trajectoire en drift. Cockpit : gains de tête séparés
+(`Neck.Forward.Accel` 2,2 / `Brake` 0,5, `ForwardPitchAccel` 0,5) → 6,2 cm en arrière + 2,5° à l'accélération,
+2,4 cm en avant + 1,8° au freinage ; FOV 60.
+
 **Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
 Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).
 Déplacements avant / côté / vertical poussés par les accélérations du véhicule **en g** (vertical passé en
