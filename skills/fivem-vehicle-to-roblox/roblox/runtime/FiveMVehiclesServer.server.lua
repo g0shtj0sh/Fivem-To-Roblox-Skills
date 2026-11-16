@@ -312,9 +312,14 @@ telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, br
 	end
 end)
 
--- Saleté : monte avec la distance parcourue par un véhicule conduit (pleine en ~8 km sur route, ~2 km hors route),
+-- Saleté : monte avec le temps de conduite (pleine en ~35 min sur route, ~15 min hors route),
 -- sauf KeepClean. Vérifié toutes les 2 s, écrit seulement par pas de 1 % (une écriture répliquée de temps en temps).
-local DIRT_FULL_M = 8000
+-- Au TEMPS de conduite, pas à la distance (2026-11-16, demande de l'utilisateur : « se salir au bout de ~30 min de
+-- route, ~15 min si on va beaucoup dans la terre »). Avant : pleine en 8 km de route (≈ 5 min à 100 km/h), ×4 hors route.
+local DIRT_FULL_S = 35 * 60 -- s de conduite sur route pour être pleinement sale
+local DIRT_OFFROAD_MULT = 2.3 -- terre, herbe, sable, neige… : pleine en ≈ 15 min
+local DIRT_MIN_SPEED = 2 -- m/s (≈ 7 km/h) : à l'arrêt ou au pas, la voiture ne se salit pas
+local DIRT_TICK = 2 -- s entre deux relevés
 local OFFROAD = { Grass = true, LeafyGrass = true, Mud = true, Ground = true, Sand = true, Snow = true, Rock = true,
 	Slate = true, Glacier = true, Salt = true, Sandstone = true, CrackedLava = true }
 local dirtCarry = setmetatable({}, { __mode = "k" })
@@ -323,24 +328,24 @@ task.spawn(function()
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	while true do
-		task.wait(2)
+		task.wait(DIRT_TICK)
 		for _, model in ipairs(CollectionService:GetTagged(TAG)) do
 			local root = model.PrimaryPart
 			local seat = model:FindFirstChild("DriverSeat", true)
 			if root and not root.Anchored and seat and seat.Occupant and model:GetAttribute("KeepClean") ~= true then
 				local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
 				local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
-				local meters = root.AssemblyLinearVelocity.Magnitude / spm * 2
-				if meters > 1 then
+				local speed = root.AssemblyLinearVelocity.Magnitude / spm
+				if speed > DIRT_MIN_SPEED then
 					params.FilterDescendantsInstances = { model }
 					local hit = workspace:Raycast(root.Position, Vector3.new(0, -4 * spm, 0), params)
-					local mult = (hit and OFFROAD[hit.Material.Name]) and 4 or 1
+					local mult = (hit and OFFROAD[hit.Material.Name]) and DIRT_OFFROAD_MULT or 1
 					local shown = model:GetAttribute("DirtLevel") or 0
 					local cur = math.max(dirtCarry[model] or 0, shown)
 					if shown < (dirtShown[model] or shown) then
 						cur = shown -- lavé ou réglé entre-temps
 					end
-					local new = math.min(1, cur + meters * mult / DIRT_FULL_M)
+					local new = math.min(1, cur + DIRT_TICK * mult / DIRT_FULL_S)
 					dirtCarry[model] = new -- reste sous le pas gardé ici (un attribut serait répliqué à tous)
 					if math.floor(new * 100) ~= math.floor(shown * 100) then
 						model:SetAttribute("DirtLevel", math.floor(new * 100) / 100)
