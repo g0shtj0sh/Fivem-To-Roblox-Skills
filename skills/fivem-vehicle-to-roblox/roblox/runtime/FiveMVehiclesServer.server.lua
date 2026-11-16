@@ -281,6 +281,46 @@ telemetry.OnServerEvent:Connect(function(player, model, rpm, throttle, steer, br
 	end
 end)
 
+-- Saleté : monte avec la distance parcourue par un véhicule conduit (pleine en ~8 km sur route, ~2 km hors route),
+-- sauf KeepClean. Vérifié toutes les 2 s, écrit seulement par pas de 1 % (une écriture répliquée de temps en temps).
+local DIRT_FULL_M = 8000
+local OFFROAD = { Grass = true, LeafyGrass = true, Mud = true, Ground = true, Sand = true, Snow = true, Rock = true,
+	Slate = true, Glacier = true, Salt = true, Sandstone = true, CrackedLava = true }
+local dirtCarry = setmetatable({}, { __mode = "k" })
+local dirtShown = setmetatable({}, { __mode = "k" })
+task.spawn(function()
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	while true do
+		task.wait(2)
+		for _, model in ipairs(CollectionService:GetTagged(TAG)) do
+			local root = model.PrimaryPart
+			local seat = model:FindFirstChild("DriverSeat", true)
+			if root and not root.Anchored and seat and seat.Occupant and model:GetAttribute("KeepClean") ~= true then
+				local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
+				local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
+				local meters = root.AssemblyLinearVelocity.Magnitude / spm * 2
+				if meters > 1 then
+					params.FilterDescendantsInstances = { model }
+					local hit = workspace:Raycast(root.Position, Vector3.new(0, -4 * spm, 0), params)
+					local mult = (hit and OFFROAD[hit.Material.Name]) and 4 or 1
+					local shown = model:GetAttribute("DirtLevel") or 0
+					local cur = math.max(dirtCarry[model] or 0, shown)
+					if shown < (dirtShown[model] or shown) then
+						cur = shown -- lavé ou réglé entre-temps
+					end
+					local new = math.min(1, cur + meters * mult / DIRT_FULL_M)
+					dirtCarry[model] = new -- reste sous le pas gardé ici (un attribut serait répliqué à tous)
+					if math.floor(new * 100) ~= math.floor(shown * 100) then
+						model:SetAttribute("DirtLevel", math.floor(new * 100) / 100)
+					end
+					dirtShown[model] = model:GetAttribute("DirtLevel") or 0
+				end
+			end
+		end
+	end
+end)
+
 local function enterPrompts(model)
 	local out = {}
 	for _, d in ipairs(model:GetDescendants()) do

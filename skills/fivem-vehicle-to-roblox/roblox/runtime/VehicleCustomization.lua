@@ -860,7 +860,7 @@ local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_"
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
 local SAVE_KEYS = {
 	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
-	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade", "HornSound",
+	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade", "HornSound", "DirtLevel", "KeepClean",
 }
 
 -- Clé gardée dans une sauvegarde / acceptée à la restauration. Vitres : seulement les vraies vitres du modèle (une
@@ -1049,7 +1049,19 @@ end
 
 -- Réparation (GTA) : portières remises, vitres réparées et remontées, véhicule remis sur ses roues s'il est
 -- retourné. Ne touche ni à la custom ni aux réglages.
+-- ------------------------------------------------------------------ saleté
+-- DirtLevel 0..1 (VehicleRuntime l'affiche : crasse projetée sur la carrosserie). Monte en roulant (serveur, plus vite
+-- hors route), sauf KeepClean ; Wash / Repair la remettent à 0 ; le niveau GTA 0..15 du vMenu = DirtLevel × 15.
+function Custom.SetDirt(model, level)
+	model:SetAttribute("DirtLevel", math.clamp(tonumber(level) or 0, 0, 1))
+	return true
+end
+function Custom.Wash(model)
+	return Custom.SetDirt(model, 0)
+end
+
 function Custom.Repair(model)
+	model:SetAttribute("DirtLevel", 0)
 	for k in pairs(model:GetAttributes()) do
 		if string.sub(k, 1, 12) == "DoorRemoved_" or string.sub(k, 1, 13) == "WindowBroken_" then
 			model:SetAttribute(k, nil)
@@ -1460,6 +1472,25 @@ OPS.RemoveDoor = function(model, bone, keepDebris)
 	end
 	local ok = Custom.RemoveDoor(model, bone, keepDebris)
 	return ok, (not ok) and "already" or nil
+end
+
+OPS.Wash = function(model)
+	return Custom.Wash(model)
+end
+
+OPS.Dirt = function(model, level)
+	if type(level) ~= "number" or level ~= level then
+		return false, "invalid"
+	end
+	return Custom.SetDirt(model, math.clamp(math.floor(level), 0, 15) / 15)
+end
+
+OPS.KeepClean = function(model, on)
+	model:SetAttribute("KeepClean", on == true or nil)
+	if on == true then
+		model:SetAttribute("DirtLevel", 0)
+	end
+	return true
 end
 
 OPS.Repair = function(model)

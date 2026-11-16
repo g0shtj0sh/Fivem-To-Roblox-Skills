@@ -1384,6 +1384,44 @@ function Runtime:_applyLod(tier)
 	end
 end
 
+-- Saleté (attribut DirtLevel 0..1) : une crasse teintée projetée sur chaque face des pièces de carrosserie
+-- (Texture Roblox, répétée), opacité selon le niveau ; rien tant que le véhicule est propre, rien au palier de détail 2.
+Runtime.DirtTexture = "rbxassetid://87743000627023" -- brolver-rp scripts/vehicle-dirt/draw_grime.py (tuilable)
+Runtime.DirtColor = Color3.fromRGB(92, 76, 56)
+Runtime.DirtTile = 7 -- studs
+function Runtime:_applyDirt()
+	local level = (self.LodTier or 0) >= 2 and 0 or math.clamp(self.Model:GetAttribute("DirtLevel") or 0, 0, 1)
+	local key = math.floor(level * 20 + 0.5)
+	if key == self.DirtKey then
+		return
+	end
+	self.DirtKey = key
+	if not self.DirtTextures then
+		if key == 0 then
+			return
+		end
+		self.DirtTextures = {}
+		local faces = { Enum.NormalId.Top, Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }
+		for _, p in ipairs(self.Model:GetDescendants()) do
+			if p:IsA("BasePart") and p:GetAttribute("Kind") == "paint" then
+				for _, face in ipairs(faces) do
+					local t = Instance.new("Texture")
+					t.Name = "F2R_Dirt"
+					t.Face = face
+					t.Texture = self.Model:GetAttribute("DirtTexture") or Runtime.DirtTexture
+					t.StudsPerTileU, t.StudsPerTileV = Runtime.DirtTile, Runtime.DirtTile
+					t.Color3 = Runtime.DirtColor
+					t.Parent = p
+					table.insert(self.DirtTextures, t)
+				end
+			end
+		end
+	end
+	for _, t in ipairs(self.DirtTextures) do
+		t.Transparency = 1 - (key / 20) * 0.92
+	end
+end
+
 local accum = 0
 RunService.RenderStepped:Connect(function(dt)
 	local cam = Workspace.CurrentCamera
@@ -1402,6 +1440,7 @@ RunService.RenderStepped:Connect(function(dt)
 			if slowTick or r.LodTier == nil then
 				local L = Runtime.Lod
 				r:_applyLod(r.IsLocalOccupant and 0 or (dist > L.Far and 2) or (dist > L.Mid and 1) or 0)
+				r:_applyDirt()
 			end
 			if near or r.IsLocalOccupant then
 				r:Update(dt)
