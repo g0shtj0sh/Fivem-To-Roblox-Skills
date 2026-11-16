@@ -31,7 +31,7 @@ local Workspace = game:GetService("Workspace")
 
 local Mirror = {}
 Mirror.Tag = "FiveMVehicle"
-Mirror.Enabled = true
+Mirror.Enabled = false -- éteint par défaut ; touche B ou Mirror.SetEnabled(true)
 Mirror.Mirrored = true
 Mirror.Key = Enum.KeyCode.B
 Mirror.Size = UDim2.fromScale(0.27, 0.12) -- largeur relative à l'écran ; la hauteur suit Aspect

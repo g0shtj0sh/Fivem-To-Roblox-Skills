@@ -134,7 +134,7 @@ derrière 130° (par-dessus l'épaule, lissé). Mesuré (m422) : accélération 
 freinage → 4,6 cm en avant, −3,5° ; virage → 1,8 cm vers l'extérieur, roulis 5°, regard 20° dans le virage ; tout à
 0 à l'arrêt.
 
-**Rétroviseur** (`VehicleMirror`, touche **B**, bouton « Rétro » sur mobile) : rectangle en haut au centre (27 % de
+**Rétroviseur** (`VehicleMirror`, **éteint par défaut**, touche **B**, bouton « Rétro » sur mobile) : rectangle en haut au centre (27 % de
 la largeur, 4:1), `ViewportFrame` + `WorldModel` de **copies** (Roblox ne rend pas le monde deux fois) :
 véhicules tagués derrière (≤ `Range` studs, `MaxPartsPerVehicle` plus grosses pièces, `BulkMoveTo` à chaque image),
 décor (`GetPartBoundsInBox` derrière le véhicule, budget `MaxDecorParts`, `NewPerRefresh` par relevé),
