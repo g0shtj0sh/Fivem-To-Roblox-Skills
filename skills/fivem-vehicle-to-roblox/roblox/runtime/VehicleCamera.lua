@@ -93,7 +93,8 @@ Camera.Settings = {
 	-- FOV vertical 55 : cadrage des vidéos de référence (volant ≈ 0,8 × la hauteur d'écran) ; le « FOV 100 » du guide
 	-- NeckFX donnait une vue bien trop large (refusé par l'utilisateur, 2026-11-16). Pitch : regard vers le bas (°).
 	-- Forward : avance de l'œil vers le volant (m). Calé sur la vue cockpit de référence (volant ≈ 0,7 × la hauteur).
-	Cockpit = { Fov = 55, Forward = 0.03, Pitch = 6, LookBack = 130 },
+	-- 60 : 55 était « légèrement trop zoomé » (utilisateur, 2026-11-16, après essai)
+	Cockpit = { Fov = 60, Forward = 0.03, Pitch = 6, LookBack = 130 },
 	-- tête physique du cockpit : réglages « NeckFX Imagined Visuals » fournis par l'utilisateur (2026-11-16)
 	Neck = {
 		Enabled = true,
@@ -107,7 +108,10 @@ Camera.Settings = {
 		Pitch = { On = true, Freq = 0.7, Damp = 0.85, Tracking = false },
 		Roll = { On = true, Freq = 1, Damp = 1, Tracking = false },
 		Yaw = { On = true, Freq = 1.5, Damp = 0.85, Tracking = true },
-		Forward = { On = true, Freq = 1.5, Damp = 0.85, Scale = 2 },
+		-- Accel / Brake : gain de la tête selon le sens. Nos voitures accélèrent ~0,3–0,5 g mais freinent ~1 g : à gain
+		-- égal la poussée en arrière ne se sentait pas et la tête partait trop en avant au freinage (utilisateur,
+		-- 2026-11-16 ; mesuré : 2,8 cm en arrière à l'accélération, 4,6 cm en avant + 3,5° de hochement au freinage)
+		Forward = { On = true, Freq = 1.5, Damp = 0.85, Scale = 2, Accel = 2.2, Brake = 0.5 },
 		Side = { On = true, Freq = 1.3, Damp = 0.85, Scale = 1 },
 		Vertical = { On = true, Freq = 3.5, Damp = 0.85, Scale = 1, Recenter = 1 },
 		ForwardPitchPivot = 0.7, -- m (0 = sans) : le déplacement avant fait hocher la tête
@@ -790,7 +794,8 @@ local function neckPose(model, root, dt)
 	local dx = N.Side.On and springStep(neck.x, N.Side.Freq * fs, N.Side.Damp * ds, (N.Side.Scale or 1) * a.X, dt) or 0
 	local ay = highPass(neck.hpY, a.Y, N.Vertical.Recenter, dt)
 	local dy = N.Vertical.On and springStep(neck.y, N.Vertical.Freq * fs, N.Vertical.Damp * ds, (N.Vertical.Scale or 1) * ay, dt) or 0
-	local dz = N.Forward.On and springStep(neck.z, N.Forward.Freq * fs, N.Forward.Damp * ds, (N.Forward.Scale or 1) * a.Z, dt) or 0
+	local az = a.Z * (a.Z > 0 and (N.Forward.Accel or 1) or (N.Forward.Brake or 1))
+	local dz = N.Forward.On and springStep(neck.z, N.Forward.Freq * fs, N.Forward.Damp * ds, (N.Forward.Scale or 1) * az, dt) or 0
 	dx, dy, dz = softClip(dx, L.Side), softClip(dy, L.Vertical), softClip(dz, L.Forward)
 	-- rotations : la tête garde son orientation dans le monde (on retranche la rotation du véhicule), puis revient
 	local rot = root.CFrame.Rotation
