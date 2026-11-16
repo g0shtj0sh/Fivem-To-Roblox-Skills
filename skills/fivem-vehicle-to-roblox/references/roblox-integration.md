@@ -120,6 +120,17 @@ Mesures (Studio, m422, 2026-11-16) : en ligne droite caméra alignée (0°) ; en
 capot (suit la trajectoire + ~18°) ; Dynamic : FOV 55° à l'arrêt → 80° à 120 km/h. Cadrage ChaseNear comparé aux
 vidéos de référence : voiture en bas au centre, ≈ 25 % de la largeur, horizon vers le tiers haut.
 
+**Révision (2026-11-16, retour de l'utilisateur sur capture)** : les défauts sont calés en Studio sur les vidéos de
+référence, en comparant une capture et une image de référence **à la même hauteur** (le FOV de Roblox est vertical)
+et en mesurant une grandeur commune (`brolver-rp/scripts/camera-refs/compare.py`) : cockpit FOV 55 + œil avancé de
+3 cm (volant ≈ 0,7 × la hauteur d'écran, comme la référence) ; poursuite proche 2,9 m / 1,15 m / 3° ; poursuite
+3,2 m / 1,55 m / 10° ; **angle fixe** : la vue ne tourne que pendant un appui (clic droit, stick, doigt) et revient au
+centre ; poursuite fixe derrière la voiture (`VelocityFollow = 0`, `SlipExaggerate = 0`). Tête : accélérations
+dérivées d'une vitesse lissée puis lissées (6/s) ; seules les rotations lentes sont stabilisées (`Bandwidth` 2,5 Hz,
+`RotationScale` 0,5) — stabilisée à toutes les fréquences, notre caisse qui vibre faisait danser l'habitacle
+(17,5 °/s en ligne droite) ; regard dans le virage 0,04 / 6° max ; inclinaison latérale divisée par deux. Mesuré
+(m422, ligne droite > 30 km/h) : rotation de l'image 6,8 °/s avec la tête contre 13,6 sans ; habitacle 3,9 °/s.
+
 **Cockpit : tête physique** (`Settings.Neck`, comportement relevé sur NeckFX / AC Head Physics de Jack Sankey &
 Jordash, réécrit) : un ressort amorti par axe (`x'' = −2ζω·x' − ω²·x + a`, fréquence en Hz, amortissement 0..1).
 Déplacements avant / côté / vertical poussés par les accélérations du véhicule **en g** (vertical passé en

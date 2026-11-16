@@ -82,15 +82,27 @@ Camera.Presets = {
 Camera.Settings = {
 	Preset = "Calm",
 	DefaultView = "ChaseNear",
-	ChaseNear = { Distance = 2.4, Height = 1.15, Pitch = 13 }, -- mètres, mètres, degrés (réglage « cinématique »)
-	Chase = { Distance = 2.8, Height = 1.25, Pitch = 15 }, -- réglage « jouable »
+	-- mètres, mètres, degrés. Calés en Studio sur les vidéos de référence (comparaison à même hauteur d'image,
+	-- 2026-11-16) : proche = poursuite No Hesi (horizon 47 %, voiture ≈ 0,5 × la hauteur d'écran), poursuite =
+	-- vidéo « last christmas » (voiture ≈ 0,4 × la hauteur, horizon 40 %). Les réglages AC d'origine (2,4 / 1,15 / 13
+	-- et 2,8 / 1,25 / 15) donnaient une caméra trop proche qui plongeait sur le toit avec nos repères.
+	ChaseNear = { Distance = 2.9, Height = 1.15, Pitch = 3 },
+	Chase = { Distance = 3.2, Height = 1.55, Pitch = 10 },
 	Bonnet = { Fov = 65, Forward = 1.15, Height = 0.2 }, -- avance depuis l'œil (m), hauteur au-dessus du capot (m)
-	Cockpit = { Fov = 100, LookBack = 130 }, -- FOV vertical (NeckFX conseille 100 dans Assetto Corsa)
+	-- FOV vertical 55 : cadrage des vidéos de référence (volant ≈ 0,8 × la hauteur d'écran) ; le « FOV 100 » du guide
+	-- NeckFX donnait une vue bien trop large (refusé par l'utilisateur, 2026-11-16). Pitch : regard vers le bas (°).
+	-- Forward : avance de l'œil vers le volant (m). Calé sur la vue cockpit de référence (volant ≈ 0,7 × la hauteur).
+	Cockpit = { Fov = 55, Forward = 0.03, Pitch = 6, LookBack = 130 },
 	-- tête physique du cockpit : réglages « NeckFX Imagined Visuals » fournis par l'utilisateur (2026-11-16)
 	Neck = {
 		Enabled = true,
 		Strength = 1, -- multiplie les déplacements et les rotations de la tête (0 = tête fixe)
 		FrequencyScale = 1, DampingScale = 1, ThresholdKmh = 3, FullKmh = 10,
+		-- au-dessus de Bandwidth (Hz), la tête suit la voiture (« Max Frequency » de NeckFX) : notre caisse vibre bien
+		-- plus que celle d'Assetto Corsa, stabilisée à toutes les fréquences la vue faisait danser tout l'habitacle
+		-- (mesuré 2026-11-16 : 17,5 °/s de rotation de la vue en ligne droite contre 0,13 sans la tête)
+		Bandwidth = 2.5,
+		RotationScale = 0.5, -- part des rotations de la tête gardée (réalisme dosé, comme les références)
 		Pitch = { On = true, Freq = 0.7, Damp = 0.85, Tracking = false },
 		Roll = { On = true, Freq = 1, Damp = 1, Tracking = false },
 		Yaw = { On = true, Freq = 1.5, Damp = 0.85, Tracking = true },
@@ -98,14 +110,17 @@ Camera.Settings = {
 		Side = { On = true, Freq = 1.3, Damp = 0.85, Scale = 1 },
 		Vertical = { On = true, Freq = 3.5, Damp = 0.85, Scale = 1, Recenter = 1 },
 		ForwardPitchPivot = 0.7, -- m (0 = sans) : le déplacement avant fait hocher la tête
-		SideRollPivot = 0.2, -- m : le déplacement latéral la penche
+		SideRollPivot = 0.4, -- m : le déplacement latéral la penche (0,2 du preset NeckFX : 5,8° en virage, trop)
 		SideSighting = 25, -- m : et la tourne pour garder un point visé devant
-		SteerFollow = 0.1, SteerMax = 20, SteerRatio = 14, Smoothing = 0.08, -- regard dans le virage (angle du volant)
+		-- regard dans le virage : léger (la tête tourne très peu dans les vidéos de référence ; 0,1 / 20° tournait trop)
+		SteerFollow = 0.04, SteerMax = 6, SteerRatio = 14, Smoothing = 0.25,
 		GearKick = { On = true, Scale = 0.15, Vertical = 1, Forward = 0.5, Pitch = 1, Freq = 4, Damp = 0.26, Gas = 0 },
 		Limits = { Forward = 0.25, Side = 0.12, Vertical = 0.14, Angle = 30 }, -- garde-fous (m, degrés)
 	},
-	VelocityFollow = 1, -- 0 : la poursuite suit le capot ; 1 : la trajectoire (AC)
-	SlipExaggerate = 1,
+	-- 0 : la poursuite reste fixe derrière la voiture (vidéos de référence, demande de l'utilisateur 2026-11-16) ;
+	-- 1 : elle suit la trajectoire comme DynaCam (la voiture se voit de biais en glisse)
+	VelocityFollow = 0,
+	SlipExaggerate = 0,
 	Collide = true,
 	-- effets (remplis par le preset)
 }
@@ -350,6 +365,8 @@ local function resetDynamics()
 	state.dirY = 0
 	state.slip = 0
 	state.lastVel = nil
+	state.velF = nil
+	state.accNeck = Vector3.zero
 	state.acc, state.accFast, state.accSlow, state.lastAccRaw = Vector3.zero, Vector3.zero, Vector3.zero, Vector3.zero
 	state.bump, state.bumpV, state.after, state.fovAdd = 0, 0, 0, 0
 	state.head = Vector3.zero
@@ -362,7 +379,7 @@ local function setView(v, char)
 	local was = state.view
 	state.view = v
 	state.yaw = 0
-	state.pitch = (v == "Cockpit") and -math.rad(Camera.StartPitch) or 0
+	state.pitch = (v == "Cockpit") and -math.rad(Camera.Settings.Cockpit.Pitch or Camera.StartPitch) or 0
 	state.lastLook = os.clock()
 	if v and v ~= "Cockpit" then
 		state.lastOutside = v
@@ -471,12 +488,16 @@ local function updateDynamics(root, g, dt)
 	local spm = g.spm
 	local vel = root.AssemblyLinearVelocity / spm
 	local cf = root.CFrame
+	-- la vitesse lue à chaque image tremble (pas physiques, réseau) : dérivée d'une vitesse lissée, sinon les
+	-- accélérations font trembler la tête du cockpit
+	state.velF = state.velF and state.velF:Lerp(vel, lerpK(20, dt)) or vel
 	if state.lastVel and dt > 0 then
-		local a = (vel - state.lastVel) / dt / 9.81
+		local a = (state.velF - state.lastVel) / dt / 9.81
 		local raw = Vector3.new(a:Dot(cf.RightVector), a.Y, a:Dot(cf.LookVector))
 		state.acc = state.acc:Lerp(raw, lerpK(3, dt))
 		state.accFast = state.accFast:Lerp(raw, lerpK(15, dt))
 		state.accSlow = state.accSlow:Lerp(raw, lerpK(1, dt))
+		state.accNeck = (state.accNeck or Vector3.zero):Lerp(raw, lerpK(6, dt))
 		local jerk = (raw - state.lastAccRaw) / dt / 16
 		state.lastAccRaw = raw
 		-- choc : un à-coup fort laisse une secousse qui retombe
@@ -491,7 +512,7 @@ local function updateDynamics(root, g, dt)
 			state.bump += state.bumpV * h
 		end
 	end
-	state.lastVel = vel
+	state.lastVel = state.velF
 	state.speed += (vel.Magnitude - state.speed) * lerpK(30, dt)
 	return vel
 end
@@ -529,8 +550,9 @@ local function chaseCFrame(model, root, dt, viewSettings)
 
 	-- regarder autour / derrière, et retour derrière la voiture
 	local mps = speed
-	if os.clock() - state.lastLook > Camera.RecenterDelay and mps > Camera.RecenterSpeed then
-		local k = lerpK(Camera.RecenterRate, dt)
+	-- angle fixe : revient derrière la voiture dès qu'on ne regarde plus autour (clic droit, stick, doigt)
+	if not state.looking then
+		local k = lerpK(6, dt)
 		state.yaw -= state.yaw * k
 		state.pitch -= state.pitch * k
 	end
@@ -627,8 +649,8 @@ end
 local function bonnetCFrame(model, seat, root, dt)
 	local cf = root.CFrame
 	updateDynamics(root, geometry(model), dt)
-	if os.clock() - state.lastLook > Camera.RecenterDelay and state.speed > Camera.RecenterSpeed then
-		local k = lerpK(Camera.RecenterRate, dt)
+	if not state.looking then
+		local k = lerpK(6, dt)
 		state.yaw -= state.yaw * k
 		state.pitch -= state.pitch * k
 	end
@@ -650,7 +672,7 @@ resetNeck = function()
 	for _, r in pairs(neck.hpRate) do
 		r[1], r[2] = 0, 0
 	end
-	neck.look, neck.lastRot, neck.gear = 0, nil, nil
+	neck.look, neck.lastRot, neck.gear, neck.lp = 0, nil, nil, nil
 end
 local function springStep(s, freq, damp, a, dt)
 	local w = 2 * math.pi * math.min(freq, 9.7)
@@ -709,7 +731,7 @@ local function neckPose(model, root, dt)
 	local on = smoothStep01(kmh / full, (N.ThresholdKmh or 3) / full)
 	local L = N.Limits or {}
 	-- accélérations du véhicule en g (x à droite, y en haut, z vers l'avant), légèrement lissées
-	local a = state.accFast
+	local a = state.accNeck or Vector3.zero
 	-- déplacements : la tête reste en arrière de l'accélération
 	local dx = N.Side.On and springStep(neck.x, N.Side.Freq * fs, N.Side.Damp * ds, (N.Side.Scale or 1) * a.X, dt) or 0
 	local ay = highPass(neck.hpY, a.Y, N.Vertical.Recenter, dt)
@@ -742,6 +764,18 @@ local function neckPose(model, root, dt)
 	local pitch = axis("pitch", N.Pitch, rx)
 	local yaw = axis("yaw", N.Yaw, ry)
 	local roll = axis("roll", N.Roll, rz)
+	-- seules les rotations lentes restent compensées : passe-bas (Bandwidth) sur les angles de la tête
+	local bw = N.Bandwidth or 0
+	if bw > 0 then
+		local kb = 1 - math.exp(-dt * 2 * math.pi * bw)
+		neck.lp = neck.lp or { 0, 0, 0 }
+		neck.lp[1] += (pitch - neck.lp[1]) * kb
+		neck.lp[2] += (yaw - neck.lp[2]) * kb
+		neck.lp[3] += (roll - neck.lp[3]) * kb
+		pitch, yaw, roll = neck.lp[1], neck.lp[2], neck.lp[3]
+	end
+	local rs = N.RotationScale or 1
+	pitch, yaw, roll = pitch * rs, yaw * rs, roll * rs
 	-- pivots : avancer fait hocher, glisser de côté penche et tourne la tête
 	if (N.ForwardPitchPivot or 0) ~= 0 then
 		pitch += dz / N.ForwardPitchPivot
@@ -797,16 +831,21 @@ local function cockpitCFrame(model, seat, root, dt, char)
 	local eye = Pose.EyeWorld(model, seat)
 	local g = geometry(model)
 	updateDynamics(root, g, dt)
-	if os.clock() - state.lastLook > Camera.RecenterDelay and state.speed > Camera.RecenterSpeed then
-		local k = lerpK(Camera.RecenterRate, dt)
+	-- angle fixe (Assetto Corsa) : la vue ne tourne que pendant qu'on regarde (clic droit, stick, doigt) et revient
+	-- droit devant dès qu'on lâche
+	local basePitch = -math.rad(Camera.Settings.Cockpit.Pitch or Camera.StartPitch)
+	if not state.looking then
+		local k = lerpK(8, dt)
 		state.yaw -= state.yaw * k
-		state.pitch += (-math.rad(Camera.StartPitch) - state.pitch) * k
+		state.pitch += (basePitch - state.pitch) * k
 	end
 	-- regarder derrière : par-dessus l'épaule (LookBack degrés), transition lissée
 	local backT = anyDown(Camera.LookBackKeys) and math.rad(Camera.Settings.Cockpit.LookBack or 130) or 0
 	neck.back += (backT - neck.back) * lerpK(12, dt)
 	local head = neckPose(model, root, dt)
-	local cf = CFrame.new(eye) * root.CFrame.Rotation * head
+	-- l'œil GTA du siège est un peu loin du volant par rapport aux vues cockpit de référence : avance réglable (m)
+	local fwd = (Camera.Settings.Cockpit.Forward or 0) * g.spm
+	local cf = CFrame.new(eye) * root.CFrame.Rotation * CFrame.new(0, 0, -fwd) * head
 		* CFrame.Angles(0, state.yaw + neck.back, 0) * CFrame.Angles(state.pitch, 0, 0)
 	setBody(char, true)
 	return cf, Camera.Settings.Cockpit.Fov or 100
@@ -960,28 +999,26 @@ function Camera.Start()
 		cam.CameraType = Enum.CameraType.Scriptable
 		local aiming = targeting()
 		local sens = UserSettings():GetService("UserGameSettings").MouseSensitivity
-		if state.view == "Cockpit" then
-			if not aiming then
-				UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-				UserInputService.MouseIconEnabled = false
-			end
-		else
-			-- extérieur : souris libre ; clic droit maintenu pour regarder autour (comme la caméra de Roblox)
-			if not aiming then
-				UserInputService.MouseBehavior = rmb and Enum.MouseBehavior.LockCurrentPosition or Enum.MouseBehavior.Default
-			end
+		-- toutes les vues : souris libre, clic droit maintenu pour regarder autour (comme la caméra de Roblox et
+		-- Assetto Corsa) ; le cockpit garde un angle fixe le reste du temps
+		if not aiming then
+			UserInputService.MouseBehavior = rmb and Enum.MouseBehavior.LockCurrentPosition or Enum.MouseBehavior.Default
+			UserInputService.MouseIconEnabled = true
 		end
+		local looking = rmb or next(state.touches) ~= nil
 		local d = aiming and Vector2.zero or UserInputService:GetMouseDelta()
-		if d.Magnitude > 0 and (state.view == "Cockpit" or rmb) then
+		if d.Magnitude > 0 and rmb then
 			look(-d.X * 0.002 * math.pi * sens, -d.Y * 0.0015 * math.pi * sens)
 		end
 		for _, pad in ipairs(UserInputService:GetConnectedGamepads()) do
 			for _, st in ipairs(UserInputService:GetGamepadState(pad)) do
 				if st.KeyCode == Enum.KeyCode.Thumbstick2 and st.Position.Magnitude > 0.2 then
 					look(-st.Position.X * 4 * dt, st.Position.Y * 3 * dt)
+					looking = true
 				end
 			end
 		end
+		state.looking = looking
 
 		local root = model.PrimaryPart
 		local cf, fov
