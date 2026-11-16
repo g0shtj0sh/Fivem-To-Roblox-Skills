@@ -122,6 +122,24 @@ Camera.Settings = {
 	-- devant une caméra qui garde le sens de la route (utilisateur, 2026-11-16, vidéo waVSKP0OuOs) ;
 	-- 0 : elle reste collée derrière le capot (refusé : « on a toujours la vue arrière de notre véhicule »)
 	VelocityFollow = 1,
+	-- vitesse (par seconde) à laquelle la caméra rattrape la trajectoire : plus bas = plus d'inertie, la voiture
+	-- glisse dans l'image en drift au lieu d'entraîner la caméra (référence waVSKP0OuOs ; 6 tournait trop avec elle)
+	FollowRate = 3,
+	-- Poursuite « Fixed » (ci-dessus : Assetto Corsa / DynaCam, la caméra garde la trajectoire) ou « Dynamic »
+	-- (façon GTA V : derrière le capot avec du retard, regard libre qui reste où on l'a laissé, zoom à la molette,
+	-- vue plus haute pour le RP ; demande de l'utilisateur 2026-11-16, utilisée par défaut). Capot et cockpit
+	-- ne changent pas.
+	ChaseMode = "Dynamic",
+	Dynamic = {
+		ChaseNear = { Distance = 3.6, Height = 1.55, Pitch = 7 },
+		Chase = { Distance = 5.2, Height = 2.1, Pitch = 10 },
+		Follow = 0.3, -- part de la trajectoire dans la direction suivie (0 = capot seul, 1 = trajectoire seule)
+		YawRate = 3, -- 1/s : vitesse de rattrapage à pleine vitesse (×0,25 à l'arrêt)
+		ZoomMin = 0.7, ZoomMax = 1.8, -- molette : facteur de distance
+		-- effets doux : fluide, sans secousses
+		Fx = { Fov = 70, FovDynamic = true, FovGain = 8, BrakeZoom = 0, AccelFx = 0.35, BrakeDip = 0.3,
+			RollFx = 0.25, BumpFx = 0.4, SpeedShake = 0.3, ShakeSpeed = 30 },
+	},
 	SlipExaggerate = 0,
 	Collide = true,
 	-- effets (remplis par le preset)
@@ -159,6 +177,7 @@ local state = {
 	-- poursuite
 	dirFlat = nil,
 	dirY = 0,
+	zoom = 1, -- poursuite dynamique : facteur de distance (molette)
 	slip = 0,
 	speed = 0,
 	lastVel = nil,
@@ -536,7 +555,9 @@ local function chaseCFrame(model, root, dt, viewSettings)
 	local speed = vel.Magnitude
 
 	-- direction suivie : la trajectoire dès ~1 m/s (pas en marche arrière), lissée
-	local follow = (S.VelocityFollow or 1) * math.clamp(state.speed - 1, 0, 1)
+	local dyn = S.ChaseMode == "Dynamic" and S.Dynamic ~= nil
+	local E = dyn and S.Dynamic.Fx or S -- effets de la poursuite
+	local follow = (dyn and (S.Dynamic.Follow or 0.3) or (S.VelocityFollow or 1)) * math.clamp(state.speed - 1, 0, 1)
 	local target = carDir
 	-- vraie marche arrière : pas d'orbite. On y entre seulement en reculant depuis (presque) l'arrêt ; une toupie à
 	-- vitesse (la voiture glisse l'arrière en avant) n'en est pas une : la caméra garde la trajectoire et montre
@@ -555,19 +576,32 @@ local function chaseCFrame(model, root, dt, viewSettings)
 	state.dirY += ((speed < 0.1 and carDir.Y or target.Y) - state.dirY) * lerpK(4, dt)
 	local tFlat = flat(target) or carFlat
 	-- rotation lissée par l'ANGLE (un mélange de vecteurs passerait par zéro sur un demi-tour : saut de caméra)
+	if dyn and backwards then
+		tFlat = carFlat -- dynamique : en marche arrière comme en toupie, la caméra reste derrière le capot
+	end
+	-- dynamique : rattrapage plus lent à basse vitesse (on peut manœuvrer sans que la vue balaie)
+	local rate = dyn and (S.Dynamic.YawRate or 3) * math.clamp(state.speed / 10, 0.25, 1) or (S.FollowRate or 6)
 	state.dirFlat = state.dirFlat
-			and rotY(state.dirFlat, signedAngle(state.dirFlat, tFlat) * lerpK(Camera.Settings.FollowRate or 6, dt))
+			and rotY(state.dirFlat, signedAngle(state.dirFlat, tFlat) * lerpK(rate, dt))
 		or tFlat
 	local dirFlat = flat(state.dirFlat) or carFlat
 	-- angle de glisse un peu exagéré (la voiture se montre davantage de biais)
-	local angle = reversing and 0 or signedAngle(carFlat, dirFlat)
+	local angle = (reversing or dyn) and 0 or signedAngle(carFlat, dirFlat)
 	state.slip += ((S.SlipExaggerate or 1) * 0.32 * softsat(2 * angle) - state.slip) * lerpK(8, dt)
 	local view = rotY(dirFlat, state.slip)
 
 	-- regarder autour / derrière, et retour derrière la voiture
 	local mps = speed
-	-- angle fixe : revient derrière la voiture dès qu'on ne regarde plus autour (clic droit, stick, doigt)
-	if not state.looking then
+	if dyn then
+		-- dynamique (GTA) : la vue reste où on l'a laissée ; elle ne revient derrière qu'en roulant, après un moment
+		if not state.looking and state.speed > Camera.RecenterSpeed
+			and os.clock() - (state.lastLook or 0) > Camera.RecenterDelay then
+			local k = lerpK(Camera.RecenterRate, dt)
+			state.yaw -= state.yaw * k
+			state.pitch -= state.pitch * k
+		end
+	elseif not state.looking then
+		-- fixe : revient derrière la voiture dès qu'on ne regarde plus autour (clic droit, stick, doigt)
 		local k = lerpK(6, dt)
 		state.yaw -= state.yaw * k
 		state.pitch -= state.pitch * k
@@ -583,31 +617,35 @@ local function chaseCFrame(model, root, dt, viewSettings)
 	dir3 = CFrame.fromAxisAngle(right, state.pitch):VectorToWorldSpace(dir3)
 
 	-- champ de vision (vertical) et distance
-	local base = S.Fov or 72
-	if S.FovDynamic then
+	local base = E.Fov or 72
+	if E.FovDynamic then
 		local az = state.accSlow.Z
-		local accelPart = az > 0 and softsat(az) or (S.BrakeZoom or 0) * 0.5 * softsat(2 * az)
-		state.fovAdd += ((S.FovGain or 0) * softsat(state.speed / 36) + accelPart * 20 - state.fovAdd) * lerpK(5, dt)
+		local accelPart = az > 0 and softsat(az) or (E.BrakeZoom or 0) * 0.5 * softsat(2 * az)
+		state.fovAdd += ((E.FovGain or 0) * softsat(state.speed / 36) + accelPart * 20 - state.fovAdd) * lerpK(5, dt)
 	else
 		state.fovAdd += (0 - state.fovAdd) * lerpK(5, dt)
 	end
 	local fov = math.clamp(base + state.fovAdd, 10, 110)
 	local az = state.acc.Z
-	local accelPush = (az > 0 and 2 * softsat(0.5 * az) or softsat(az)) * g.halfWB * 1.5 * (S.AccelFx or 0)
-	local D = viewSettings.Distance + 0.1 + 1.5 * g.halfWB + accelPush
+	local accelPush = (az > 0 and 2 * softsat(0.5 * az) or softsat(az)) * g.halfWB * 1.5 * (E.AccelFx or 0)
+	local zoom = dyn and state.zoom or 1
+	local D = (viewSettings.Distance + 0.1 + 1.5 * g.halfWB) * zoom + accelPush
 	-- quand le FOV s'élargit, la caméra se rapproche pour garder la voiture à la même taille
 	D += (D - (2.5 * g.halfWB + 1.1)) * (math.tan(math.rad(base) / 2) / math.tan(math.rad(fov) / 2) - 1)
 	local pitchUser = math.rad(viewSettings.Pitch)
 	-- Height = hauteur de la caméra au-dessus du point suivi (≈ centre de gravité) ; Pitch penche la vue vers le bas
-	local H = viewSettings.Height
+	local H = viewSettings.Height * math.sqrt(zoom)
 
 	-- position (orbite autour du point suivi, distance comptée depuis l'essieu arrière)
 	-- point suivi : centre des roues, un peu au-dessus (≈ centre de gravité), avancé d'un quart d'empattement
-	local anchor = cf:PointToWorldSpace(Vector3.new(g.center.X, g.center.Y + 0.15, g.center.Z) * spm)
-		+ carDir * (0.5 * g.halfWB * spm)
+	-- l'avance est prise le long de la VUE, pas du capot : quand la voiture pivote en drift, le point visé ne part
+	-- pas sur le côté (sinon la caméra se décale avec la rotation de la voiture — retour utilisateur 2026-11-16)
+	local anchor = cf.Position + Vector3.new(0, (g.center.Y + 0.15) * spm, 0)
+		+ (cf:VectorToWorldSpace(Vector3.new(g.center.X, 0, g.center.Z) * spm))
+		+ dirFlat * (0.5 * g.halfWB * spm)
 	local camUp = right:Cross(dir3).Unit
-	local shakeK = sigmoid(state.speed / (S.ShakeSpeed or 25) * 5 - 5) * (S.SpeedShake or 0)
-	local bumpK = math.clamp(state.bump, -1, 1) * (S.BumpFx or 0)
+	local shakeK = sigmoid(state.speed / (E.ShakeSpeed or 25) * 5 - 5) * (E.SpeedShake or 0)
+	local bumpK = math.clamp(state.bump, -1, 1) * (E.BumpFx or 0)
 	local after = state.after
 	local pos = anchor - dir3 * D * spm + camUp * H * spm
 		+ camUp * (bumpK * 0.15 + noise(3) * after * 0.03) * spm
@@ -617,11 +655,11 @@ local function chaseCFrame(model, root, dt, viewSettings)
 	-- orientation : inclinaison réglée, regard vertical, plongée au freinage, bosses, tremblement
 	local lookDir = (CFrame.fromAxisAngle(right, -pitchUser)):VectorToWorldSpace(dir3)
 	local dip = az < 0 and 2 * softsat(-az / 2) or 0.1 * softsat(-10 * az)
-	local tilt = -math.rad(dip * 7) * (S.BrakeDip or 0) - bumpK * 0.05
+	local tilt = -math.rad(dip * 7) * (E.BrakeDip or 0) - bumpK * 0.05
 		+ noise(4) * (shakeK * 0.0012 + after * 0.02)
 	lookDir = CFrame.fromAxisAngle(right, tilt):VectorToWorldSpace(lookDir)
 	lookDir = CFrame.fromAxisAngle(camUp, noise(5) * (after * 0.008 + shakeK * 0.0008)):VectorToWorldSpace(lookDir)
-	local roll = deadzone(3.4 * state.accFast.X) * -0.06 * (S.RollFx or 0) + noise(6) * after * 0.02
+	local roll = deadzone(3.4 * state.accFast.X) * -0.06 * (E.RollFx or 0) + noise(6) * after * 0.02
 	local up = CFrame.fromAxisAngle(lookDir, roll):VectorToWorldSpace(Vector3.yAxis)
 
 	if S.Collide ~= false then
@@ -968,6 +1006,11 @@ function Camera.Start()
 		end
 		if input.UserInputType == Enum.UserInputType.Touch and state.touches[input] then
 			look(-input.Delta.X * 0.0045, -input.Delta.Y * 0.0045)
+		elseif input.UserInputType == Enum.UserInputType.MouseWheel and (state.view == "ChaseNear" or state.view == "Chase") then
+			local D = Camera.Settings.Dynamic
+			if Camera.Settings.ChaseMode == "Dynamic" and D then
+				state.zoom = math.clamp(state.zoom * (1 - 0.1 * input.Position.Z), D.ZoomMin or 0.7, D.ZoomMax or 1.8)
+			end
 		end
 	end)
 
@@ -1044,7 +1087,9 @@ function Camera.Start()
 			cf, fov = bonnetCFrame(model, seat, root, dt)
 			setBody(char, false)
 		else
-			cf, fov = chaseCFrame(model, root, dt, Camera.Settings[state.view] or Camera.Settings.Chase)
+			local S = Camera.Settings
+			local vs = (S.ChaseMode == "Dynamic" and S.Dynamic and S.Dynamic[state.view]) or S[state.view] or S.Chase
+			cf, fov = chaseCFrame(model, root, dt, vs)
 			setBody(char, false)
 		end
 		cam.CFrame = cf
