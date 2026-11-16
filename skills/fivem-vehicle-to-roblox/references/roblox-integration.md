@@ -651,6 +651,7 @@ Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a a
    | `"KickOut"` | — | `KickOccupants` |
    | `"HornTune"` | — | `PlayHornTune` |
    | `"Seat"` | — | `CycleSeat` : le joueur passe au siège libre suivant |
+   | `"EngineSound"` | nom d'un son du pack (`brolver_coupe_03`), `nil` = son d'origine | `SetEngineSound` : seulement un son de la **même catégorie** que le véhicule (raison `"other_category"` sinon), voir « Changer le son moteur en jeu » |
 
    Le serveur (`FiveMVehiclesServer`) limite le débit (8 par seconde, rafale 12, par joueur), appelle la règle
    (qui reçoit l'op : un jeu peut autoriser certaines ops hors du véhicule, p. ex. au propriétaire), puis
@@ -674,6 +675,27 @@ la finition Chrome / Classic / Matte / Metallic / Metal / Classic / Worn ; Nacr�
 Jantes → `Wheel` (`Alloy` + `Classic`) ; Intérieur / Tableau de bord → `InteriorTrim` / `Dashboard` ; Couleur
 personnalisée → op `"Color"` ; Combinaison d'usine → op `"Factory"`. Caméléon : pas de peinture dans la palette
 (DLC), rien à brancher.
+
+### Changer le son moteur en jeu (`EngineSoundBank`, op `"EngineSound"`, 2026-11-16)
+
+Un véhicule converti porte un seul son du pack maison. Pour lui proposer les autres sons de **sa catégorie**
+(coupé, sport, super… = catégorie du pack tirée de la classe GTA vérifiée, § 1c) :
+
+1. `python scripts/engine_sound_bank.py build --category <cat> --out <dossier>` découpe chaque son de la catégorie
+   avec la même chaîne que la conversion (34 boucles : moteur + échappement, enfoncé / relâché / ralenti, régimes
+   mesurés). Déterministe : le son déjà porté par un véhicule donne les **mêmes fichiers** (empreinte vérifiée).
+2. Publier les boucles (`upload_list.json`), écrire `<dossier>/sound_ids.json` (`"<son>/<fichier>.wav": "rbxassetid://…"`).
+3. `python scripts/engine_sound_bank.py emit --out <dossier> --reuse <son>=<sortie du véhicule>/sounds/sound_ids.json
+   [--merge EngineSoundBank.lua]` → `EngineSoundBank.lua`, à poser en ModuleScript
+   `ReplicatedStorage.FiveMVehicles.EngineSoundBank` (l'installateur du runtime ne le touche pas). `--reuse` évite de
+   republier le son déjà dans un véhicule.
+
+Runtime : `Custom.EngineSounds(model)` → `{ Category, Default, Current, List = { {Name, Label} } }` (aussi dans
+`GetOptions().EngineSounds`) ; l'op `"EngineSound"` pose l'attribut `EngineSound` (absent = d'origine, sauvegardé par
+`Serialize`, remis à l'origine par `Apply` s'il manque). Catégorie = celle du son d'origine (`Audio.Source`
+`awc:<son>_moteur_…`), sinon la classe. Chaque client crée alors les `Sound` de la banque (`Bank_<boucle>`, préchargés)
+et refait ses couches ; klaxon et clignotants restent ceux du véhicule. Coût : 34 boucles publiées par son ; un
+véhicule n'en joue que ~4 à la fois.
 
 ## Textures et brillance (2026-11-15)
 

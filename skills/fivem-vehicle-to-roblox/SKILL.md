@@ -55,6 +55,9 @@ VC_SEDAN→berline, VC_SPORT_CLASSIC→classique, VC_OFF_ROAD→toutterrain, « 
 utilitaires→pickup…) ; le son est tiré du nom du modèle (stable d'une conversion à l'autre).
 Moteur → couche `engine` (capot), échappement → couche `exhaust` (pots), découpés en boucles comme un son de mod. `--engine-sound
 brolver_super_03` (ou une catégorie, ex. `muscle`) force le choix ; `--no-engine-pack` l'ignore.
+**Changer de son en jeu** (menu de custom, même catégorie seulement) : banque `EngineSoundBank` publiée une fois par
+catégorie avec `scripts/engine_sound_bank.py`, op `"EngineSound"` (references/roblox-integration.md, « Changer le son
+moteur en jeu »).
 Sans chemin, le pack est **téléchargé automatiquement** depuis la release GitHub `brolver-motor-sounds-v1` (une URL est aussi acceptée) ; le .rar est téléchargé et décompressé une seule fois (7-Zip, sinon `unrar`/`rar` du PATH) dans `%LOCALAPPDATA%/f2r/engine_pack` (`~/.cache/f2r/engine_pack` hors Windows).
 Code 2 = binaires sans extracteur : installer .NET 8 (ci-dessus) et relancer ; sinon export XML
 CodeWalker par l'utilisateur ; `dlc.rpf` chiffré → OpenIV.
