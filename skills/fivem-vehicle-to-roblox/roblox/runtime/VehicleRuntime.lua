@@ -582,9 +582,11 @@ function Runtime:_aimHeadlights(full)
 	end
 	self.HeadBeamFull = full
 	local H = Runtime.Headlights
-	local range = full and H.FullRange or H.FullRange / H.DistMult
+	local prof = self:_lightProfile()
+	local maxRange = prof.range or H.FullRange
+	local range = full and maxRange or maxRange / H.DistMult
 	local pitch = math.rad(full and H.FullPitch or H.DippedPitch)
-	local angle = full and H.FullAngle or H.DippedAngle
+	local angle = full and prof.fullAngle or prof.dippedAngle
 	self.HeadBase = self.HeadBase or {}
 	for _, role in ipairs({ "headlight_l", "headlight_r" }) do
 		for _, l in ipairs(self.LightObjects[role] or {}) do
@@ -676,6 +678,61 @@ function Runtime:_shatter(bone)
 	end
 end
 
+-- Réglages des feux du mod (carcols.meta Lights, VehicleConfig.LightSettings) : chaque voiture garde sa couleur, son
+-- ouverture et son intensité de phares (avant le 2026-11-16 : tout en dur, toutes les voitures éclairaient pareil).
+-- Portée : un SpotLight Roblox plafonne à 60 studs (≈ 14 m sur une voiture à l'échelle) : la portée GTA (25-40 m) y
+-- est presque toujours ramenée. Couleurs des feux arrière / clignotants / recul : gardées seulement si franches (une
+-- couleur blanche dans le carcols laisse la texture donner la teinte, et resterait blanche ici).
+local function cfgColor(block)
+	local c = block and block.color
+	if type(c) ~= "table" or #c < 3 then
+		return nil
+	end
+	return Color3.new(math.clamp(c[1], 0, 1), math.clamp(c[2], 0, 1), math.clamp(c[3], 0, 1))
+end
+local function saturated(c)
+	return c and (math.max(c.R, c.G, c.B) - math.min(c.R, c.G, c.B)) > 0.35
+end
+function Runtime:_lightProfile()
+	if self.LightProfile then
+		return self.LightProfile
+	end
+	local L = self.Config.LightSettings or {}
+	local H = Runtime.Headlights
+	local prof = { head = LIGHT_COLORS.head, tail = LIGHT_COLORS.tail, brake = LIGHT_COLORS.brake,
+		indicator = LIGHT_COLORS.indicator, reverse = LIGHT_COLORS.reverse,
+		dippedAngle = H.DippedAngle, fullAngle = H.FullAngle, brightness = H.Brightness }
+	local head = L.headLight
+	if head then
+		local c = cfgColor(head)
+		if c then
+			-- un blanc GTA (1, 1, 0,8) reste lumineux : mélangé au blanc chaud par défaut pour garder de la clarté
+			prof.head = LIGHT_COLORS.head:Lerp(c, 0.7)
+		end
+		local outer = tonumber(head.outerConeAngle)
+		if outer and outer > 5 then
+			prof.dippedAngle = math.clamp(outer, 30, 100)
+			prof.fullAngle = math.clamp(outer * H.FullAngle / H.DippedAngle, prof.dippedAngle, 120)
+		end
+		local k = tonumber(head.intensity)
+		if k and k > 0 then
+			prof.brightness = H.Brightness * math.clamp(k, 0.6, 1.6)
+		end
+		local fall = tonumber(head.falloffMax)
+		if fall and fall > 0 then
+			prof.range = math.min(H.FullRange, fall * self.Spm)
+		end
+	end
+	for key, block in pairs({ tail = L.tailLight, indicator = L.indicator, reverse = L.reversingLight }) do
+		local c = cfgColor(block)
+		if saturated(c) or (key == "reverse" and c) then
+			prof[key] = c
+		end
+	end
+	self.LightProfile = prof
+	return prof
+end
+
 function Runtime:_updateLights(s)
 	-- véhicule rendu invisible (VehicleCustomization.SetVisible) : tous les feux éteints
 	if s.Invisible then
@@ -700,7 +757,8 @@ function Runtime:_updateLights(s)
 		end
 	end
 	local xenon = self.Model:GetAttribute("XenonColor")
-	local headColor = xenon or LIGHT_COLORS.head
+	local prof = self:_lightProfile()
+	local headColor = xenon or prof.head
 	local hl = s.Headlights
 	local sirenCfg = self.Config.Sirens
 	local beat = sirenCfg and math.floor(now * (sirenCfg.Bpm or 220) / 60) or 0
@@ -710,7 +768,7 @@ function Runtime:_updateLights(s)
 	-- croisement / route (portée et visée, voir Runtime.Headlights) ; ombres seulement pour la voiture du joueur local
 	local H = Runtime.Headlights
 	local full = hl >= 2
-	local headBright = full and H.Brightness * H.IntensityMult or H.Brightness
+	local headBright = full and prof.brightness * H.IntensityMult or prof.brightness
 	self:_setRole("headlight_l", hl >= 1 or wigL, headColor, headBright)
 	self:_setRole("headlight_r", hl >= 1 or wigR, headColor, headBright)
 	self:_aimHeadlights(full)
@@ -727,7 +785,7 @@ function Runtime:_updateLights(s)
 	self:_setRole("always_on", s.Engine, LIGHT_COLORS.drl)
 	local hasBrakeParts = self.LightParts.brakelight_l or self.LightParts.brakelight_r or self.LightParts.brakelight_m
 	local tailOn = hl >= 1 or (s.Brake and not hasBrakeParts)
-	local tailColor = (s.Brake and not hasBrakeParts) and LIGHT_COLORS.brake or LIGHT_COLORS.tail
+	local tailColor = (s.Brake and not hasBrakeParts) and prof.brake or prof.tail
 	local tailBright = (s.Brake and not hasBrakeParts) and 1.2 or 0.35
 	self:_setRole("taillight_l", tailOn, tailColor, tailBright)
 	self:_setRole("taillight_r", tailOn, tailColor, tailBright)
@@ -745,14 +803,14 @@ function Runtime:_updateLights(s)
 	end
 	self:_cabinLight("interior", (s.InteriorLight or doorOpen) and not s.Invisible)
 	self:_cabinLight("plate", (hl or 0) > 0 and not s.Invisible)
-	self:_setRole("reversinglight_l", s.Reverse, LIGHT_COLORS.reverse, 1.2)
-	self:_setRole("reversinglight_r", s.Reverse, LIGHT_COLORS.reverse, 1.2)
+	self:_setRole("reversinglight_l", s.Reverse, prof.reverse, 1.2)
+	self:_setRole("reversinglight_r", s.Reverse, prof.reverse, 1.2)
 	local left = (s.Indicator == "Left" or s.Indicator == "Hazard") and blink
 	local right = (s.Indicator == "Right" or s.Indicator == "Hazard") and blink
-	self:_setRole("indicator_lf", left, LIGHT_COLORS.indicator, 1)
-	self:_setRole("indicator_lr", left, LIGHT_COLORS.indicator, 1)
-	self:_setRole("indicator_rf", right, LIGHT_COLORS.indicator, 1)
-	self:_setRole("indicator_rr", right, LIGHT_COLORS.indicator, 1)
+	self:_setRole("indicator_lf", left, prof.indicator, 1)
+	self:_setRole("indicator_lr", left, prof.indicator, 1)
+	self:_setRole("indicator_rf", right, prof.indicator, 1)
+	self:_setRole("indicator_rr", right, prof.indicator, 1)
 	for i = 1, 4 do
 		local on = s.Siren and ((beat + i) % 2 == 0) or (self.Model:GetAttribute("ExtraLights") == true)
 		self:_setRole("extralight_" .. i, on, i % 2 == 0 and Color3.fromRGB(255, 30, 30) or Color3.fromRGB(30, 60, 255), 3)
@@ -1121,6 +1179,20 @@ function Runtime:_updateAudio(dt, s)
 	local horn = self.Sounds:FindFirstChild("Horn")
 	if horn then
 		horn.Looped = true
+		-- klaxon choisi dans la banque du jeu (attribut HornSound, VehicleCustomization.HornBank)
+		local choice = self.Model:GetAttribute("HornSound")
+		if choice ~= self.HornChoice then
+			self.HornChoice = choice
+			if horn:GetAttribute("OriginalSoundId") == nil then
+				horn:SetAttribute("OriginalSoundId", horn.SoundId)
+			end
+			local bankMod = script.Parent:FindFirstChild("HornBank")
+			local ok, bank = pcall(function()
+				return bankMod and require(bankMod)
+			end)
+			local entry = ok and type(bank) == "table" and type(choice) == "string" and bank[choice]
+			horn.SoundId = (entry and entry.SoundId) or horn:GetAttribute("OriginalSoundId")
+		end
 		if s.Horn and not horn.IsPlaying then
 			horn:Play()
 		elseif not s.Horn and horn.IsPlaying then

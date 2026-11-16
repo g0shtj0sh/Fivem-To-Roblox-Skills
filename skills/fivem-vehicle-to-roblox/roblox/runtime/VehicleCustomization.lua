@@ -698,6 +698,54 @@ function Custom.GetPerformance(model)
 	return out
 end
 
+-- ------------------------------------------------------------------ klaxon (banque du jeu)
+-- Le jeu publie ses klaxons dans ReplicatedStorage.FiveMVehicles.HornBank ({ [nom] = { Label, SoundId } }, gardé par
+-- les réinstallations). Choix = attribut HornSound (absent = klaxon d'origine) ; chaque client change le son
+-- (VehicleRuntime). Remplace l'emplacement « Klaxon » de GTA (46 noms sans son dans les mods).
+local hornBankCache
+local function hornBank()
+	if hornBankCache == nil then
+		local folder = script.Parent or game:GetService("ReplicatedStorage"):FindFirstChild("FiveMVehicles")
+		local mod = folder and folder:FindFirstChild("HornBank")
+		local ok, bank = pcall(function()
+			return mod and require(mod)
+		end)
+		hornBankCache = (ok and type(bank) == "table" and bank) or false
+	end
+	return hornBankCache or nil
+end
+Custom.HornBank = hornBank
+
+-- { Current (nom ou nil = d'origine), List = { {Name, Label} } } ; nil sans banque
+function Custom.HornSounds(model)
+	local bank = hornBank()
+	if not bank then
+		return nil
+	end
+	local list = {}
+	for name, entry in pairs(bank) do
+		if type(entry) == "table" and type(entry.SoundId) == "string" then
+			table.insert(list, { Name = name, Label = entry.Label or name })
+		end
+	end
+	table.sort(list, function(x, y)
+		return x.Name < y.Name
+	end)
+	local current = model:GetAttribute("HornSound")
+	return { Current = type(current) == "string" and current or nil, List = list }
+end
+
+function Custom.SetHornSound(model, name)
+	if name ~= nil then
+		local bank = hornBank()
+		if not bank or type(bank[name]) ~= "table" then
+			return false, "unknown"
+		end
+	end
+	model:SetAttribute("HornSound", name)
+	return true
+end
+
 -- ------------------------------------------------------------------ son moteur (banque du jeu)
 -- Un véhicule converti porte UN son du pack maison (VehicleConfig.Audio). Le jeu peut publier les autres sons du
 -- pack dans ReplicatedStorage.FiveMVehicles.EngineSoundBank (scripts/engine_sound_bank.py) : le véhicule peut alors
@@ -802,6 +850,7 @@ function Custom.GetOptions(model)
 		Performance = Custom.PerformanceSlots(model),
 		StatMods = cfg.StatMods or {},
 		EngineSounds = Custom.EngineSounds(model),
+		HornSounds = Custom.HornSounds(model),
 	}
 end
 
@@ -811,7 +860,7 @@ local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_"
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
 local SAVE_KEYS = {
 	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
-	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade",
+	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade", "HornSound",
 }
 
 -- Clé gardée dans une sauvegarde / acceptée à la restauration. Vitres : seulement les vraies vitres du modèle (une
@@ -858,7 +907,8 @@ end
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade" }
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
+	"HornSound" }
 
 function Custom.Apply(model, data)
 	data = data or {}
@@ -1517,6 +1567,13 @@ OPS.EngineSound = function(model, name)
 		return false, "invalid"
 	end
 	return Custom.SetEngineSound(model, name)
+end
+
+OPS.HornSound = function(model, name)
+	if name ~= nil and (type(name) ~= "string" or #name > 64) then
+		return false, "invalid"
+	end
+	return Custom.SetHornSound(model, name)
 end
 
 OPS.HornTune = function(model)

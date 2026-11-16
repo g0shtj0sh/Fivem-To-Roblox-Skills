@@ -808,6 +808,13 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
 
     lid = variation.get("lightSettings", -1)
     light_settings = carcols["lights"].get(lid) or {}
+    if not light_settings and carcols["lights"]:
+        # numéro demandé par carvariations absent du carcols (m422 : demande 1, décrit 900, vérifié 2026-11-16) : un
+        # seul bloc dans le mod = c'est le sien ; plusieurs = le plus petit numéro, signalé
+        fid = sorted(carcols["lights"])[0]
+        light_settings = carcols["lights"][fid]
+        report.warn(f"Réglages des feux : n° {lid} demandé par carvariations absent du carcols ; bloc n° {fid} utilisé"
+                    + (" (le seul du mod)." if len(carcols["lights"]) == 1 else f" (sur {len(carcols['lights'])})."))
     sid = variation.get("sirenSettings", -1)
     siren_src = carcols["sirens"].get(sid)
     sirens = None
