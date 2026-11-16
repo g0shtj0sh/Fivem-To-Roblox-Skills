@@ -150,6 +150,31 @@ Dyn.Tuning = {
 	-- après une montée 1→2 le régime tombe à 0,93 × 1,949 / 3,333 ≈ 0,54, mesuré)
 	ReverseHold = 0.25, -- s à l'arrêt, frein maintenu, avant de passer la marche arrière
 	ShiftLockout = 0.35, -- s minimum entre deux passages automatiques
+	-- RÉGIME RÉALISTE (2026-11-16, vidéo de l'utilisateur : « après ou pendant un drift le compte-tours s'emballe,
+	-- bruits horribles ; au démarrage l'aiguille saute directement vers 1 »). Relevé image par image (compte-tours,
+	-- 5 i/s) et spectrogramme du son : en drift, 2ᵉ de 63 à 88 km/h, régime collé entre 6 200 et 7 100 tr/min et qui
+	-- rebondit 3 à 5 fois par seconde (rupteur à coupure nette : couple coupé, roues ralenties, couple rendu) ; au
+	-- frein à main, rétrogradage en 1ʳᵉ à 66 km/h (roues arrière bloquées → régime moyen des roues motrices bas),
+	-- puis 1ʳᵉ au rupteur de 59 à 41 km/h ; moteur coupé puis relancé : son coupé net, aiguille à ~1 000 tout de suite.
+	SoftLimitFrom = 0.96, -- roues qui patinent : le couple s'efface de 0,96 à 1 (rupteur doux, comme le burn) au lieu
+	-- d'être coupé net à 1 — le régime se TIENT sous la zone rouge, il ne rebondit plus
+	LimiterUpshiftAfter = 0.35, -- s au rupteur, roues qui patinent : la boîte monte quand même (une vraie boîte auto
+	-- décide sur le régime moteur) …
+	LimiterUpshiftSlide = 1.5, -- m/s de vitesse latérale minimale (glisse) pour cette montée forcée entre
+	-- LimiterUpshiftMinSpeed et LimiterUpshiftAnySpeed ; au-delà, elle se fait même en ligne droite (roues qui patinent
+	-- au rupteur à 50 km/h et plus : banc 2026-11-16, 1ʳᵉ tenue au rupteur de 49 à 72 km/h pendant 4 s)
+	LimiterUpshiftAnySpeed = 14, -- m/s (≈ 50 km/h)
+	LimiterHoldGear = 2.0, -- s : après une montée forcée au rupteur, pas de descente tant qu'on accélère
+	LimiterUpshiftMinSpeed = 8, -- … au-dessus de cette vitesse (m/s ≈ 29 km/h) : au départ arrêté GTA reste en 1ʳᵉ
+	HandbrakeClutch = 0.1, -- frein à main tiré en roulant : embrayage ouvert (MESURÉ dans GTA, hbcorner_70 : embrayage
+	-- 0,10, régime qui retombe en douceur au ralenti) ; le moteur tourne libre (il monte si on accélère), aucune boîte
+	-- automatique ne change de rapport, et au relâchement l'embrayage se referme progressivement (ClutchChangeRateUp)
+	CrankTime = 0.55, -- s de démarreur au démarrage du moteur (régime CrankRpm, aucune poussée)
+	CrankRpm = 0.055, -- régime normalisé du démarreur (0,2 = ralenti) : ~230 tr/min pour un ralenti à 850
+	StartFlare = 0.14, -- montée de régime à l'allumage, au-dessus du ralenti (pic ~2 000 tr/min sur la m422) …
+	StartFlareRise = 0.15, -- … atteinte en ce temps (s) …
+	StartFlareTau = 0.45, -- … puis retour au ralenti (constante de temps, s)
+	EngineStopRate = 6, -- 1/s : moteur coupé, le régime retombe à 0 (≈ 0,6 s depuis le ralenti)
 	ShiftRpmRate = 10, -- 1/s : au passage, le régime rejoint celui du nouveau rapport à ce taux x embrayage (lissé)
 	RpmDisplayTau = 0.06, -- s : lissage du régime montré (son, compte-tours, télémétrie)
 	EngineBrakeG = 0.9, -- frein moteur (en g) au rupteur, gaz relâchés (proportionnel au régime). MESURÉ :
@@ -671,7 +696,7 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 
 	local S = {
 		rpm = 0.2, gear = 1, clutch = 1, shiftDir = 0, lastShift = -1, time = 0,
-		reverseTimer = 0, steerAngle = 0, lock = P.steerLock,
+		reverseTimer = 0, steerAngle = 0, lock = P.steerLock, engineWasOn = true, limiterT = 0,
 		omega = {}, x = {}, slip = {}, slipV = {}, slipLong = {}, slipLat = {}, stick = {}, burnout = false,
 	}
 	for i, w in ipairs(wheels) do
@@ -794,6 +819,18 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	local vf = -vBody.Z -- vitesse vers l'avant
 	local speed = vBody.Magnitude
 	local engineOn = inp.Engine ~= false
+	-- démarrage : démarreur (CrankTime) puis montée de régime ; S.engineWasOn part à true (un véhicule déjà allumé
+	-- quand on y monte ne rejoue pas son démarrage)
+	if engineOn and not S.engineWasOn then
+		S.startT = 0
+	end
+	if engineOn then
+		S.offRpm = nil
+	end
+	S.engineWasOn = engineOn
+	S.startT = (S.startT or math.huge) + dt
+	local cranking = engineOn and S.startT < T.CrankTime
+	local running = engineOn and not cranking
 
 	-- marche arrière façon GTA : à l'arrêt, frein maintenu -> arrière ; en arrière, « frein » accélère
 	local throttle, brake = inp.Throttle or 0, inp.Brake or 0
@@ -832,12 +869,12 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 	else
 		driveIn, brakeIn = throttle, brake
 	end
-	if not engineOn then
+	if not running then
 		driveIn = 0
 	end
 
 	-- burn façon GTA (voir Dyn.Tuning, BurnoutInput) : W + S en marche avant, à l'arrêt ou presque
-	local wantBurn = S.gear >= 1 and engineOn and throttle > T.BurnoutInput and brake > T.BurnoutInput
+	local wantBurn = S.gear >= 1 and running and throttle > T.BurnoutInput and brake > T.BurnoutInput
 	S.burnout = wantBurn and math.abs(vf) < (S.burnout and T.BurnoutExit or T.BurnoutEnter)
 	local burnout = S.burnout
 
@@ -959,7 +996,13 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		drivenSpeed = nd > 0 and drivenSpeed / nd or math.abs(vf)
 		local ratio = gearRatio(P, S, vf)
 		local gearTop = P.flatVel / math.abs(ratio)
-		if S.clutch < 1 and not launchHold then
+		-- frein à main en roulant : embrayage ouvert (voir Dyn.Tuning, HandbrakeClutch)
+		local hbOpen = inp.Handbrake and S.gear ~= 0 and math.abs(vf) > 1 and not burnout and not S.launch
+		if hbOpen then
+			S.clutch = math.min(S.clutch, T.HandbrakeClutch)
+			S.shiftDir = 1
+		end
+		if S.clutch < 1 and not launchHold and not hbOpen then
 			S.clutch = math.min(1, S.clutch + ((S.shiftDir >= 0) and P.clutchUp or P.clutchDown) * h)
 			-- départ : l'embrayage ne se ferme qu'une fois les roues au régime tenu par le moteur (MESURÉ : GTA plafonne
 			-- vers 0,7–0,8 puis ferme à 0,93 s, 24,9 km/h, régime de roue 0,51) ; sinon le régime retombe d'un coup
@@ -980,7 +1023,20 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		end
 		local free = math.clamp(S.rpm + (2 * thr - 1) * 2 * P.driveInertia * h, 0.2, 1)
 		local wheelRpm = drivenSpeed / gearTop
-		if S.clutch < 1 and not S.launch then
+		if hbOpen then
+			-- moteur débrayé : il tourne libre, monte si on accélère, retombe au ralenti sinon
+			S.rpm = math.clamp(S.rpm + (2 * driveIn - 1) * 2 * P.driveInertia * h, 0.2, T.SoftLimitFrom)
+			-- la boîte auto descend avec la vitesse pendant ce temps : au relâchement, le bon rapport est prêt (sinon
+			-- 3ᵉ à 20 km/h, moteur au ralenti ~1 s : banc 2026-11-16). GTA descend aussi au frein à main (hbcorner_70).
+			if S.gear > 1 and P.gearbox ~= "manual" and not P.cvt then
+				local bodyR = math.abs(vf) / gearTop
+				local lower = math.abs(P.ratios[S.gear - 1] or ratio)
+				if bodyR < T.DownshiftRpm and bodyR * lower / math.abs(ratio) < T.UpshiftRpm * T.DownshiftMargin then
+					S.gear -= 1
+					S.lastShift = S.time
+				end
+			end
+		elseif S.clutch < 1 and not S.launch then
 			-- passage de rapport : le régime rejoint celui du nouveau rapport à une vitesse qui suit l'embrayage
 			-- (ShiftRpmRate x embrayage, par seconde), puis on remonte dans les tours. Le mélange
 			-- « roues x embrayage + libre x (1 - embrayage) » que GTA fait une fois par image, appliqué ici à chaque
@@ -997,7 +1053,24 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			S.rpm = math.max(S.rpm, 0.2 + (lr - 0.2) * up * thr)
 		end
 		if not engineOn then
-			S.rpm = math.max(wheelRpm, 0)
+			-- moteur coupé : le régime RETOMBE à 0 (il ne saute plus). Valeur gardée à part : le calcul normal
+			-- ci-dessus le replace au ralenti à chaque sous-pas
+			S.offRpm = (S.offRpm or S.rpm) * math.exp(-h * T.EngineStopRate)
+			if S.offRpm < 0.004 then
+				S.offRpm = 0
+			end
+			S.rpm = S.offRpm
+		elseif cranking then
+			S.rpm = T.CrankRpm * (1 + 0.12 * math.sin(S.startT * 38)) -- démarreur, léger battement
+		elseif S.startT < T.CrankTime + 3 then
+			-- allumage : le régime monte au-dessus du ralenti puis y redescend
+			local ts = S.startT - T.CrankTime
+			local peak = 0.2 + T.StartFlare
+			if ts < T.StartFlareRise then
+				S.rpm = math.max(T.CrankRpm + (peak - T.CrankRpm) * (ts / T.StartFlareRise), math.min(S.rpm, peak))
+			else
+				S.rpm = math.max(S.rpm, 0.2 + T.StartFlare * math.exp(-(ts - T.StartFlareRise) / T.StartFlareTau))
+			end
 		end
 		local cut = 1
 		if burnout then
@@ -1006,10 +1079,14 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			-- ne se formait jamais.
 			cut = math.clamp((1 - S.rpm) / 0.05, 0, 1)
 		end
+		local spinning = not burnout and wheelRpm > (math.abs(vf) / gearTop) * 1.15 + 0.05
+		if spinning and not P.hardRev and S.rpm >= T.SoftLimitFrom then
+			-- roues qui patinent : seul le rupteur borne leur régime ; rupteur DOUX (voir Dyn.Tuning, SoftLimitFrom)
+			cut = math.clamp((1 - S.rpm) / (1 - T.SoftLimitFrom), 0, 1)
+		end
+		S.limiterT = (S.rpm >= T.SoftLimitFrom) and (S.limiterT or 0) + h or 0
 		if S.rpm >= 1 then
-			if P.hardRev or (not burnout and wheelRpm > (math.abs(vf) / gearTop) * 1.15 + 0.05) then
-				-- roues qui patinent (roue délestée d'un différentiel libre, départ) : seul le rupteur borne leur
-				-- régime, sinon elles s'emballent sans fin
+			if P.hardRev and spinning then
 				cut = 0
 			elseif (S.gear == P.nGears or S.gear < 0) and not P.cvt then
 				-- MESURÉ : la marche arrière plafonne à −48,8 km/h, soit exactement
@@ -1025,11 +1102,28 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			-- Sous ce seuil (glissement normal de traction, ~1 %), rien ne change : le régime de roue décide.
 			local bodyRpm = math.abs(vf) / gearTop
 			local shiftRpm = (S.rpm > bodyRpm * 1.15) and bodyRpm or S.rpm
+			-- … sauf collé au rupteur en roulant (drift) : on monte, sinon le moteur hurle au rupteur (vidéo 2026-11-16)
+			-- seulement en GLISSE (la caisse avance de travers) : en ligne droite, départ arrêté compris, la boîte garde
+			-- sa règle (banc 2026-11-16 : sans cette condition, 2ᵉ à 29 km/h au départ, 0-100 en 4,3 s au lieu de 3,8)
+			local limiterShift = S.limiterT > T.LimiterUpshiftAfter and (math.abs(vf) > T.LimiterUpshiftAnySpeed
+				or (math.abs(vf) > T.LimiterUpshiftMinSpeed and math.abs(vBody.X) > T.LimiterUpshiftSlide))
+			if limiterShift then
+				shiftRpm = S.rpm
+			end
+			-- descente décidée sur le plus haut des deux régimes : des roues BLOQUÉES (frein à main) ne font plus
+			-- rétrograder en 1ʳᵉ à 66 km/h
+			local downRpm = math.max(S.rpm, bodyRpm)
 			if shiftRpm > upRpm and S.gear < P.nGears and driveIn > 0.05 then
 				shift(S, S.gear + 1, 1)
+				if limiterShift then
+					-- pas de retour au rapport inférieur tant qu'on reste sur les gaz (sinon 1-2-1-2 en drift : banc
+					-- du 2026-11-16, la 2ᵉ à 30 km/h repassait en 1ʳᵉ aussitôt)
+					S.holdGearUntil = S.time + T.LimiterHoldGear
+				end
 			elseif S.gear > 1
-				and S.rpm < ((driveIn > 0.05) and (T.DownshiftRpmThrottle or T.DownshiftRpm) or T.DownshiftRpm)
-				and S.rpm * P.ratios[S.gear - 1] / ratio < upRpm * T.DownshiftMargin then
+				and not (driveIn > 0.3 and S.time < (S.holdGearUntil or 0))
+				and downRpm < ((driveIn > 0.05) and (T.DownshiftRpmThrottle or T.DownshiftRpm) or T.DownshiftRpm)
+				and downRpm * P.ratios[S.gear - 1] / ratio < upRpm * T.DownshiftMargin then
 				shift(S, S.gear - 1, -1)
 			end
 		end
@@ -1055,7 +1149,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			aDrive += T.SlopeAssist * P.g * slopeSin * thr * engage * dir
 		end
 		-- frein moteur, gaz relâchés, embrayé (sauf FREEWHEEL_NO_GAS)
-		local engBrake = (not P.freewheel and thr < 0.05 and S.clutch >= 1 and engineOn) and T.EngineBrakeG * P.g * (S.rpm - 0.2) / 0.8 or 0
+		local engBrake = (not P.freewheel and thr < 0.05 and S.clutch >= 1 and running) and T.EngineBrakeG * P.g * (S.rpm - 0.2) / 0.8 or 0
 
 		for i, w in ipairs(P.wheels) do
 			local c = contacts[i] or { grounded = false, vLong = 0, vLat = 0, grip = 1 }

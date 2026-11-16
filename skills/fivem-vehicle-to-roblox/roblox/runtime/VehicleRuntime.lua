@@ -1209,6 +1209,13 @@ function Runtime:_updateAudio(dt, s)
 	end
 	self.EngineWasOn = engineOn
 	local rpm = s.Rpm or a.IdleRpm or 850
+	-- moteur audible selon son régime sous le ralenti : il « prend » au démarrage et s'éteint en ralentissant au
+	-- lieu d'apparaître / se couper net (2026-11-16). Sans régime connu (télémétrie absente) : allumé = audible.
+	local idleR = a.IdleRpm or 850
+	local audible = (s.Rpm and math.clamp(s.Rpm / idleR, 0, 1) ^ 1.5) or (engineOn and 1 or 0)
+	if not engineOn and not (s.Rpm and self.IsLocalOccupant) then
+		audible = 0 -- un véhicule garé moteur coupé reste muet, même avec un vieil attribut Rpm
+	end
 	-- charge : enfoncé ↔ relâché, lissée (attaque rapide, relâche un peu plus lente)
 	local target = math.clamp((s.Throttle or 0) * 1.6, 0, 1)
 	local tau = target > (self.LoadSmooth or 0) and E.LoadAttack or E.LoadRelease
@@ -1241,7 +1248,7 @@ function Runtime:_updateAudio(dt, s)
 			local weights = crossfade(list, rpm)
 			for i, item in ipairs(list) do
 				local snd = item.Sound
-				local part = engineOn and (weights[i] or 0) * mix or 0
+				local part = (weights[i] or 0) * mix * audible
 				-- le ralenti est dans les deux listes : ses deux parts s'ajoutent en puissance
 				seen[snd] = math.sqrt((seen[snd] or 0) ^ 2 + part * part)
 			end

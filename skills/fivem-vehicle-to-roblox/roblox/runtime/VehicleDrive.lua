@@ -328,7 +328,8 @@ local function step(a, dt)
 		tyre[w.bone] = TyreFx.Intensity(ow, tyreCtx)
 	end
 	Runtime.SetTelemetry(car, {
-		Rpm = idle + (math.clamp(out.rpm, 0.2, 1) - 0.2) / 0.8 * (maxRpm - idle),
+		-- sous le ralenti (démarreur, moteur qui s'arrête) : proportionnel, 0 = moteur arrêté
+		Rpm = (out.rpm >= 0.2) and (idle + (math.min(out.rpm, 1) - 0.2) / 0.8 * (maxRpm - idle)) or (math.max(out.rpm, 0) / 0.2 * idle),
 		Gear = out.gear,
 		-- accélérateur EFFECTIF (en marche arrière, c'est S) : le son moteur en tire la charge enfoncé / relâché
 		Throttle = out.drive or inp.Throttle,

@@ -92,17 +92,23 @@ function Dashboard.Read(model, dt)
 	local reverse = (s.Gear ~= nil and s.Gear < 0) or s.Reverse == true and speedMs < -0.5
 
 	local idle, maxRpm = a.IdleRpm or 850, a.MaxRpm or 7200
-	local rpm = engine and (s.Rpm or idle) or 0
-	local rpm01 = engine and math.clamp((rpm - idle) / math.max(maxRpm - idle, 1), 0, 1) or 0
+	-- régime réel quand il est connu (démarreur, montée à l'allumage, moteur qui s'arrête : 2026-11-16) ; sinon
+	-- ralenti moteur allumé, 0 moteur coupé
+	local rpm = s.Rpm or (engine and idle or 0)
+	if not engine and not s.Rpm then
+		rpm = 0
+	end
+	local rpm01 = math.clamp((rpm - idle) / math.max(maxRpm - idle, 1), 0, 1)
 
 	local st = smooth[model]
 	if not st then
-		st = { speed = math.abs(speedMs) * k, rpm = rpm01 }
+		st = { speed = math.abs(speedMs) * k, rpm = rpm01, rpmAbs = rpm }
 		smooth[model] = st
 	end
 	if dt then
 		st.speed += (math.abs(speedMs) * k - st.speed) * (1 - math.exp(-SPEED_SMOOTH * dt))
 		st.rpm += (rpm01 - st.rpm) * (1 - math.exp(-RPM_SMOOTH * dt))
+		st.rpmAbs = (st.rpmAbs or rpm) + (rpm - (st.rpmAbs or rpm)) * (1 - math.exp(-RPM_SMOOTH * dt))
 	end
 
 	local gear
@@ -130,7 +136,7 @@ function Dashboard.Read(model, dt)
 		Gear = gear,
 		GearNumber = reverse and -1 or (s.Gear or 1),
 		GearCount = gearCount,
-		Rpm = rpm,
+		Rpm = st.rpmAbs or rpm, -- lissé comme Rpm01 (l'aiguille ne saute pas d'une image à l'autre)
 		Rpm01 = st.rpm,
 		RpmGta = engine and (0.2 + 0.8 * st.rpm) or 0,
 		Redline = engine and st.rpm >= REDLINE,
