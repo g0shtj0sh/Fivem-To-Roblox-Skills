@@ -45,6 +45,18 @@ def test_flat_diffuse_keeps_paint_without_texture():
                               "decal": tmp / "decal.png"}, tmp / "out", Report())
         assert store.is_flat("vehicle_generic_smallspecmap")
         assert not store.is_flat("decal")
+        # régression 2026-11-16 : une teinte unie SOMBRE ou une alpha ne sont pas des aplats neutres
+        Image.new("RGB", (16, 16), (0, 0, 0)).save(tmp / "black_dark.png")
+        Image.new("RGBA", (16, 16), (0, 0, 0, 112)).save(tmp / "glass_light.png")
+        cut = np.zeros((16, 16, 4), np.uint8)
+        cut[..., 3] = 255
+        cut[::2, :, 3] = 0
+        Image.fromarray(cut, "RGBA").save(tmp / "grille1_diff.png")
+        store2 = TextureStore({n: tmp / f"{n}.png" for n in ("black_dark", "glass_light", "grille1_diff")},
+                              tmp / "out2", Report())
+        assert not store2.is_flat("black_dark")
+        assert not store2.is_flat("glass_light")
+        assert not store2.is_flat("grille1_diff")
         assert not store.is_flat(None) and not store.is_flat("absente")
 
 

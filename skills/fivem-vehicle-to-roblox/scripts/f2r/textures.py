@@ -19,6 +19,13 @@ from .util import Report
 MAX_SIZE = 2048
 # Écart type RVB (0..1) sous lequel une texture est un aplat sans détail.
 FLAT_STD = 0.02
+# ... et dont la teinte est quasi blanche (moyenne RVB >= FLAT_MIN_MEAN) et entièrement opaque : seule une telle
+# diffuse ne change rien à la peinture (GTA multiplie couleur x diffuse). Une teinte unie SOMBRE (black_dark,
+# grille6_diff, chrome, rgba1717gray) donne la couleur de la pièce, et une alpha (glass_light : verre des phares,
+# grille1_diff : grille ajourée) donne sa transparence : les retirer rendait phares et calandre opaques et clairs
+# (m422, régression du 2026-11-15 16:27 constatée le 2026-11-16).
+FLAT_MIN_MEAN = 0.9
+FLAT_MIN_ALPHA = 0.99
 
 # --- Brillance GTA -> rugosité / métal Roblox (2026-11-15) ---------------------------------
 # Carte « spec » GTA V (SpecSampler) : R = intensité spéculaire, G = brillance (exposant),
@@ -132,6 +139,14 @@ def is_metal(*names: str | None) -> bool:
     return any(h in (n or "").lower() for n in names for h in METAL_HINTS)
 
 
+def is_neutral_flat(img: Image.Image) -> bool:
+    """Aplat neutre : RVB uniforme (écart type < FLAT_STD), quasi blanc (moyenne >= FLAT_MIN_MEAN) et opaque
+    (alpha >= FLAT_MIN_ALPHA partout)."""
+    a = np.asarray(img.convert("RGBA"), np.float32) / 255.0
+    rgb, alpha = a[..., :3], a[..., 3]
+    return bool(rgb.std() < FLAT_STD and rgb.mean() >= FLAT_MIN_MEAN and alpha.min() >= FLAT_MIN_ALPHA)
+
+
 class TextureStore:
     """Résout les noms de textures GTA, convertit et met en cache les PNG produits."""
 
@@ -142,7 +157,7 @@ class TextureStore:
         self.max_size = max_size
         self.cache: dict[tuple[str, str], Path | None] = {}
         self.avg: dict[str, list[float]] = {}
-        # texture uniforme (aucun détail : écart type RVB < FLAT_STD), ex. vehicle_generic_smallspecmap
+        # texture neutre (aplat quasi blanc et opaque : is_neutral_flat), ex. vehicle_generic_smallspecmap
         self.flat: dict[str, bool] = {}
         self.missing: set[str] = set()
         # retouches par texture (rebadge) : nom -> fonction(image, role) -> image, sur la taille d'origine
@@ -179,7 +194,7 @@ class TextureStore:
         if edit is not None:
             img = edit(img, role)
         self.avg.setdefault(name.lower(), average_color(img))
-        self.flat.setdefault(name.lower(), float(np.asarray(img.convert("RGB"), np.float32).std()) / 255.0 < FLAT_STD)
+        self.flat.setdefault(name.lower(), is_neutral_flat(img))
         if role in ("light", "emask"):  # optique : texture agrandie et masque d'émission (light_emissive.py)
             big = light_upscale(img, self.max_size)
             img = emissive_mask(big) if role == "emask" else big
@@ -255,8 +270,9 @@ class TextureStore:
         return img is not None and has_alpha_mask(img)
 
     def is_flat(self, name: str | None) -> bool:
-        """True si la texture est uniforme (un aplat) : sur une pièce peinte elle n'apporte rien de plus que la
-        couleur, et la garder poserait une SurfaceAppearance qui empêche les finitions de la custom."""
+        """True si la texture est un aplat NEUTRE (uni, quasi blanc, opaque : is_neutral_flat) : sur une pièce peinte
+        elle n'apporte rien de plus que la couleur, et la garder poserait une SurfaceAppearance qui empêche les
+        finitions de la custom. Une teinte unie sombre ou une alpha comptent : False."""
         if not name:
             return False
         if name.lower() not in self.flat:
