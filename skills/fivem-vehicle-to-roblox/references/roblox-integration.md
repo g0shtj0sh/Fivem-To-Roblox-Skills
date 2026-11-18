@@ -545,7 +545,7 @@ serveur, attribut `Neons.Layout`) :
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
 - **deux `SurfaceLight` par tube** (une source linéaire éclaire tout autour d'elle) : `NeonOut` face `Bottom` du tube
   incliné (vers le bas et l'extérieur) et `NeonIn` face latérale intérieure (vers le bas et SOUS la voiture) ;
-  `Angle` 150, sans ombres ; bande SERRÉE au ras de la caisse comme GTA V (portées 0,75–1 m, `Brightness` 14 dehors /
+  `Angle` 150, sans ombres ; bande SERRÉE au ras de la caisse comme GTA V (portées 0,95–1,05 m dehors, 0,9–1 m dessous, `Brightness` 14 dehors /
   10 dessous, tubes latéraux inclinés de 25°, avant / arrière de 15°, tube latéral arrêté avant les axes des roues) —
   des portées de 1,2–1,65 m donnaient une nappe trop diffuse (refusée le 2026-11-18) ;
 - à éviter : une seule lumière inclinée vers l'extérieur (nappe seulement au bord, rien dessous : refusé, « trop sur

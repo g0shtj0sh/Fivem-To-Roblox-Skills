@@ -572,7 +572,7 @@ end
 --     carrosserie et habitacle teintés.
 --   · Juger une lumière caméra POSÉE depuis ~2 s : juste après un déplacement de caméra, le rendu des petites lumières
 --     n'est pas encore à jour (captures « frame » trompeuses).
-Custom.NeonLayoutVersion = 12
+Custom.NeonLayoutVersion = 13
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (invisible)
 	SideInset = 0.1, -- m : rentré sous le bas de caisse depuis son bord
@@ -584,9 +584,9 @@ Custom.Neon = {
 	SideTilt = 25, -- ° : inclinaison du tube latéral (une lumière vers le bas-extérieur, une vers le bas-intérieur)
 	EndTilt = 15, -- ° : avant / arrière
 	Angle = 150,
-	SideOutRange = 0.85, -- m : lumière latérale vers l'extérieur (bande serrée au ras de la caisse, comme GTA V)
+	SideOutRange = 1.05, -- m : lumière latérale vers l'extérieur (bande serrée au ras de la caisse, comme GTA V)
 	SideInRange = 1.0, -- m : … vers le dessous de la voiture
-	EndOutRange = 0.75, -- m
+	EndOutRange = 0.95, -- m
 	EndInRange = 0.9, -- m
 	OutBrightness = 14,
 	InBrightness = 10,
