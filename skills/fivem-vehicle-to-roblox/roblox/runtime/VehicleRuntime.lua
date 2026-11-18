@@ -681,7 +681,10 @@ end
 
 -- Lumières d'habitacle et de plaque, aux os du modèle GTA (mètres, repère du véhicule)
 Runtime.CabinLights = {
-	interior = { bone = "interiorlight", class = "PointLight", range = 1.1, brightness = 0.9, color = Color3.fromRGB(255, 220, 180) },
+	-- plafonnier : 1,1 m / 0,9 jusqu'au 2026-11-19, trop faible pour être vu (« quand je fais I il se passe rien ») ;
+	-- ombres pour qu'il reste dans l'habitacle (sans elles, une portée plus grande teinte toit et portières dehors)
+	interior = { bone = "interiorlight", class = "PointLight", range = 1.5, brightness = 2.2, shadows = true,
+		color = Color3.fromRGB(255, 220, 180) },
 	plate = { bone = "platelight", class = "SpotLight", range = 0.7, brightness = 1.6, angle = 120,
 		color = Color3.fromRGB(255, 245, 230), face = Enum.NormalId.Bottom },
 }
@@ -702,7 +705,7 @@ function Runtime:_cabinLight(kind, on)
 		l.Range = spec.range * self.Spm
 		l.Brightness = spec.brightness
 		l.Color = spec.color
-		l.Shadows = false
+		l.Shadows = spec.shadows == true
 		l.Enabled = false
 		if spec.class == "SpotLight" then
 			l.Angle = spec.angle
