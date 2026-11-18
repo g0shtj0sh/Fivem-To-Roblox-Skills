@@ -612,7 +612,12 @@ end
 --     pas être éclairée, pas d'ombres), tube latéral prolongé de 0,15 m à chaque bout. 4 lumières par voiture, sans
 --     ombres. Vérifié (Play PC) de jour sous l'angle de l'utilisateur et de nuit : bande continue au ras du bas de
 --     caisse. Les rectangles durs de la v3–v6 venaient des Angle 120–150 sur des tubes inclinés.
-Custom.NeonLayoutVersion = 19
+--   · v10 (2026-11-19, « ça n'épouse pas bien les côtés du véhicule, surtout l'avant et l'arrière ») : le tube
+--     avant / arrière était un segment droit entre les roues → tache ronde au milieu du bouclier. Il devient
+--     EndSegments segments à plat qui suivent le bord du bouclier mesuré par rayons (bord le plus extérieur à
+--     chaque abscisse, rentré de EndInset), d'un coin à l'autre (EndSpan × demi-largeur). Une SurfaceLight par
+--     segment.
+Custom.NeonLayoutVersion = 21
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (invisible)
 	SideInset = 0, -- m : tube au bord du bas de caisse (v9 ; 0,18 en v6–v8 : lumière cachée sous la voiture)
@@ -620,13 +625,14 @@ Custom.Neon = {
 	ArchGap = 1.08, -- × rayon de roue : zone de mesure du bas de caisse, entre les arches
 	SideFraction = 0.82, -- part de cette zone sondée
 	SideReach = -1.33, -- × rayon de roue au-delà des axes (négatif : le tube s'arrête entre les arches)
-	EndFraction = 0.58, -- largeur du tube avant / arrière : entre les roues, pas devant elles
+	EndSegments = 4, -- v10 : segments avant / arrière qui suivent le contour du bouclier
+	EndSpan = 0.92, -- part de la demi-largeur du bouclier couverte (jusqu'aux coins)
 	SideTilt = 0, -- ° : tube à plat (v9 : la face du dessous regarde droit vers le sol)
 	EndTilt = 0,
 	SideExtend = 0.15, -- m ajoutés à chaque bout du tube latéral
 	Angle = 180, -- SurfaceLight : demi-espace sous le tube
 	SideRange = 1.5, -- m
-	EndRange = 1.3, -- m
+	EndRange = 1.45, -- m (v10 : segments courts, un peu plus de portée pour égaler les côtés)
 	Brightness = 6,
 }
 
@@ -741,61 +747,71 @@ function Custom.LayoutNeons(model)
 			y = groundY + 0.18 * spm
 		end
 		y = math.max(y - tube * 0.6, groundY + 0.04 * spm)
-		strips[sgn < 0 and "Left" or "Right"] = {
+		strips[sgn < 0 and "Left" or "Right"] = { {
 			cf = CFrame.new(x, y, (frontZ + rearZ) / 2) * CFrame.Angles(0, 0, math.rad(sgn * N.SideTilt)),
 			size = Vector3.new(tube, tube, math.max((rearZ - frontZ) + 2 * radius * N.SideReach, (rearZ - frontZ) * 0.4) + 2 * N.SideExtend * spm),
 			isEnd = false,
-		}
+		} }
 	end
-	-- tubes avant / arrière : sous le bouclier, devant / derrière les roues
+	-- tubes avant / arrière (v10) : plusieurs segments qui SUIVENT le contour du bouclier, mesuré par rayons, d'un coin
+	-- à l'autre (un tube droit entre les roues laissait une tache ronde au milieu, « ça n'épouse pas l'avant et
+	-- l'arrière », 2026-11-19)
 	for _, e in ipairs({ { "Front", -1, frontZ, minZ }, { "Back", 1, rearZ, maxZ } }) do
 		local name, sgn, axleZ, endZ = e[1], e[2], e[3], e[4]
 		local limitZ = math.abs(axleZ) + radius * 1.02 -- jamais dans la roue
-		local edge = nil
-		for _, fx in ipairs({ -0.35, 0, 0.35 }) do
+		local lowEnd = lowY + radius * 0.3 -- bouclier : son bord peut remonter un peu dans les coins
+		-- bord du bouclier (z le plus extérieur) à l'abscisse x
+		local function edgeAt(x)
 			local z = math.abs(endZ)
-			local found
 			while z > limitZ do
-				local y = under(fx * track, sgn * z)
-				if y and y < lowY then
-					found = z
-					break
+				local y = under(x, sgn * z)
+				if y and y < lowEnd then
+					return z, y
 				end
 				z -= step
 			end
-			if found then
-				edge = edge and math.min(edge, found) or found
-			end
+			return nil
 		end
-		local zAbs = math.max((edge or (math.abs(endZ) - 0.2 * spm)) - N.EndInset * spm, limitZ + tube)
-		local z = sgn * zAbs
-		-- largeur : bouclier mesuré à cette profondeur
+		-- largeur du bouclier : mesurée juste derrière son bord central
+		local zc = edgeAt(0) or (math.abs(endZ) - 0.2 * spm)
 		local wx = 0
 		local x = 0
 		while x < halfX do
-			local y = under(x, z)
-			if y and y < lowY + radius * 0.3 then
+			local y = under(x, sgn * math.max(zc - N.EndInset * spm, limitZ))
+			if y and y < lowEnd then
 				wx = x
 			end
 			x += step * 2
 		end
-		local half = (wx > 0 and wx or track) * N.EndFraction
-		local y = math.huge
-		for i = -4, 4 do
-			local hy = under(half * i / 4, z)
-			if hy then
-				y = math.min(y, hy)
+		local span = (wx > 0 and wx or track) * N.EndSpan
+		local pts = {}
+		local yMin = math.huge
+		for i = 0, N.EndSegments do
+			local px = -span + 2 * span * i / N.EndSegments
+			local ez, ey = edgeAt(px)
+			if ez then
+				table.insert(pts, Vector3.new(px, 0, sgn * math.max(ez - N.EndInset * spm, limitZ + tube)))
+				yMin = math.min(yMin, ey)
 			end
 		end
-		if y == math.huge then
-			y = groundY + 0.2 * spm
+		if yMin == math.huge then
+			yMin = groundY + 0.2 * spm
 		end
-		y = math.max(y - tube * 0.6, groundY + 0.04 * spm)
-		strips[name] = {
-			cf = CFrame.new(0, y, z) * CFrame.Angles(math.rad(-sgn * N.EndTilt), 0, 0),
-			size = Vector3.new(half * 2, tube, tube),
-			isEnd = true,
-		}
+		local y = math.max(yMin - tube * 0.6, groundY + 0.04 * spm)
+		local segs = {}
+		if #pts < 2 then
+			pts = { Vector3.new(-span, 0, sgn * (zc - N.EndInset * spm)), Vector3.new(span, 0, sgn * (zc - N.EndInset * spm)) }
+		end
+		for k = 1, #pts - 1 do
+			local a0, a1 = pts[k] + Vector3.new(0, y, 0), pts[k + 1] + Vector3.new(0, y, 0)
+			local mid = (a0 + a1) / 2
+			table.insert(segs, {
+				cf = CFrame.lookAt(mid, a1, Vector3.yAxis), -- à plat, −Z le long du segment
+				size = Vector3.new(tube, tube, (a1 - a0).Magnitude),
+				isEnd = true,
+			})
+		end
+		strips[name] = segs
 	end
 
 	-- pose : on garde les pièces existantes (une par côté), soudure refaite après le déplacement
@@ -811,39 +827,38 @@ function Custom.LayoutNeons(model)
 		end
 	end
 	for i, side in ipairs(Custom.NeonSides) do
-		local st = strips[side]
-		local p = bySide[side]
-		if not p then
-			p = Instance.new("Part")
-			p.Name = "Neon" .. i
-			p.Material = Enum.Material.Neon
-			p.CanCollide, p.CanQuery, p.CanTouch, p.Massless = false, false, false, true
+		for k, st in ipairs(strips[side] or {}) do
+			local p = k == 1 and bySide[side] or nil
+			if not p then
+				p = Instance.new("Part")
+				p.Name = k == 1 and ("Neon" .. i) or ("Neon" .. i .. "_" .. k)
+				p.Material = Enum.Material.Neon
+				p.CanCollide, p.CanQuery, p.CanTouch, p.Massless = false, false, false, true
+				p.Parent = folder
+			end
+			p:SetAttribute("NeonSide", side)
+			for _, c in ipairs(p:GetChildren()) do
+				if c:IsA("WeldConstraint") or c:IsA("Light") or (c:IsA("Attachment") and (c.Name == "NeonGlow" or c.Name == "NeonLight")) then
+					c:Destroy()
+				end
+			end
 			p.CastShadow = false
 			p.Transparency = 1
-			p:SetAttribute("NeonSide", side)
-			p.Parent = folder
+			p.Size = st.size
+			p.CFrame = rcf * st.cf
+			-- une SurfaceLight par tube, face du dessous : source en ligne, comme un vrai tube néon (v9)
+			local light = Instance.new("SurfaceLight")
+			light.Name = "NeonLight"
+			light.Face = Enum.NormalId.Bottom
+			light.Angle = N.Angle
+			light.Range = (st.isEnd and N.EndRange or N.SideRange) * spm
+			light.Brightness = N.Brightness
+			light.Shadows = false -- demi-espace vers le bas : n'éclaire pas la caisse ; pas d'ombres (coût, v7 : blocs)
+			light.Enabled = false
+			light.Parent = p
+			local w = Instance.new("WeldConstraint")
+			w.Part0, w.Part1, w.Parent = root, p, p
 		end
-		for _, c in ipairs(p:GetChildren()) do
-			if c:IsA("WeldConstraint") or c:IsA("Light") or (c:IsA("Attachment") and (c.Name == "NeonGlow" or c.Name == "NeonLight")) then
-				c:Destroy()
-			end
-		end
-		p.CastShadow = false
-		p.Transparency = 1
-		p.Size = st.size
-		p.CFrame = rcf * st.cf
-		-- une SurfaceLight par tube, face du dessous : source en ligne, comme un vrai tube néon (v9)
-		local light = Instance.new("SurfaceLight")
-		light.Name = "NeonLight"
-		light.Face = Enum.NormalId.Bottom
-		light.Angle = N.Angle
-		light.Range = (st.isEnd and N.EndRange or N.SideRange) * spm
-		light.Brightness = N.Brightness
-		light.Shadows = false -- demi-espace vers le bas : n'éclaire pas la caisse ; pas d'ombres (coût, v7 : blocs)
-		light.Enabled = false
-		light.Parent = p
-		local w = Instance.new("WeldConstraint")
-		w.Part0, w.Part1, w.Parent = root, p, p
 	end
 	local oldGlow = model:FindFirstChild("NeonGlow") -- nappe dessinée d'un essai rejeté (2026-11-18) : retirée
 	if oldGlow then
