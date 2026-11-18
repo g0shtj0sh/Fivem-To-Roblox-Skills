@@ -213,7 +213,9 @@ local function step(a, dt)
 	local ctrl = Input.Controls
 	local inp = {
 		Throttle = ctrl.Throttle, Brake = ctrl.Brake, Steer = ctrl.Steer, Handbrake = ctrl.Handbrake or car:GetAttribute("ParkingBrake") == true,
-		Engine = car:GetAttribute("Engine") ~= false,
+		-- moteur HS (fumée noire) ou épave en feu : aucune poussée, même si un attribut local dit le contraire
+		Engine = car:GetAttribute("Engine") ~= false and car:GetAttribute("EngineDead") ~= true
+			and car:GetAttribute("Wrecked") ~= true,
 		GearUp = a.gearUp, GearDown = a.gearDown,
 	}
 	a.gearUp, a.gearDown = false, false

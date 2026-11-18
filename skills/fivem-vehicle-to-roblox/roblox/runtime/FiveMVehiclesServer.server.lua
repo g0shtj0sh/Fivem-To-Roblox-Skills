@@ -172,26 +172,31 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if not t or typeof(value) ~= t or not isDriver(player, model) or not allowed(player, "set") then
 			return
 		end
+		-- demande refusée : le client a déjà écrit la valeur chez lui (retour visuel immédiat) ; on lui renvoie la
+		-- vraie, sinon il garde par ex. un moteur HS « allumé » et conduit quand même (bug signalé le 2026-11-18)
+		local function refuse()
+			remote:FireClient(player, "Resync", model, key, model:GetAttribute(key))
+		end
 		if model:GetAttribute("Wrecked") == true then
-			return -- véhicule en feu / épave (VehicleDamage) : plus rien ne marche jusqu'à la réparation
+			return refuse() -- véhicule en feu / épave (VehicleDamage) : plus rien ne marche jusqu'à la réparation
 		end
 		if t == "number" and (value ~= value or math.abs(value) == math.huge) then
-			return
+			return refuse()
 		end
 		if VALID[key] and not VALID[key][value] then
-			return
+			return refuse()
 		end
 		if key == "Headlights" then
 			value = math.clamp(math.floor(value), 0, 2)
 		end
 		if key == "Siren" and not model:GetAttribute("HasSiren") then
-			return
+			return refuse()
 		end
 		if key == "Engine" and value == false and model:GetAttribute("EngineAlwaysOn") == true then
-			return -- « Moteur toujours allumé » (Custom.SetEngineAlwaysOn)
+			return refuse() -- « Moteur toujours allumé » (Custom.SetEngineAlwaysOn)
 		end
 		if key == "Engine" and value == true and model:GetAttribute("EngineDead") == true then
-			return -- moteur détruit (VehicleDamage) : il faut réparer
+			return refuse() -- moteur détruit (VehicleDamage) : il faut réparer
 		end
 		if key == "Engine" then
 			-- moteur coupé par le conducteur : il le reste à la sortie et quand on remonte (GTA) ; sinon, en sortant, le

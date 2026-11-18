@@ -72,7 +72,13 @@ local function set(key, value)
 	if not driving then
 		return
 	end
-	driving:SetAttribute(key, value) -- retour visuel immédiat, le serveur confirme
+	-- retour visuel immédiat, le serveur confirme (ou renvoie la vraie valeur : « Resync ») ; jamais pour ce que le
+	-- serveur refusera à coup sûr : moteur HS (EngineDead) ou épave en feu (Wrecked) — VehicleDamage
+	local refused = driving:GetAttribute("Wrecked") == true
+		or (key == "Engine" and value == true and driving:GetAttribute("EngineDead") == true)
+	if not refused then
+		driving:SetAttribute(key, value)
+	end
 	remote:FireServer(driving, "Set", key, value)
 end
 
@@ -205,7 +211,14 @@ local function unbindOccupantActions()
 end
 
 -- Descente : le serveur choisit où poser le personnage ; le client, qui possède sa physique, s'y place.
-remote.OnClientEvent:Connect(function(kind, cf)
+remote.OnClientEvent:Connect(function(kind, cf, key, value)
+	if kind == "Resync" then
+		-- demande refusée par le serveur : on remet la vraie valeur (cf = le modèle ici)
+		if typeof(cf) == "Instance" and type(key) == "string" then
+			cf:SetAttribute(key, value)
+		end
+		return
+	end
 	if kind ~= "PlaceAt" or typeof(cf) ~= "CFrame" then
 		return
 	end
