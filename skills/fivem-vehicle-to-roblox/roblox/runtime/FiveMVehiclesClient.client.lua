@@ -59,40 +59,6 @@ local function attach(m)
 	end)
 end
 
--- Néons : nappe au sol dessinée (VehicleCustomization.BuildNeonGlow) atténuée de jour, comme dans GTA V où les néons
--- se devinent à peine en plein soleil (2026-11-18). Nuit (20 h – 5 h) : pleine ; jour (9 h – 17 h) : DayVisibility.
-local NEON_DAY_VISIBILITY = 0.3
-local function neonVisibility()
-	local t = game:GetService("Lighting").ClockTime
-	local function ramp(a, b, x)
-		return math.clamp((x - a) / (b - a), 0, 1)
-	end
-	local day = math.min(ramp(5, 9, t), 1 - ramp(17, 20, t)) -- 0 la nuit, 1 en plein jour
-	return 1 - (1 - NEON_DAY_VISIBILITY) * day
-end
-task.spawn(function()
-	local lastVis
-	while true do
-		local vis = neonVisibility()
-		for _, m in ipairs(CollectionService:GetTagged(TAG)) do
-			local plate = m:FindFirstChild("NeonGlow")
-			local gui = plate and plate:FindFirstChild("Glow")
-			if gui and (gui.Enabled or vis ~= lastVis) then
-				for _, img in ipairs(gui:GetChildren()) do
-					local base = img:IsA("ImageLabel") and img:GetAttribute("BaseTransparency")
-					if base then
-						-- le grand ovale diffus fait « tache » de jour : atténué deux fois plus
-						local v = img.Name == "Oval" and vis * vis or vis
-						img.ImageTransparency = 1 - (1 - base) * v
-					end
-				end
-			end
-		end
-		lastVis = vis
-		task.wait(1)
-	end
-end)
-
 if not game:IsLoaded() then
 	game.Loaded:Wait()
 end

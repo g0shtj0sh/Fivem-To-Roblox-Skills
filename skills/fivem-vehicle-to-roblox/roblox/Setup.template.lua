@@ -822,9 +822,14 @@ do
 		p.Transparency = 1
 		p.CanCollide, p.CanQuery, p.CanTouch, p.Massless = false, false, false, true
 		p.Parent = neons
-		local l = Instance.new("PointLight")
-		l.Range = 8
-		l.Brightness = 2
+		-- vraie lumière vers le sol ; le runtime (VehicleCustomization.LayoutNeons) recale ensuite les tubes sur la
+		-- géométrie du véhicule, les rend invisibles et règle la lumière (néons façon GTA V, 2026-11-18)
+		local l = Instance.new("SurfaceLight")
+		l.Face = Enum.NormalId.Bottom
+		l.Angle = 150
+		l.Range = 1.5 * spm
+		l.Brightness = 9
+		l.Shadows = false
 		l.Enabled = false
 		l.Parent = p
 		local w = Instance.new("WeldConstraint")

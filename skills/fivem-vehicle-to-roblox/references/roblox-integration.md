@@ -35,7 +35,7 @@ ré-installer un modèle déjà installé : ré-importer le `.glb` pour recommen
 ├─ Joints/          Pivot_<os> + Motor6D <os> (roues, portes, capot, coffre, volant, gyrophares)
 ├─ Seats/           DriverSeat, Seat_seat_pside_f…
 ├─ Liveries/        SurfaceAppearance "1", "2"…
-├─ Neons/           4 bandes Neon + PointLight (cachées)
+├─ Neons/           4 tubes invisibles calés sous la caisse + SurfaceLight vers le sol (vraies lumières)
 └─ VehicleConfig    ModuleScript : toutes les données (roues, charnières, lumières, mods, handling…)
 ```
 
@@ -533,6 +533,23 @@ Custom.SetPerformance(car, "Engine", 3)               -- appliqué en direct par
 local save = Custom.Serialize(car)                     -- table -> DataStore
 Custom.Apply(newCar, save)
 ```
+
+### Néons : règle (2026-11-18, décision de l'utilisateur)
+Un néon de véhicule est une **vraie lumière Roblox**, comme dans GTA V : on ne voit pas les barres, on voit leur
+lumière au sol. **Jamais** d'image, de `SurfaceGui`, de plaque dessinée ou d'« UI » pour la nappe (essai rejeté :
+« ce n'est pas une UI »). Ce que fait le runtime (`VehicleCustomization.LayoutNeons`, une fois par véhicule, côté
+serveur, attribut `Neons.Layout`) :
+- tubes **mesurés** sur la géométrie : rayons tirés du dessous contre les pièces de collision `CanQuery` (roues
+  exclues) ; latéral au bord du bas de caisse, long de l'avant de la roue avant à l'arrière de la roue arrière
+  (`SideReach`) ; avant / arrière sous les boucliers ;
+- tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
+- `SurfaceLight` face `Bottom`, `Angle` 150, sans ombres, latéraux inclinés de 35° vers l'extérieur (portée 1,5 m),
+  avant / arrière de 12° (1,3 m), `Brightness` 9 ;
+- à éviter : `PointLight` sous la caisse (teinte toute la carrosserie et l'habitacle), `Angle` 120 (rectangles à
+  bords nets), 170 (lumière qui file le long de la voiture), inclinaison forte des tubes avant / arrière (plus hauts :
+  la nappe part loin derrière).
+**Vérifier une lumière** caméra posée depuis ~2 s : juste après un déplacement de caméra, le rendu des petites
+lumières n'est pas à jour (une capture `frame` a montré une `SurfaceLight` « éteinte » à tort).
 Les portes / capot / coffre s'ouvrent via ProximityPrompt (touche G) ou
 `car:SetAttribute("Door_door_dside_f", 1)` côté serveur.
 

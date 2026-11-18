@@ -154,3 +154,4 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
   (appliquée au personnage) et sortent grises.
 - **Contrôle** (Play, m422) : volant et compteurs dégagés ; serveur : avant-bras à 0,48 × 0,77 (inchangé, les
   autres joueurs voient l'avatar normal) ; client en vue intérieure : 0,26 × 0,42 ; après V : 0,48 × 0,77.
+| Néons : barres visibles, carrosserie teintée, nappe faible | ancien calage (boîte englobante + PointLight 8 studs au bord de caisse) | runtime ≥ 2026-11-18 : tubes invisibles calés sous la caisse + `SurfaceLight` vers le sol (voir roblox-integration, « Néons : règle ») ; jamais de nappe en image / SurfaceGui |
