@@ -552,7 +552,17 @@ serveur, attribut `Neons.Layout`) :
   exclues) ; latéral au bord du bas de caisse, long de l'avant de la roue avant à l'arrière de la roue arrière
   (`SideReach`) ; avant / arrière sous les boucliers ;
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
-- **une chaîne de `PointLight` à ombres par tube** (v7, 2026-11-18, retour « la lumière n'est pas diffusée de
+- **v8 (2026-11-19) : 8 `SpotLight` tournées vers le sol, sans ombres, comme les phares** — 3 par côté, 1 devant,
+  1 derrière ; `Face` Bottom d'une attache alignée sur la voiture (pas sur le tube incliné), `Angle` 180 (une
+  demi-sphère vers le bas : elle ne peut pas éclairer la caisse au-dessus d'elle, donc pas besoin d'ombres) ; portées
+  1,25 m (côtés) / 1,1 m (bouts), `Brightness` 8 ; nappe serrée sous la voiture, ~0,8 m de débord. Raison : la v7
+  (15 `PointLight` à ombres) faisait, dans la vidéo de l'utilisateur en roulant, de grands blocs de lumière qui
+  sautaient d'une image à l'autre (rendu de secours « en grille » de Roblox, cellules de ~4 studs). Hypothèse non
+  reproduite chez l'agent (qualité graphique 10 fixe, `settings().Rendering` inaccessible au script) : trop de
+  lumières locales / d'ombres → budget dépassé, ou qualité graphique baissée. Règle : **peu de lumières, sans
+  ombres**, orientées pour ne pas pouvoir toucher la carrosserie. Vérifié en Play (PC) : arrêt et en mouvement
+  (rotation + translation), rouge et bleu, carrosserie non teintée. Non vérifié : qualité graphique basse, téléphone.
+- historique v7 : **une chaîne de `PointLight` à ombres par tube** (v7, 2026-11-18, retour « la lumière n'est pas diffusée de
   manière assez homogène » ; références : photos de kits LED réels et captures GTA Online) : une lumière tous les
   0,4 m (`LightSpacing`), rentrées de 0,3 m vers l'axe sous le bas de caisse (`SideLightInset`), 0,05 m à l'avant /
   l'arrière (`EndLightInset` : 0,3 éclaire l'intérieur des jantes avant, 0,14 la calandre par dedans) ; portées

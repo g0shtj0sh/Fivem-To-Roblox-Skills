@@ -571,7 +571,7 @@ end
 
 -- NÉONS FAÇON GTA V (2026-11-18, demandes de l'utilisateur : « comme dans GTA 5 et adapté à chaque véhicule »,
 -- puis « les néons de véhicules, c'est des VRAIES lumières […] tes parts de néon en invisible et leur lueur »).
--- RÈGLE : un néon = des tubes (Parts) INVISIBLES calés sous la caisse + de VRAIES lumières Roblox (PointLight à ombres, v7)
+-- RÈGLE : un néon = des tubes (Parts) INVISIBLES calés sous la caisse + de VRAIES lumières Roblox (SpotLight vers le sol sans ombres, v8)
 -- tournées vers le sol. JAMAIS d'image, de SurfaceGui ou d'« UI » pour dessiner la nappe (essayé le 2026-11-18 :
 -- rejeté, « ce n'est pas une UI »). Méthode :
 --   · position de chaque tube MESURÉE sur le véhicule (rayons tirés du dessous contre ses pièces de collision) ;
@@ -595,7 +595,16 @@ end
 --     éclairaient l'intérieur des jantes avant. Juger la voiture POSÉE sur ses roues : un prototype qui flottait de
 --     0,2 m (lumières plus hautes) donnait une nappe plus large et plus claire. Réglage final : 0,4 m d'écart
 --     (16 lumières sur BavrenN4), luminosité 7.
-Custom.NeonLayoutVersion = 17
+--   · v8 (2026-11-19, retour « un peu moins de portée […] le même type de lumière que les phares, là ça clignote,
+--     je veux du réalisme et que ce soit propre », vidéo de l'utilisateur en roulant) : la v7 (15 PointLight À OMBRES
+--     par voiture) faisait de grands blocs de lumière qui sautaient d'une image à l'autre en roulant — rendu de
+--     secours « en grille » de Roblox (cellules de ~4 studs) quand il y a trop de lumières locales / d'ombres à
+--     calculer ou quand la qualité graphique baisse. HYPOTHÈSE (non reproduite chez l'agent, qualité 10 fixe) :
+--     dépassement du budget de lumières détaillées. Correctif : comme les phares, des SpotLight SANS ombres, et
+--     peu nombreuses : 3 par côté + 1 devant + 1 derrière = 8. Chacune regarde droit vers le bas avec Angle 180
+--     (une demi-sphère) : elle ne peut pas éclairer la caisse au-dessus d'elle, donc plus besoin d'ombres. Portées
+--     1,25 m (côtés) / 1,1 m (bouts) : nappe serrée sous la voiture, ~0,8 m de débord.
+Custom.NeonLayoutVersion = 18
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (invisible)
 	SideInset = 0.18, -- m : rentré SOUS le bas de caisse depuis son bord (la lumière vient de dessous, v6)
@@ -604,17 +613,19 @@ Custom.Neon = {
 	SideFraction = 0.82, -- part de cette zone sondée
 	SideReach = -1.33, -- × rayon de roue au-delà des axes (négatif : le tube s'arrête entre les arches, roues dans l'ombre)
 	EndFraction = 0.58, -- largeur du tube avant / arrière : entre les roues, pas devant elles
-	SideTilt = 20, -- ° : inclinaison du tube latéral (sans effet sur les PointLight, gardée pour le calage)
+	SideTilt = 20, -- ° : inclinaison du tube latéral (sans effet sur les lumières, gardée pour le calage)
 	EndTilt = 12, -- ° : avant / arrière
-	-- lumières (v7) : chaîne de PointLight à ombres le long de chaque tube
-	LightSpacing = 0.4, -- m entre deux lumières (0,65 : taches visibles sous la portière, voiture posée au sol)
+	-- lumières (v8) : SpotLight vers le bas, demi-sphère, sans ombres (comme les phares : pas d'ombres)
+	SideLights = 3, -- par côté
+	EndLights = 1, -- devant / derrière
+	SpotAngle = 180,
 	SideLightInset = 0.3, -- m : lumières latérales rentrées vers l'axe de la voiture depuis le tube
 	EndLightInset = 0.05, -- m : avant / arrière (0,3 : intérieur des jantes avant éclairé ; 0,14 : calandre éclairée par dedans)
 	SideLightExtend = -0.1, -- m ajoutés à chaque bout du tube latéral (négatif : loin des roues)
 	EndLightExtend = -0.2, -- m : avant / arrière
-	SideRange = 1.45, -- m
-	EndRange = 1.15, -- m
-	Brightness = 7,
+	SideRange = 1.25, -- m
+	EndRange = 1.1, -- m
+	Brightness = 8,
 }
 
 local function neonBodyParts(model)
@@ -819,26 +830,29 @@ function Custom.LayoutNeons(model)
 		p.Transparency = 1
 		p.Size = st.size
 		p.CFrame = rcf * st.cf
-		-- chaîne de PointLight le long du tube (repère du VehicleRoot : axe du tube, rentrée vers l'axe de la voiture)
+		-- SpotLight vers le bas le long du tube (repère du VehicleRoot : axe du tube, rentrée vers l'axe de la voiture)
 		local center = st.cf.Position
 		local isEnd = st.isEnd
 		local axis = isEnd and Vector3.xAxis or Vector3.zAxis
 		local inward = isEnd and Vector3.new(0, 0, -math.sign(center.Z)) or Vector3.new(-math.sign(center.X), 0, 0)
 		local len = (isEnd and st.size.X or st.size.Z) + 2 * (isEnd and N.EndLightExtend or N.SideLightExtend) * spm
 		len = math.max(len, 0.2 * spm)
-		local count = math.max(2, math.floor(len / (N.LightSpacing * spm) + 0.5) + 1)
+		local count = math.max(1, isEnd and N.EndLights or N.SideLights)
 		local inset = (isEnd and N.EndLightInset or N.SideLightInset) * spm
 		for k = 0, count - 1 do
-			local at = center + axis * ((k / (count - 1) - 0.5) * len) + inward * inset
+			local t = count == 1 and 0 or (k / (count - 1) - 0.5) * len
+			local at = center + axis * t + inward * inset
 			local a = Instance.new("Attachment")
 			a.Name = "NeonLight"
-			a.Position = p.CFrame:PointToObjectSpace(rcf:PointToWorldSpace(at))
 			a.Parent = p
-			local light = Instance.new("PointLight")
+			-- repère aligné sur la voiture (pas sur le tube incliné) : Face Bottom = droit vers le sol
+			a.CFrame = p.CFrame:ToObjectSpace(rcf * CFrame.new(at))
+			local light = Instance.new("SpotLight")
+			light.Face = Enum.NormalId.Bottom
+			light.Angle = N.SpotAngle
 			light.Range = (isEnd and N.EndRange or N.SideRange) * spm
 			light.Brightness = N.Brightness
-			-- ombres : la caisse, les jantes et l'habitacle restent sombres (sans elles ils se teintent, essayé)
-			light.Shadows = true
+			light.Shadows = false -- demi-sphère vers le bas : n'éclaire pas la caisse ; les ombres coûtent (v7 : blocs qui clignotent)
 			light.Enabled = false
 			light.Parent = a
 		end
