@@ -545,9 +545,13 @@ serveur, attribut `Neons.Layout`) :
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
 - **deux `SurfaceLight` par tube** (une source linéaire éclaire tout autour d'elle) : `NeonOut` face `Bottom` du tube
   incliné (vers le bas et l'extérieur) et `NeonIn` face latérale intérieure (vers le bas et SOUS la voiture) ;
-  `Angle` 150, sans ombres ; bande SERRÉE au ras de la caisse comme GTA V (portées 0,95–1,05 m dehors, 0,9–1 m dessous, `Brightness` 14 dehors /
-  10 dessous, tubes latéraux inclinés de 25°, avant / arrière de 15°, tube latéral arrêté avant les axes des roues) —
-  des portées de 1,2–1,65 m donnaient une nappe trop diffuse (refusée le 2026-11-18) ;
+  `Angle` 150 ; la lumière vient de SOUS la voiture et ne déborde que de ~0,3 m, comme GTA V (v6,
+  2026-11-18) : tubes latéraux rentrés de 0,18 m sous le bas de caisse et limités à l'entre-roues (`SideReach` −1,33),
+  tubes avant / arrière larges de l'entre-roues seulement (`EndFraction` 0,58) pour laisser les roues dans l'ombre ;
+  inclinaisons 20° / 12° ; portées 1,05–1,4 m ; `Brightness` 14 dehors / 10 dessous ; **ombres activées sur les deux
+  lumières** (sinon les jantes s'éclairent ; avec, les roues découpent la lumière comme dans GTA — coût non mesuré). Refusés : nappe large et diffuse
+  (portées 1,2–1,65 m, tubes au bord), puis bande serrée mais posée AU BORD de la caisse (« ça doit être vraiment
+  sous la voiture ») ;
 - à éviter : une seule lumière inclinée vers l'extérieur (nappe seulement au bord, rien dessous : refusé, « trop sur
   les bords ») ; une seule lumière droite vers le bas (trop rasante, nappe cachée sous la caisse) ; `PointLight` sous
   la caisse (teinte toute la carrosserie et l'habitacle) ; `Angle` 120 (rectangles à bords nets).

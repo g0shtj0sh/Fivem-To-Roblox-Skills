@@ -572,22 +572,22 @@ end
 --     carrosserie et habitacle teintés.
 --   · Juger une lumière caméra POSÉE depuis ~2 s : juste après un déplacement de caméra, le rendu des petites lumières
 --     n'est pas encore à jour (captures « frame » trompeuses).
-Custom.NeonLayoutVersion = 13
+Custom.NeonLayoutVersion = 15
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (invisible)
-	SideInset = 0.1, -- m : rentré sous le bas de caisse depuis son bord
-	EndInset = 0.12, -- m : rentré sous le bouclier depuis son bord
+	SideInset = 0.18, -- m : rentré SOUS le bas de caisse depuis son bord (la lumière vient de dessous, v6)
+	EndInset = 0.19, -- m : rentré sous le bouclier depuis son bord
 	ArchGap = 1.08, -- × rayon de roue : zone de mesure du bas de caisse, entre les arches
 	SideFraction = 0.82, -- part de cette zone sondée
-	SideReach = -0.3, -- × rayon de roue au-delà des axes (négatif : le tube s'arrête avant l'axe, roues moins éclairées)
-	EndFraction = 0.86, -- largeur du tube avant / arrière sous le bouclier
-	SideTilt = 25, -- ° : inclinaison du tube latéral (une lumière vers le bas-extérieur, une vers le bas-intérieur)
-	EndTilt = 15, -- ° : avant / arrière
+	SideReach = -1.33, -- × rayon de roue au-delà des axes (négatif : le tube s'arrête entre les arches, roues dans l'ombre)
+	EndFraction = 0.58, -- largeur du tube avant / arrière : entre les roues, pas devant elles
+	SideTilt = 20, -- ° : inclinaison du tube latéral (une lumière vers le bas-extérieur, une vers le bas-intérieur)
+	EndTilt = 12, -- ° : avant / arrière
 	Angle = 150,
-	SideOutRange = 1.05, -- m : lumière latérale vers l'extérieur (bande serrée au ras de la caisse, comme GTA V)
-	SideInRange = 1.0, -- m : … vers le dessous de la voiture
-	EndOutRange = 0.95, -- m
-	EndInRange = 0.9, -- m
+	SideOutRange = 1.4, -- m (tube rentré sous la caisse : la lumière ne déborde que de ~0,3 m, comme GTA V)
+	SideInRange = 1.17, -- m : … vers le dessous de la voiture
+	EndOutRange = 1.21, -- m
+	EndInRange = 1.05, -- m
 	OutBrightness = 14,
 	InBrightness = 10,
 }
@@ -705,7 +705,7 @@ function Custom.LayoutNeons(model)
 		y = math.max(y - tube * 0.6, groundY + 0.04 * spm)
 		strips[sgn < 0 and "Left" or "Right"] = {
 			cf = CFrame.new(x, y, (frontZ + rearZ) / 2) * CFrame.Angles(0, 0, math.rad(sgn * N.SideTilt)),
-			size = Vector3.new(tube, tube, (rearZ - frontZ) + 2 * radius * N.SideReach),
+			size = Vector3.new(tube, tube, math.max((rearZ - frontZ) + 2 * radius * N.SideReach, (rearZ - frontZ) * 0.4)),
 			outRange = N.SideOutRange,
 			inRange = N.SideInRange,
 			inFace = sgn > 0 and Enum.NormalId.Left or Enum.NormalId.Right,
@@ -806,7 +806,9 @@ function Custom.LayoutNeons(model)
 			light.Angle = N.Angle
 			light.Range = l[3] * spm
 			light.Brightness = l[4]
-			light.Shadows = false
+			-- ombres : les roues font écran et restent sombres (référence GTA V) ; sans elles la jante s'éclaire
+			-- (mesuré 2026-11-18 : il les faut sur les DEUX lumières, la lumière de dessous éclaire aussi la jante)
+			light.Shadows = true
 			light.Enabled = false
 			light.Parent = p
 		end
