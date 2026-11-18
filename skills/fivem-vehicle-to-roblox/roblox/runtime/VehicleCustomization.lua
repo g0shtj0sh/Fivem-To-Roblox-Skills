@@ -126,6 +126,14 @@ function Custom.Refresh(model)
 		local base = part:GetAttribute("BaseTransparency") or 0
 		if part:GetAttribute("Kind") == "glass" then
 			base = model:GetAttribute("WindowTint") or base
+			-- texture des vitres (GlassTexture) : en AlphaMode Transparency, l'alpha de la texture décide seul et
+			-- Part.Transparency / Part.Color sont ignorés -> toutes les teintes rendaient pareil (mesuré, 2026-11-18).
+			-- Overlay : la texture se pose sur Part.Color et la transparence de la pièce s'applique. Corrige aussi
+			-- les véhicules installés avant ce correctif.
+			local gsa = part:FindFirstChildOfClass("SurfaceAppearance")
+			if gsa and gsa.AlphaMode ~= Enum.AlphaMode.Overlay then
+				gsa.AlphaMode = Enum.AlphaMode.Overlay
+			end
 		end
 		part.Transparency = visible and base or 1
 		part:SetAttribute("Visible", visible)
@@ -461,10 +469,13 @@ local function keepStockTint(model)
 end
 
 -- 0 = vitres claires, 1 = opaques (les teintes GTA vont ~0.35 -> 0.9) ; color = teinte du verre (nil = fumé)
+-- Transparence = ClearTransparency x (1 - amount). 0.6 avant le 2026-11-18 : « Aucune », « Fumé clair » et
+-- « D'origine » (0.45) se confondaient ; 0.88 = verre clair qui garde son reflet (observé en Play, BavrenN4).
+Custom.ClearGlassTransparency = 0.88
 function Custom.SetWindowTint(model, amount, color)
 	keepStockTint(model)
 	amount = math.clamp(amount, 0, 0.95)
-	model:SetAttribute("WindowTint", 0.6 - amount * 0.6)
+	model:SetAttribute("WindowTint", Custom.ClearGlassTransparency * (1 - amount))
 	local base = color or Color3.new(0.12, 0.13, 0.14)
 	for _, part in ipairs(glassParts(model)) do
 		part.Color = base:Lerp(Color3.new(0.02, 0.02, 0.02), amount * (color and 0.4 or 1))
@@ -474,12 +485,14 @@ end
 
 -- Teintes de vitres de GTA, dans l'ordre des menus (vMenu : D'origine, Aucune, Limousine, Fumé clair,
 -- Fumé foncé, Noir intégral, Vert). Amount : opacité 0..0,95 de SetWindowTint.
+-- Ordre de GTA : Aucune < D'origine (0.45) < Fumé clair < Fumé foncé < Limousine < Noir intégral. Le matériau Glass
+-- éclaircit beaucoup : Fumé clair 0.35 / foncé 0.6 / Limo 0.8 se confondaient avec Aucune (observé, 2026-11-18).
 Custom.WindowTints = {
 	{ Name = "Stock", Label = "D'origine" },
 	{ Name = "None", Label = "Aucune", Amount = 0 },
-	{ Name = "Limo", Label = "Limousine", Amount = 0.8 },
-	{ Name = "LightSmoke", Label = "Fumé clair", Amount = 0.35 },
-	{ Name = "DarkSmoke", Label = "Fumé foncé", Amount = 0.6 },
+	{ Name = "Limo", Label = "Limousine", Amount = 0.85 },
+	{ Name = "LightSmoke", Label = "Fumé clair", Amount = 0.55 },
+	{ Name = "DarkSmoke", Label = "Fumé foncé", Amount = 0.72 },
 	{ Name = "PureBlack", Label = "Noir intégral", Amount = 0.95 },
 	{ Name = "Green", Label = "Vert", Amount = 0.55, Color = Color3.fromRGB(30, 90, 45) },
 }

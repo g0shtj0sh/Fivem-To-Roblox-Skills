@@ -174,6 +174,15 @@ coupé par frein / frein à main / marche arrière, PI sur l'accélérateur) et 
 avant (`K`) ; `VehicleInput.Labels` (libellés pour un panneau des touches). Mesuré : régulateur 57–58 km/h pour
 57,9 ; limiteur 55–56 km/h accélérateur à fond ; 200 envois de télémétrie en 1 s → 34 écritures du régime.
 
+**Teintes de vitres et texture de verre (2026-11-18)** : la `SurfaceAppearance` des vitres doit être en
+`AlphaMode.Overlay`. En `Transparency`, l'alpha de la texture décide seul : `Part.Transparency`, `Part.Color` et même
+`SurfaceAppearance.Color` sont ignorés, donc les 7 teintes rendaient exactement pareil (mesuré en Play sur BavrenN4 :
+transparence 0 + rouge vif = aucun changement). En Overlay, la texture se pose sur `Part.Color` et la transparence de
+la pièce s'applique (teinte, vert, vitre baissée = 1). Le Setup pose Overlay ; `Custom.Refresh` et `setupVehicle`
+(serveur) convertissent les véhicules installés avant. Transparences : Aucune 0.88, D'origine 0.45, Fumé clair 0.40,
+Fumé foncé 0.25, Limousine 0.13, Noir intégral 0.04, Vert 0.40 (le matériau Glass éclaircit beaucoup : l'ancienne
+plage 0.6 → 0.03 confondait Aucune / Fumé clair / D'origine).
+
 **Vitres, plafonnier, plaque, klaxon (2026-11-16)** : la texture des vitres du mod (`vehicle_generic_glasswindows*` :
 bordure noire, dégivrage) est mise en ligne à part (`glass/`, id lu avec les sons) et posée par le Setup en
 SurfaceAppearance à transparence (attribut `GlassTexture`) ; une vitre qui casse (`WindowBroken_<os>`) lance des
@@ -525,7 +534,7 @@ Custom.SetColor(car, "Primary", Color3.fromRGB(10, 10, 10))   -- Primary/Seconda
 Custom.SetPaintMaterial(car, "Primary", Enum.Material.Metal, 0.1)
 Custom.SetLivery(car, 1)                              -- 0 = sans
 Custom.SetExtra(car, 1, false)
-Custom.SetWindowTint(car, 0.7)                        -- 0 clair → 0.95 limo
+Custom.SetWindowTint(car, 0.7)                        -- 0 clair → 0.95 noir (transparence = 0.88 × (1 − amount))
 Custom.SetNeon(car, true, Color3.fromRGB(255, 0, 200))
 Custom.SetXenon(car, Color3.fromRGB(120, 170, 255))   -- nil = halogène
 Custom.SetPlate(car, "ROBLOX")                        -- plaque imposée par le jeu (voir « Plaques »)

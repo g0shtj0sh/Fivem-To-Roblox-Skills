@@ -519,6 +519,15 @@ local function setupVehicle(model)
 	Access.TagCollision(model)
 	Access.Watch(model)
 	noTouchSeats(model)
+	-- vitres texturées installées avant le 2026-11-18 (AlphaMode Transparency : teinte ignorée) -> Overlay
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") and p:GetAttribute("Kind") == "glass" then
+			local gsa = p:FindFirstChildOfClass("SurfaceAppearance")
+			if gsa and gsa.AlphaMode ~= Enum.AlphaMode.Overlay then
+				gsa.AlphaMode = Enum.AlphaMode.Overlay
+			end
+		end
+	end
 	local root = model.PrimaryPart
 	if root then
 		model:SetAttribute("Parked", root.Anchored)
