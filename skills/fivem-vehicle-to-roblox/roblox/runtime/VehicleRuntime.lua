@@ -714,6 +714,22 @@ function Runtime:_cabinLight(kind, on)
 		l.Parent = att
 		att.Parent = self.Root
 		self.CabinLightObjs[kind] = l
+		if kind == "interior" then
+			-- cabochon du plafonnier (comme GTA) : de jour la lumière seule ne se voit presque pas dans l'habitacle
+			-- (« quand j'appuie sur I ça n'active toujours pas », 2026-11-19) ; la lampe elle-même s'allume
+			local lens = Instance.new("Part")
+			lens.Name = "F2R_InteriorLens"
+			lens.Material = Enum.Material.Neon
+			lens.Size = Vector3.new(0.16, 0.012, 0.09) * self.Spm
+			lens.CanCollide, lens.CanQuery, lens.CanTouch, lens.Massless = false, false, false, true
+			lens.CastShadow = false
+			lens.Transparency = 1
+			lens.CFrame = self.Root.CFrame * CFrame.new(att.Position - Vector3.new(0, 0.012 * self.Spm, 0))
+			local w = Instance.new("WeldConstraint")
+			w.Part0, w.Part1, w.Parent = self.Root, lens, lens
+			lens.Parent = self.Model
+			self.CabinLens = lens
+		end
 	end
 	on = on and (self.LodTier or 0) < 2
 	if l and kind == "interior" then
@@ -726,6 +742,16 @@ function Runtime:_cabinLight(kind, on)
 	end
 	if l and l.Enabled ~= on then
 		l.Enabled = on
+	end
+	local lens = kind == "interior" and self.CabinLens
+	if lens then
+		local t = on and 0.05 or 1
+		if lens.Transparency ~= t then
+			lens.Transparency = t
+		end
+		if l and lens.Color ~= l.Color then
+			lens.Color = l.Color
+		end
 	end
 end
 
