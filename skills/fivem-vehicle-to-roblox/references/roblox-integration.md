@@ -552,7 +552,15 @@ serveur, attribut `Neons.Layout`) :
   exclues) ; latéral au bord du bas de caisse, long de l'avant de la roue avant à l'arrière de la roue arrière
   (`SideReach`) ; avant / arrière sous les boucliers ;
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
-- **v8 (2026-11-19) : 8 `SpotLight` tournées vers le sol, sans ombres, comme les phares** — 3 par côté, 1 devant,
+- **v9 (2026-11-19, méthode actuelle) : UNE `SurfaceLight` par tube, comme un vrai tube néon** — tube À PLAT posé
+  AU BORD du bas de caisse (`SideInset` 0, `EndInset` 0,09 m, inclinaisons 0), tube latéral prolongé de 0,15 m à
+  chaque bout ; lumière sur la face `Bottom`, `Angle` 180 (demi-espace vers le bas : la caisse au-dessus ne peut
+  pas être éclairée), **sans ombres** ; portées 1,5 m (côtés) / 1,3 m (bouts), `Brightness` 6 ; 4 lumières par
+  voiture. Raison : la v8 (8 `SpotLight` rentrées de 0,3 m sous la caisse) ne donnait que des petites taches
+  cachées sous la voiture, « juste des points » de jour (capture de l'utilisateur). Une source en ligne donne
+  une bande continue. Vérifié (Play PC) : de jour sous l'angle de l'utilisateur, de nuit 3/4 avant et arrière, en
+  mouvement. Les rectangles durs de la v3–v6 venaient des `Angle` 120–150 sur tubes inclinés.
+- historique v8 : **v8 (2026-11-19) : 8 `SpotLight` tournées vers le sol, sans ombres, comme les phares** — 3 par côté, 1 devant,
   1 derrière ; `Face` Bottom d'une attache alignée sur la voiture (pas sur le tube incliné), `Angle` 180 (une
   demi-sphère vers le bas : elle ne peut pas éclairer la caisse au-dessus d'elle, donc pas besoin d'ombres) ; portées
   1,25 m (côtés) / 1,1 m (bouts), `Brightness` 8 ; nappe serrée sous la voiture, ~0,8 m de débord. Raison : la v7
