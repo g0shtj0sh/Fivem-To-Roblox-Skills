@@ -171,6 +171,9 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if not t or typeof(value) ~= t or not isDriver(player, model) or not allowed(player, "set") then
 			return
 		end
+		if model:GetAttribute("Wrecked") == true then
+			return -- véhicule en feu / épave (VehicleDamage) : plus rien ne marche jusqu'à la réparation
+		end
 		if t == "number" and (value ~= value or math.abs(value) == math.huge) then
 			return
 		end
@@ -387,6 +390,45 @@ if Damage then
 	end)
 end
 
+-- Pannes et feu (VehicleDamage, 2026-11-18) : calage / moteur qui lâche au hasard selon la fumée, flammes qui
+-- brûlent les occupants (dégâts) et enflamment quelques secondes qui s'approche du foyer (sans dégâts).
+if Damage then
+	task.spawn(function()
+		local dt = Damage.TickEvery
+		while true do
+			task.wait(dt)
+			for _, model in ipairs(CollectionService:GetTagged(TAG)) do
+				if not model:IsDescendantOf(workspace) then
+					continue
+				end
+				local ok = pcall(Damage.Tick, model, dt)
+				if ok and model:GetAttribute("Burning") == true then
+					local occupants = {}
+					for _, seat in ipairs((model:FindFirstChild("Seats") or Instance.new("Folder")):GetChildren()) do
+						local hum = (seat:IsA("Seat") or seat:IsA("VehicleSeat")) and seat.Occupant
+						if hum and hum.Parent then
+							occupants[hum.Parent] = true
+							Damage.Ignite(hum.Parent, Damage.OccupantAfterburn, Damage.OccupantBurnDps)
+						end
+					end
+					local firePos, spm = Damage.FirePosition(model)
+					if firePos then
+						local reach = Damage.NearFireRadius * spm
+						for _, plr in ipairs(Players:GetPlayers()) do
+							local char = plr.Character
+							local hrp = char and char:FindFirstChild("HumanoidRootPart")
+							if hrp and not occupants[char] and (hrp.Position - firePos).Magnitude < reach then
+								Damage.Ignite(char, Damage.NearBurnTime, 0)
+							end
+						end
+					end
+				end
+			end
+			Damage.BurnTick(dt)
+		end
+	end)
+end
+
 local function enterPrompts(model)
 	local out = {}
 	for _, d in ipairs(model:GetDescendants()) do
@@ -455,7 +497,7 @@ local function setupVehicle(model)
 					model:SetAttribute("DriverUserId", plr and plr.UserId or 0)
 					Access.OnDriverChanged(model, plr)
 					-- le moteur démarre quand le conducteur s'assoit (comme GTA)
-					if model:GetAttribute("AutoStartEngine") ~= false then
+					if model:GetAttribute("AutoStartEngine") ~= false and model:GetAttribute("EngineDead") ~= true then
 						model:SetAttribute("Engine", true)
 					end
 				end

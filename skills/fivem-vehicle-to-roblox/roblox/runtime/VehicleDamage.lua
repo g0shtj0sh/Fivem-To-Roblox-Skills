@@ -15,25 +15,46 @@
 --   une fois sur chaque client. Repair remet tout à neuf. NoDamage = invincible.
 
 local Damage = {}
--- ROBUSTESSE (2026-11-16, demande de l'utilisateur : « les véhicules bien plus robustes, le but n'est pas d'aller
--- au garage toutes les 2 min », pensé pour les courses-poursuites). Avant : MinImpact 4, BodyPerMs 26,
--- EnginePerMs 20, feux dès le seuil, vitres 7, arrachage 16 — un mur à ~90 km/h (variation mesurée 26,6 m/s)
--- ôtait ~450 points au moteur et faisait fumer dès le 1er choc. Maintenant, même mur : ~125 points au moteur,
--- fumée après 4 à 5 gros chocs de face, moteur mort après ~8 ; un accrochage à 50 km/h (~14 m/s) : ~50 points.
-Damage.MinImpact = 6 -- m/s de variation de vitesse horizontale en un pas : en dessous, rien
-Damage.MaxImpact = 40
-Damage.BodyPerMs = 10 -- points de carrosserie par m/s au-delà du seuil
-Damage.EnginePerMs = 6.5
+-- ROBUSTESSE (2026-11-16) puis VITESSE (2026-11-18, demande de l'utilisateur : « que ça prenne en compte la vitesse […]
+-- à toute vitesse dans un mur c'est forcément beaucoup plus de dégâts qu'à 10 km/h »). Les points perdus suivent
+-- l'ÉNERGIE du choc (carré de la variation de vitesse) au lieu d'une droite : K × (Δv² − MinImpact²).
+-- Avant (droite) : mur à ~90 km/h (Δv 26,6 m/s) ≈ 125 points au moteur, 50 km/h ≈ 50.
+-- Mesuré sur la m422 (EngineDamageMult du mod inclus), choc de face, Play Studio 2026-11-18 :
+-- 20 km/h ≈ 3 · 28 km/h ≈ 22 · 50 km/h ≈ 92 · 72 km/h ≈ 200 · 95 km/h ≈ 370 · 118 km/h ≈ 570 (fumée claire)
+-- · 144 km/h ≈ 850 (fumée noire d'un coup). Un 2e gros choc met le feu ; les accrochages restent légers ; un choc
+-- à l'arrière (loin du moteur) touche ~7 fois moins le moteur.
+Damage.MinImpact = 5 -- m/s de variation de vitesse horizontale en un pas : en dessous, rien
+Damage.MaxImpact = 45
+Damage.BodyK = 0.6 -- points de carrosserie par (m/s)² au-delà du seuil
+Damage.EngineK = 0.4 -- points moteur par (m/s)², × proximité du moteur (0,12..1)
 Damage.LightMin = 9 -- m/s : un feu ne casse qu'au-delà
-Damage.SmokeBelow = 450
-Damage.HeavySmokeBelow = 220
-Damage.FireBelow = 60
+Damage.SmokeBelow = 450 -- fumée CLAIRE : le moteur peut caler (on le redémarre)
+Damage.HeavySmokeBelow = 220 -- fumée NOIRE : le moteur peut lâcher à tout moment, définitivement (réparation)
+Damage.FireBelow = 60 -- FEU : véhicule mort, occupants brûlés
 Damage.LightRadius = 0.55 -- m (+ 0,05 par m/s au-delà du seuil)
 Damage.WindowRadius = 0.7 -- m (+ 0,06 par m/s) ; une vitre ne casse qu'au-delà de WindowMin
 Damage.WindowMin = 13
 Damage.DetachAt = 22 -- m/s (≈ 80 km/h dans un mur) : un ouvrant du côté du choc est arraché ; il TOMBE
 -- (copie physique) et disparaît après VehicleCustomization.DebrisLifetime s, comme les éclats de vitre
 Damage.DetachRadius = 1.0 -- m
+
+-- PANNES (2026-11-18, demande de l'utilisateur). Tirées par le serveur (Damage.Tick, toutes les TickEvery s, moteur
+-- allumé) et à chaque choc. Probabilités PAR SECONDE moteur allumé (au ralenti ×0,5) :
+--   fumée claire → CALAGE (Engine = false, EngineFault = "stall") : on redémarre normalement (touche moteur) ;
+--   fumée noire  → MOTEUR HS (EngineDead, EngineFault = "dead") : il ne redémarre plus jusqu'à la réparation ;
+--   feu          → ÉPAVE (Wrecked, Burning) : plus rien ne marche (moteur, phares, klaxon, sirène, clignotants),
+--                  les occupants prennent feu et des dégâts, qui s'approche du feu s'enflamme quelques secondes.
+Damage.TickEvery = 0.5
+Damage.StallPerSecond = 1 / 45 -- fumée claire : un calage toutes les ~45 s de moteur allumé (en moyenne)
+Damage.DeathPerSecond = 1 / 35 -- fumée noire : le moteur lâche après ~35 s en moyenne
+Damage.StallOnHit = 0.35 -- choc (≥ MinImpact) en fumée claire : chance de caler sur le coup
+Damage.DeathOnHit = 0.5 -- choc en fumée noire : chance que le moteur lâche sur le coup
+Damage.BurnTime = 90 -- s de flammes, puis l'épave fume noir (toujours morte)
+-- Brûlures (personnages) : un Fire Roblox sur le torse, retiré après sa durée.
+Damage.OccupantBurnDps = 9 -- points de vie par seconde à bord d'un véhicule en feu
+Damage.OccupantAfterburn = 4 -- s : il brûle encore après être sorti (mêmes dégâts)
+Damage.NearFireRadius = 1.3 -- m autour du foyer (moteur) : un piéton qui s'approche prend feu…
+Damage.NearBurnTime = 3 -- s… quelques secondes, sans dégâts (demande : « pas forcément faire des dégâts »)
 
 local function cfgOf(model)
 	local m = model:FindFirstChild("VehicleConfig")
@@ -96,20 +117,18 @@ function Damage.Apply(model, dir, strength)
 	local h = cfg.Handling or {}
 	local P = Damage.ImpactPoint(cfg, dir)
 
+	local energy = strength * strength - Damage.MinImpact * Damage.MinImpact -- (m/s)², croît avec le carré de la vitesse
 	local body = model:GetAttribute("BodyHealth") or 1000
-	body -= over * Damage.BodyPerMs * (h.CollisionDamageMult or 1)
+	body -= energy * Damage.BodyK * (h.CollisionDamageMult or 1)
 	model:SetAttribute("BodyHealth", math.max(0, math.floor(body)))
 
 	local enginePos = cfg.EnginePosition and v3(cfg.EnginePosition) or Vector3.new(0, 0, -1.4)
 	local near = math.clamp(1.4 - (P - enginePos).Magnitude / 1.6, 0.12, 1)
 	local engine = model:GetAttribute("EngineHealth") or 1000
-	engine -= over * Damage.EnginePerMs * (h.EngineDamageMult or 1) * near
+	engine -= energy * Damage.EngineK * (h.EngineDamageMult or 1) * near
 	engine = math.max(-100, math.floor(engine))
 	model:SetAttribute("EngineHealth", engine)
-	if engine <= 0 then
-		model:SetAttribute("EngineDead", true)
-		model:SetAttribute("Engine", false)
-	end
+	Damage.CheckState(model, true)
 
 	-- feux au point d'impact
 	local lr = Damage.LightRadius + 0.05 * over
@@ -160,6 +179,164 @@ function Damage.Reset(model)
 	model:SetAttribute("BodyHealth", nil)
 	model:SetAttribute("EngineHealth", nil)
 	model:SetAttribute("EngineDead", nil)
+	model:SetAttribute("EngineFault", nil)
+	model:SetAttribute("Wrecked", nil)
+	model:SetAttribute("Burning", nil)
+	model:SetAttribute("BurnUntil", nil)
+end
+
+-- Stade de la panne d'après la santé du moteur : 0 sain, 1 fumée claire, 2 fumée noire, 3 feu.
+function Damage.Stage(model)
+	local e = model:GetAttribute("EngineHealth") or 1000
+	return (e < Damage.FireBelow and 3) or (e < Damage.HeavySmokeBelow and 2) or (e < Damage.SmokeBelow and 1) or 0
+end
+
+local function setFault(model, kind)
+	-- horodaté pour que le client du conducteur affiche le message même si la panne se répète
+	model:SetAttribute("EngineFault", kind .. ":" .. string.format("%.2f", workspace:GetServerTimeNow()))
+end
+
+function Damage.Stall(model)
+	if model:GetAttribute("Engine") == true and model:GetAttribute("EngineAlwaysOn") ~= true then
+		model:SetAttribute("Engine", false)
+		setFault(model, "stall")
+	end
+end
+
+function Damage.Kill(model)
+	if model:GetAttribute("EngineDead") ~= true then
+		model:SetAttribute("EngineDead", true)
+		model:SetAttribute("Engine", false)
+		setFault(model, "dead")
+	end
+end
+
+-- Véhicule en feu : tout est coupé et reste coupé jusqu'à la réparation (Repair → Damage.Reset).
+function Damage.Wreck(model)
+	if model:GetAttribute("Wrecked") == true then
+		return
+	end
+	model:SetAttribute("Wrecked", true)
+	model:SetAttribute("EngineDead", true)
+	model:SetAttribute("Engine", false)
+	model:SetAttribute("Burning", true)
+	model:SetAttribute("BurnUntil", workspace:GetServerTimeNow() + Damage.BurnTime)
+	for k, v in pairs({ Headlights = 0, Indicator = "Off", Siren = false, Horn = false, ExtraLights = false,
+		InteriorLight = false, Throttle = 0 }) do
+		if model:GetAttribute(k) ~= nil then
+			model:SetAttribute(k, v)
+		end
+	end
+	local custom = script.Parent:FindFirstChild("VehicleCustomization")
+	local ok, Custom = pcall(function()
+		return custom and require(custom)
+	end)
+	if ok and Custom and Custom.RefreshNeons then
+		pcall(Custom.RefreshNeons, model) -- néons coupés (RefreshNeons lit Wrecked)
+	end
+	setFault(model, "fire")
+end
+
+-- SERVEUR. Applique le stade : feu → épave ; santé ≤ 0 → moteur mort. onHit : tirage « sur le coup » d'un choc.
+function Damage.CheckState(model, onHit)
+	if model:GetAttribute("NoDamage") == true then
+		return
+	end
+	local stage = Damage.Stage(model)
+	if stage >= 3 then
+		Damage.Wreck(model)
+		return
+	end
+	local e = model:GetAttribute("EngineHealth") or 1000
+	if e <= 0 then
+		Damage.Kill(model)
+		return
+	end
+	if onHit and model:GetAttribute("Engine") == true then
+		if stage == 2 and math.random() < Damage.DeathOnHit then
+			Damage.Kill(model)
+		elseif stage >= 1 and math.random() < Damage.StallOnHit then
+			Damage.Stall(model)
+		end
+	end
+end
+
+-- SERVEUR, toutes les dt s : pannes au hasard pendant que le moteur tourne, fin des flammes.
+function Damage.Tick(model, dt)
+	if model:GetAttribute("NoDamage") == true then
+		return
+	end
+	if model:GetAttribute("Burning") == true then
+		local untilT = model:GetAttribute("BurnUntil") or 0
+		if workspace:GetServerTimeNow() >= untilT then
+			model:SetAttribute("Burning", false) -- les flammes s'éteignent, l'épave fume noir
+		end
+		return
+	end
+	local stage = Damage.Stage(model)
+	if stage == 0 or model:GetAttribute("Engine") ~= true or model:GetAttribute("EngineAlwaysOn") == true then
+		return
+	end
+	local idle = (model:GetAttribute("Throttle") or 0) < 0.05
+	local k = dt * (idle and 0.5 or 1)
+	if stage >= 2 then
+		if math.random() < Damage.DeathPerSecond * k then
+			Damage.Kill(model)
+		end
+	elseif math.random() < Damage.StallPerSecond * k then
+		Damage.Stall(model)
+	end
+end
+
+-- SERVEUR. Met un personnage en feu `seconds` s (prolonge s'il brûle déjà) ; dps = dégâts par seconde (0 : aucun).
+local burning = setmetatable({}, { __mode = "k" }) -- character -> { untilT, dps, fire }
+function Damage.Ignite(character, seconds, dps)
+	local hum = character and character:FindFirstChildOfClass("Humanoid")
+	local torso = character and (character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+		or character:FindFirstChild("HumanoidRootPart"))
+	if not hum or not torso or hum.Health <= 0 then
+		return
+	end
+	local b = burning[character]
+	local now = os.clock()
+	if b and b.fire.Parent then
+		b.untilT = math.max(b.untilT, now + seconds)
+		b.dps = math.max(b.dps, dps)
+		return
+	end
+	local fire = Instance.new("Fire")
+	fire.Name = "F2R_Burning"
+	fire.Size = 4
+	fire.Heat = 7
+	fire.Color = Color3.fromRGB(255, 120, 40)
+	fire.SecondaryColor = Color3.fromRGB(255, 50, 10)
+	fire.Parent = torso
+	burning[character] = { untilT = now + seconds, dps = dps, fire = fire, hum = hum }
+end
+
+-- SERVEUR, toutes les dt s : brûlures en cours (dégâts, extinction).
+function Damage.BurnTick(dt)
+	local now = os.clock()
+	for character, b in pairs(burning) do
+		if now >= b.untilT or not b.fire.Parent or b.hum.Health <= 0 or not character.Parent then
+			b.fire:Destroy()
+			burning[character] = nil
+		elseif b.dps > 0 then
+			b.hum:TakeDamage(b.dps * dt)
+		end
+	end
+end
+
+-- Foyer d'un véhicule en feu (studs, monde) : la position du moteur.
+function Damage.FirePosition(model)
+	local root = model.PrimaryPart
+	if not root then
+		return nil
+	end
+	local cfg = cfgOf(model)
+	local spm = cfg.StudsPerMeter or 3.571
+	local pos = cfg.EnginePosition and v3(cfg.EnginePosition) or Vector3.new(0, 0.2, -1.4)
+	return root.CFrame:PointToWorldSpace(pos * spm), spm
 end
 
 -- Facteur de puissance d'un moteur touché (VehicleDrive) : 1 au-dessus de 450, 0,55 à 0
@@ -176,8 +353,11 @@ Damage.SmokeTexture = "rbxasset://textures/particles/smoke_main.dds"
 Damage.FireTexture = "rbxasset://textures/particles/fire_main.dds"
 function Damage.UpdateFx(renderer)
 	local model = renderer.Model
-	local e = model:GetAttribute("EngineHealth") or 1000
-	local stage = (e < Damage.FireBelow and 3) or (e < Damage.HeavySmokeBelow and 2) or (e < Damage.SmokeBelow and 1) or 0
+	local stage = Damage.Stage(model)
+	if model:GetAttribute("Wrecked") == true then
+		-- épave : flammes tant que Burning, puis fumée noire (même si la santé a été remontée par un script)
+		stage = model:GetAttribute("Burning") == true and 3 or 2
+	end
 	if (renderer.LodTier or 0) >= 2 and stage < 3 then
 		stage = 0 -- au loin : la fumée légère n'est pas dessinée
 	end
@@ -241,7 +421,7 @@ function Damage.UpdateFx(renderer)
 	end
 	fx.smoke.Enabled = stage >= 1
 	fx.smoke.Rate = (stage >= 2 and 22) or 9
-	fx.smoke.Color = ColorSequence.new(stage >= 2 and Color3.fromRGB(40, 40, 42) or Color3.fromRGB(170, 170, 172))
+	fx.smoke.Color = ColorSequence.new(stage >= 2 and Color3.fromRGB(40, 40, 42) or Color3.fromRGB(205, 205, 210))
 	-- en feu : la fumée reste derrière les flammes (ZOffset) et n'est presque plus éclairée par la lumière du feu
 	fx.smoke.LightInfluence = stage >= 3 and 0.3 or 1
 	fx.smoke.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3),

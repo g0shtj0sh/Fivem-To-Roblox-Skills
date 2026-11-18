@@ -533,7 +533,7 @@ local function neonSideOf(model, part)
 	if side then
 		return side
 	end
-	local root = model.PrimaryPart
+	local root = model.PrimaryPart or model:FindFirstChild("VehicleRoot")
 	if not root then
 		return nil
 	end
@@ -556,26 +556,394 @@ local function neonOn(model, side)
 	return model:GetAttribute("Neon") == true
 end
 
+-- NÉONS FAÇON GTA V (2026-11-18, demande de l'utilisateur : « comme dans GTA 5 et adapté à chaque véhicule »).
+-- Avant : 4 tubes posés sur la boîte englobante (débordaient sous le pare-chocs) + PointLight de 8 studs au bord de
+-- la caisse qui teintait toute la carrosserie. GTA V : tubes discrets sous la caisse, le long des bas de caisse entre
+-- les roues et sous les boucliers ; une nappe vive au sol qui déborde autour de la voiture ; la carrosserie garde
+-- sa couleur. Ici :
+--   · position de chaque tube MESURÉE sur le véhicule (rayons tirés du dessous contre ses pièces de collision) ;
+--   · nappe au sol DESSINÉE : une plaque invisible au ras du sol sous la voiture (`model.NeonGlow`) porte une
+--     SurfaceGui auto-éclairée (LightInfluence 0) avec une bande en dégradé par côté (UIGradient en travers, fondu
+--     aux bouts par 3 couches en gélule empilées) ; aucune lumière Roblox.
+-- Pourquoi pas de lumière (mesuré en Play Studio, m422, nuit, qualité graphique Automatique, place migrée vers
+-- l'éclairage unifié) : SpotLight / SurfaceLight vers le sol n'éclairent rien, même à luminosité 40 ; une PointLight
+-- sous la caisse éclaire le sol mais teinte TOUTE la caisse et l'habitacle (la lumière y traverse les pièces), et le
+-- rendu des petites lumières se recalcule pendant ~2 s après un déplacement de caméra (captures trompeuses).
+Custom.NeonLayoutVersion = 7
+Custom.Neon = {
+	Tube = 0.035, -- m : épaisseur du tube (sous la caisse)
+	SideInset = 0.1, -- m : rentré sous le bas de caisse depuis son bord
+	EndInset = 0.12, -- m : rentré sous le bouclier depuis son bord
+	ArchGap = 1.08, -- × rayon de roue : écart entre le tube latéral et l'axe de la roue
+	SideFraction = 0.82, -- longueur du tube latéral entre les arches
+	EndFraction = 0.86, -- largeur du tube avant / arrière sous le bouclier
+	-- nappe au sol (m)
+	GlowLift = 0.03, -- au-dessus du sol (roues au repos)
+	GlowInner = 0.45, -- sous la voiture, depuis le tube
+	GlowOuter = 0.95, -- hors de la voiture, depuis le tube
+	GlowOverhangSide = 1.1, -- au-delà des bouts du tube latéral (rejoint les nappes avant / arrière, sous les roues)
+	GlowOverhangEnd = 0.5, -- au-delà des bouts du tube avant / arrière
+	GlowPeak = 0.18, -- transparence au droit du tube (0 = opaque)
+	GlowBrightness = 2.2, -- SurfaceGui.Brightness
+	GlowLayers = { 1, 0.78, 0.56 }, -- longueur de chaque couche (fondu aux bouts par empilement)
+	GlowLayerTransparency = 0.5,
+	PixelsPerStud = 12,
+}
+
+local function neonBodyParts(model)
+	-- pièces de collision de la caisse (les seules interrogeables par rayon), sans les roues
+	local out = {}
+	local col = model:FindFirstChild("Collision")
+	for _, d in ipairs(col and col:GetDescendants() or {}) do
+		if d:IsA("BasePart") and d.CanQuery and not string.find(string.lower(d.Name), "wheel") then
+			table.insert(out, d)
+		end
+	end
+	return out
+end
+
+-- Nappe au sol des néons : une plaque invisible au ras du sol, une bande en dégradé par côté (voir l'en-tête).
+-- strips[side] = { cf, size } en studs dans le repère du VehicleRoot.
+function Custom.BuildNeonGlow(model, root, strips, groundY, spm)
+	local N = Custom.Neon
+	local old = model:FindFirstChild("NeonGlow")
+	if old then
+		old:Destroy()
+	end
+	local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+	local bands = {}
+	for side, st in pairs(strips) do
+		local c, sz = st.cf.Position, st.size
+		local lateral = side == "Left" or side == "Right"
+		local outward = lateral and Vector3.new(math.sign(c.X), 0, 0) or Vector3.new(0, 0, math.sign(c.Z))
+		local along = lateral and sz.Z or sz.X
+		local len = along + 2 * (lateral and N.GlowOverhangSide or N.GlowOverhangEnd) * spm
+		local inner, outer = N.GlowInner * spm, N.GlowOuter * spm
+		-- bande : centre, demi-tailles en X / Z (studs, repère du VehicleRoot)
+		local across = inner + outer
+		local centre = Vector3.new(c.X, 0, c.Z) + outward * ((outer - inner) / 2)
+		local hx = lateral and across / 2 or len / 2
+		local hz = lateral and len / 2 or across / 2
+		bands[side] = { centre = centre, hx = hx, hz = hz, lateral = lateral, outward = outward,
+			peak = inner / across }
+		minX, maxX = math.min(minX, centre.X - hx), math.max(maxX, centre.X + hx)
+		minZ, maxZ = math.min(minZ, centre.Z - hz), math.max(maxZ, centre.Z + hz)
+	end
+	local plate = Instance.new("Part")
+	plate.Name = "NeonGlow"
+	plate.Transparency = 1
+	plate.CanCollide, plate.CanQuery, plate.CanTouch, plate.Massless = false, false, false, true
+	plate.CastShadow = false
+	plate.Size = Vector3.new(maxX - minX, 0.05, maxZ - minZ)
+	local mid = Vector3.new((minX + maxX) / 2, groundY + N.GlowLift * spm, (minZ + maxZ) / 2)
+	plate.CFrame = root.CFrame * CFrame.new(mid)
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Glow"
+	gui.Face = Enum.NormalId.Top
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = N.PixelsPerStud
+	gui.LightInfluence = 0
+	gui.Brightness = N.GlowBrightness
+	gui.AlwaysOnTop = false
+	gui.ZOffset = 0
+	gui.Enabled = false
+	gui.Adornee = plate
+	gui.Parent = plate
+	-- SurfaceGui sur la face du DESSUS (mesuré en Play, 2026-11-18) : l'axe X de l'interface suit −Z de la pièce
+	-- (de l'arrière vers l'avant), l'axe Y suit +X ; une UIGradient à Rotation 0 suit donc −Z, à 90 suit +X.
+	local W, D = plate.Size.X, plate.Size.Z
+	for side, bd in pairs(bands) do
+		-- conteneur du côté (allumé / éteint par RefreshNeons)
+		local group = Instance.new("Frame")
+		group.Name = side
+		group.BackgroundTransparency = 1
+		group.AnchorPoint = Vector2.new(0.5, 0.5)
+		group.Position = UDim2.fromScale((maxZ - bd.centre.Z) / D, (bd.centre.X - minX) / W)
+		group.Size = UDim2.fromScale(2 * bd.hz / D, 2 * bd.hx / W)
+		group.Visible = false
+		group:SetAttribute("NeonSide", side)
+		group.Parent = gui
+		-- dégradé en travers : sous la voiture → tube (le plus vif) → dehors
+		local outwardPositive = (bd.lateral and bd.outward.X > 0) or (not bd.lateral and bd.outward.Z < 0)
+		local pk = outwardPositive and bd.peak or 1 - bd.peak
+		local function k(t, v)
+			return NumberSequenceKeypoint.new(math.clamp(t, 0, 1), v)
+		end
+		local keys
+		if outwardPositive then
+			keys = { k(0, 1), k(pk * 0.5, 0.72), k(pk, N.GlowPeak), k(pk + (1 - pk) * 0.45, 0.62), k(1, 1) }
+		else
+			keys = { k(0, 1), k(pk * 0.55, 0.62), k(pk, N.GlowPeak), k(pk + (1 - pk) * 0.5, 0.72), k(1, 1) }
+		end
+		local seq = NumberSequence.new(keys)
+		-- fondu aux bouts : couches en gélule de plus en plus courtes, empilées (une UIGradient posée sur un
+		-- CanvasGroup n'a AUCUN effet dans une SurfaceGui, mesuré le 2026-11-18 : une seule UIGradient par couche)
+		for i, frac in ipairs(N.GlowLayers) do
+			local band = Instance.new("Frame")
+			band.Name = "Band"
+			band.BorderSizePixel = 0
+			band.BackgroundTransparency = N.GlowLayerTransparency
+			band.BackgroundColor3 = Color3.new(1, 1, 1)
+			band.AnchorPoint = Vector2.new(0.5, 0.5)
+			band.Position = UDim2.fromScale(0.5, 0.5)
+			-- le long = axe X de l'interface pour une bande latérale (−Z), axe Y pour l'avant / l'arrière (+X)
+			band.Size = bd.lateral and UDim2.fromScale(frac, 1) or UDim2.fromScale(1, frac)
+			band.ZIndex = i
+			band.Parent = group
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0.5, 0)
+			corner.Parent = band
+			local across = Instance.new("UIGradient")
+			across.Rotation = bd.lateral and 90 or 0
+			across.Transparency = seq
+			across.Parent = band
+		end
+	end
+	local w = Instance.new("WeldConstraint")
+	w.Part0, w.Part1, w.Parent = root, plate, plate
+	plate.Parent = model
+	return plate
+end
+
+
+-- Calcule et pose les 4 tubes d'après la géométrie du véhicule (serveur, une fois par version de calage).
+-- Rend true si le calage est fait (ou déjà fait).
+function Custom.LayoutNeons(model)
+	local folder = model:FindFirstChild("Neons")
+	if not folder then
+		return false
+	end
+	if folder:GetAttribute("Layout") == Custom.NeonLayoutVersion then
+		return true
+	end
+	if not game:GetService("RunService"):IsServer() or not model:IsDescendantOf(workspace) then
+		return false
+	end
+	local root = model:FindFirstChild("VehicleRoot") or model.PrimaryPart
+	local cfg = getConfig(model)
+	local spm = cfg.StudsPerMeter or 3.571
+	local wheels = cfg.Wheels
+	if not root or type(wheels) ~= "table" then
+		return false
+	end
+	local N = Custom.Neon
+	-- roues (studs, repère du VehicleRoot : X droite, Y haut, −Z avant)
+	local frontZ, rearZ, track, radius, width, groundY, axleY = math.huge, -math.huge, 0, 0, 0, math.huge, 0
+	local nW = 0
+	for _, w in pairs(wheels) do
+		if type(w) == "table" and type(w.Position) == "table" then
+			local pos = Vector3.new(w.Position[1], w.Position[2], w.Position[3]) * spm
+			local r = (w.Radius or 0.33) * spm
+			frontZ, rearZ = math.min(frontZ, pos.Z), math.max(rearZ, pos.Z)
+			track = math.max(track, math.abs(pos.X))
+			radius, width = math.max(radius, r), math.max(width, (w.Width or 0.25) * spm)
+			groundY = math.min(groundY, pos.Y - r)
+			axleY += pos.Y
+			nW += 1
+		end
+	end
+	if nW < 2 or rearZ - frontZ < 1 then
+		return false
+	end
+	axleY /= nW
+	local b = cfg.Bounds
+	local halfX = b and math.max(math.abs(b.Min[1]), math.abs(b.Max[1])) * spm or track + width
+	local minZ = b and b.Min[3] * spm or frontZ - radius * 2
+	local maxZ = b and b.Max[3] * spm or rearZ + radius * 2
+
+	local body = neonBodyParts(model)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = body
+	local rcf = root.CFrame
+	local probeLen = (axleY + radius * 0.5) - (groundY - 1) + 1
+	-- hauteur du dessous de caisse en (x, z), nil si rien au-dessus jusqu'à l'axe des roues + ½ rayon
+	local function under(x, z)
+		if #body == 0 then
+			return nil
+		end
+		local o = rcf:PointToWorldSpace(Vector3.new(x, groundY - 1, z))
+		local hit = workspace:Raycast(o, rcf.UpVector * probeLen, params)
+		return hit and rcf:PointToObjectSpace(hit.Position).Y or nil
+	end
+	local lowY = axleY + radius * 0.15 -- un bas de caisse / bouclier : sous l'axe (un peu au-dessus au plus)
+	local step = 0.03 * spm
+
+	local tube = N.Tube * spm
+	local strips = {}
+	-- tubes latéraux : bord du bas de caisse entre les arches de roue
+	local zA, zB = frontZ + radius * N.ArchGap, rearZ - radius * N.ArchGap
+	local mid, span = (zA + zB) / 2, (zB - zA) * N.SideFraction
+	for _, sgn in ipairs({ -1, 1 }) do
+		local edge = nil
+		for i = 0, 4 do
+			local z = mid + (i / 4 - 0.5) * span
+			local x = halfX
+			local found
+			while x > 0.2 * spm do
+				local y = under(sgn * x, z)
+				if y and y < lowY then
+					found = x
+					break
+				end
+				x -= step
+			end
+			if found then
+				edge = edge and math.min(edge, found) or found
+			end
+		end
+		edge = edge or (track - width * 0.5)
+		local x = sgn * math.max(edge - N.SideInset * spm, 0.2 * spm)
+		local y = math.huge
+		for i = 0, 6 do
+			local hy = under(x, mid + (i / 6 - 0.5) * span)
+			if hy then
+				y = math.min(y, hy)
+			end
+		end
+		if y == math.huge then
+			y = groundY + 0.18 * spm
+		end
+		y = math.max(y - tube * 0.6, groundY + 0.04 * spm)
+		strips[sgn < 0 and "Left" or "Right"] = {
+			cf = CFrame.new(x, y, mid),
+			size = Vector3.new(tube, tube, span),
+		}
+	end
+	-- tubes avant / arrière : sous le bouclier, devant / derrière les roues
+	for _, e in ipairs({ { "Front", -1, frontZ, minZ }, { "Back", 1, rearZ, maxZ } }) do
+		local name, sgn, axleZ, endZ = e[1], e[2], e[3], e[4]
+		local limitZ = math.abs(axleZ) + radius * 1.02 -- jamais dans la roue
+		local edge = nil
+		for _, fx in ipairs({ -0.35, 0, 0.35 }) do
+			local z = math.abs(endZ)
+			local found
+			while z > limitZ do
+				local y = under(fx * track, sgn * z)
+				if y and y < lowY then
+					found = z
+					break
+				end
+				z -= step
+			end
+			if found then
+				edge = edge and math.min(edge, found) or found
+			end
+		end
+		local zAbs = math.max((edge or (math.abs(endZ) - 0.2 * spm)) - N.EndInset * spm, limitZ + tube)
+		local z = sgn * zAbs
+		-- largeur : bouclier mesuré à cette profondeur
+		local wx = 0
+		local x = 0
+		while x < halfX do
+			local y = under(x, z)
+			if y and y < lowY + radius * 0.3 then
+				wx = x
+			end
+			x += step * 2
+		end
+		local half = (wx > 0 and wx or track) * N.EndFraction
+		local y = math.huge
+		for i = -4, 4 do
+			local hy = under(half * i / 4, z)
+			if hy then
+				y = math.min(y, hy)
+			end
+		end
+		if y == math.huge then
+			y = groundY + 0.2 * spm
+		end
+		y = math.max(y - tube * 0.6, groundY + 0.04 * spm)
+		strips[name] = {
+			cf = CFrame.new(0, y, z),
+			size = Vector3.new(half * 2, tube, tube),
+		}
+	end
+
+	-- pose : on garde les pièces existantes (une par côté), soudure refaite après le déplacement
+	local bySide = {}
+	for _, p in ipairs(folder:GetChildren()) do
+		if p:IsA("BasePart") then
+			local side = neonSideOf(model, p)
+			if side and not bySide[side] then
+				bySide[side] = p
+			else
+				p:Destroy()
+			end
+		end
+	end
+	for i, side in ipairs(Custom.NeonSides) do
+		local st = strips[side]
+		local p = bySide[side]
+		if not p then
+			p = Instance.new("Part")
+			p.Name = "Neon" .. i
+			p.Material = Enum.Material.Neon
+			p.CanCollide, p.CanQuery, p.CanTouch, p.Massless = false, false, false, true
+			p.CastShadow = false
+			p.Transparency = 1
+			p:SetAttribute("NeonSide", side)
+			p.Parent = folder
+		end
+		for _, c in ipairs(p:GetChildren()) do
+			if c:IsA("WeldConstraint") or c:IsA("Light") or (c:IsA("Attachment") and c.Name == "NeonGlow") then
+				c:Destroy()
+			end
+		end
+		p.CastShadow = false
+		p.Size = st.size
+		p.CFrame = rcf * st.cf
+		local w = Instance.new("WeldConstraint")
+		w.Part0, w.Part1, w.Parent = root, p, p
+	end
+	Custom.BuildNeonGlow(model, root, strips, groundY, spm)
+	folder:SetAttribute("Layout", Custom.NeonLayoutVersion)
+	folder:SetAttribute("LayoutBody", #body) -- 0 = pas de collision interrogeable : calage d'après les roues seules
+	return true
+end
+
 function Custom.RefreshNeons(model)
 	local folder = model:FindFirstChild("Neons")
 	if not folder then
 		return
 	end
+	pcall(Custom.LayoutNeons, model)
 	local color = model:GetAttribute("NeonColor")
 	color = typeof(color) == "Color3" and color or Color3.fromRGB(0, 140, 255)
 	local hidden = model:GetAttribute("Invisible") == true
 	for _, p in ipairs(folder:GetChildren()) do
 		if p:IsA("BasePart") then
 			local side = neonSideOf(model, p)
-			local on = side ~= nil and neonOn(model, side) and not hidden
+			-- épave (VehicleDamage : véhicule en feu) : plus d'électricité, néons coupés jusqu'à la réparation
+			local on = side ~= nil and neonOn(model, side) and not hidden and model:GetAttribute("Wrecked") ~= true
 			p.Color = color
 			p.Transparency = on and 0 or 1
-			local light = p:FindFirstChildOfClass("SurfaceLight") or p:FindFirstChildOfClass("PointLight")
-			if light then
-				light.Color = color
-				light.Enabled = on
+			for _, light in ipairs(p:GetDescendants()) do
+				if light:IsA("Light") then
+					light.Color = color
+					light.Enabled = on
+				end
 			end
 		end
+	end
+	local plate = model:FindFirstChild("NeonGlow")
+	local gui = plate and plate:FindFirstChild("Glow")
+	if gui then
+		local any = false
+		for _, g in ipairs(gui:GetChildren()) do
+			local side = g:GetAttribute("NeonSide")
+			if side then
+				local on = neonOn(model, side) and not hidden and model:GetAttribute("Wrecked") ~= true
+				g.Visible = on
+				for _, band in ipairs(g:GetChildren()) do
+					if band:IsA("Frame") then
+						band.BackgroundColor3 = color
+					end
+				end
+				any = any or on
+			end
+		end
+		gui.Enabled = any
 	end
 end
 
@@ -896,7 +1264,7 @@ local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_"
 local SAVE_KEYS = {
 	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
 	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade", "HornSound", "DirtLevel", "KeepClean",
-	"BodyHealth", "EngineHealth", "EngineDead", "NoDamage",
+	"BodyHealth", "EngineHealth", "EngineDead", "Wrecked", "NoDamage",
 }
 
 -- Clé gardée dans une sauvegarde / acceptée à la restauration. Vitres : seulement les vraies vitres du modèle (une
@@ -944,7 +1312,7 @@ end
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_", "LightBroken_" }
 local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
-	"HornSound", "DirtLevel", "KeepClean", "BodyHealth", "EngineHealth", "EngineDead", "NoDamage" }
+	"HornSound", "DirtLevel", "KeepClean", "BodyHealth", "EngineHealth", "EngineDead", "Wrecked", "NoDamage" }
 
 function Custom.Apply(model, data)
 	data = data or {}
@@ -1124,8 +1492,9 @@ function Custom.Repair(model)
 		return dm and require(dm)
 	end)
 	if okD and Damage then
-		Damage.Reset(model) -- santé, feux cassés, moteur détruit
+		Damage.Reset(model) -- santé, feux cassés, moteur détruit, épave
 	end
+	Custom.RefreshNeons(model) -- néons coupés sur une épave : rallumés si demandés
 	for k in pairs(model:GetAttributes()) do
 		if string.sub(k, 1, 12) == "DoorRemoved_" or string.sub(k, 1, 13) == "WindowBroken_" then
 			model:SetAttribute(k, nil)
@@ -1227,7 +1596,7 @@ end
 -- Moteur toujours allumé : le serveur le rallume s'il est coupé (FiveMVehiclesServer).
 function Custom.SetEngineAlwaysOn(model, on)
 	model:SetAttribute("EngineAlwaysOn", on == true or nil)
-	if on then
+	if on and model:GetAttribute("EngineDead") ~= true then
 		model:SetAttribute("Engine", true)
 	end
 end
@@ -1610,6 +1979,9 @@ OPS.Engine = function(model, on)
 	end
 	if not on and model:GetAttribute("EngineAlwaysOn") == true then
 		return false, "always_on"
+	end
+	if on and model:GetAttribute("EngineDead") == true then
+		return false, "engine_dead" -- moteur HS ou véhicule en feu (VehicleDamage) : il faut réparer
 	end
 	model:SetAttribute("Engine", on)
 	return true
