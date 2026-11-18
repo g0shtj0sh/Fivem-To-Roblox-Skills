@@ -552,18 +552,19 @@ serveur, attribut `Neons.Layout`) :
   exclues) ; latéral au bord du bas de caisse, long de l'avant de la roue avant à l'arrière de la roue arrière
   (`SideReach`) ; avant / arrière sous les boucliers ;
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
-- **deux `SurfaceLight` par tube** (une source linéaire éclaire tout autour d'elle) : `NeonOut` face `Bottom` du tube
-  incliné (vers le bas et l'extérieur) et `NeonIn` face latérale intérieure (vers le bas et SOUS la voiture) ;
-  `Angle` 150 ; la lumière vient de SOUS la voiture et ne déborde que de ~0,3 m, comme GTA V (v6,
-  2026-11-18) : tubes latéraux rentrés de 0,18 m sous le bas de caisse et limités à l'entre-roues (`SideReach` −1,33),
-  tubes avant / arrière larges de l'entre-roues seulement (`EndFraction` 0,58) pour laisser les roues dans l'ombre ;
-  inclinaisons 20° / 12° ; portées 1,05–1,4 m ; `Brightness` 14 dehors / 10 dessous ; **ombres activées sur les deux
-  lumières** (sinon les jantes s'éclairent ; avec, les roues découpent la lumière comme dans GTA — coût non mesuré). Refusés : nappe large et diffuse
-  (portées 1,2–1,65 m, tubes au bord), puis bande serrée mais posée AU BORD de la caisse (« ça doit être vraiment
-  sous la voiture ») ;
+- **une chaîne de `PointLight` à ombres par tube** (v7, 2026-11-18, retour « la lumière n'est pas diffusée de
+  manière assez homogène » ; références : photos de kits LED réels et captures GTA Online) : une lumière tous les
+  0,4 m (`LightSpacing`), rentrées de 0,3 m vers l'axe sous le bas de caisse (`SideLightInset`), 0,05 m à l'avant /
+  l'arrière (`EndLightInset` : 0,3 éclaire l'intérieur des jantes avant, 0,14 la calandre par dedans) ; portées
+  1,45 m (côtés) / 1,15 m (bouts) ; `Brightness` 7 ; 15 lumières sur BavrenN4. Les disques se recouvrent en une
+  bande continue, la plus forte au ras de la caisse, dégradé doux sur ~0,5–1 m, dessous éclairé, roues sombres.
+  **Ombres obligatoires** : sans elles jantes, passages de roue et habitacle se teintent (essayé). Coût des 15
+  lumières à ombres non mesuré (PC Studio) ; téléphone non vérifié. Juger la voiture **posée sur ses roues** : un
+  prototype qui flottait de 0,2 m donnait une nappe plus large et plus claire. Historique : v3–v6 en `SurfaceLight`
+  (deux par tube, `Angle` 150) donnaient des rectangles aux bords durs et des taches séparées ;
 - à éviter : une seule lumière inclinée vers l'extérieur (nappe seulement au bord, rien dessous : refusé, « trop sur
   les bords ») ; une seule lumière droite vers le bas (trop rasante, nappe cachée sous la caisse) ; `PointLight` sous
-  la caisse (teinte toute la carrosserie et l'habitacle) ; `Angle` 120 (rectangles à bords nets).
+  la caisse **sans ombres** (teinte jantes, carrosserie et habitacle) ; `Angle` 120 (rectangles à bords nets).
 **Vérifier une lumière** caméra posée depuis ~2 s : juste après un déplacement de caméra, le rendu des petites
 lumières n'est pas à jour (une capture `frame` a montré une `SurfaceLight` « éteinte » à tort).
 Les portes / capot / coffre s'ouvrent via ProximityPrompt (touche G) ou
