@@ -35,7 +35,7 @@ ré-installer un modèle déjà installé : ré-importer le `.glb` pour recommen
 ├─ Joints/          Pivot_<os> + Motor6D <os> (roues, portes, capot, coffre, volant, gyrophares)
 ├─ Seats/           DriverSeat, Seat_seat_pside_f…
 ├─ Liveries/        SurfaceAppearance "1", "2"…
-├─ Neons/           4 tubes invisibles calés sous la caisse + SurfaceLight vers le sol (vraies lumières)
+├─ Neons/           4 tubes invisibles calés sous la caisse + 2 SurfaceLight chacun (vers le bas, dehors et dessous)
 └─ VehicleConfig    ModuleScript : toutes les données (roues, charnières, lumières, mods, handling…)
 ```
 
@@ -543,11 +543,12 @@ serveur, attribut `Neons.Layout`) :
   exclues) ; latéral au bord du bas de caisse, long de l'avant de la roue avant à l'arrière de la roue arrière
   (`SideReach`) ; avant / arrière sous les boucliers ;
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
-- `SurfaceLight` face `Bottom`, `Angle` 150, sans ombres, latéraux inclinés de 35° vers l'extérieur (portée 1,5 m),
-  avant / arrière de 12° (1,3 m), `Brightness` 9 ;
-- à éviter : `PointLight` sous la caisse (teinte toute la carrosserie et l'habitacle), `Angle` 120 (rectangles à
-  bords nets), 170 (lumière qui file le long de la voiture), inclinaison forte des tubes avant / arrière (plus hauts :
-  la nappe part loin derrière).
+- **deux `SurfaceLight` par tube** (une source linéaire éclaire tout autour d'elle) : `NeonOut` face `Bottom` du tube
+  incliné (vers le bas et l'extérieur) et `NeonIn` face latérale intérieure (vers le bas et SOUS la voiture) ;
+  `Angle` 150, sans ombres, `Brightness` 8 ; tubes latéraux inclinés de 45°, avant / arrière de 30° ;
+- à éviter : une seule lumière inclinée vers l'extérieur (nappe seulement au bord, rien dessous : refusé, « trop sur
+  les bords ») ; une seule lumière droite vers le bas (trop rasante, nappe cachée sous la caisse) ; `PointLight` sous
+  la caisse (teinte toute la carrosserie et l'habitacle) ; `Angle` 120 (rectangles à bords nets).
 **Vérifier une lumière** caméra posée depuis ~2 s : juste après un déplacement de caméra, le rendu des petites
 lumières n'est pas à jour (une capture `frame` a montré une `SurfaceLight` « éteinte » à tort).
 Les portes / capot / coffre s'ouvrent via ProximityPrompt (touche G) ou

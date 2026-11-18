@@ -250,19 +250,28 @@ local function step(a, dt)
 	local vWorld = root.AssemblyLinearVelocity
 	-- choc : variation brutale de la vitesse horizontale en un pas (un freinage fort ≈ 0,2 m/s par pas) ; envoyée au
 	-- serveur (VehicleDamage.Apply), direction = du centre vers le point touché, dans le repère du véhicule
-	if Damage and a.prevVel then
+	local wWorld = root.AssemblyAngularVelocity
+	-- prise en main (le véhicule était garé / ancré, ou tenu par le serveur) : les vitesses lues ne se suivent pas, la
+	-- première mesure donnait un faux choc à pleine force (mesuré 2026-11-18 : moteur −605 en s'asseyant) → 0,5 s sans
+	-- mesure de choc
+	if root.Anchored or not a.prevVel then
+		a.impactArmedAt = os.clock() + 0.5
+	end
+	if Damage and a.prevVel and not root.Anchored and os.clock() >= (a.impactArmedAt or 0) then
+		-- choc 3D (VehicleDamage.Measure) : horizontal, vertical (toit, dessous) et rotation stoppée net (tonneaux)
 		local dv = cf:VectorToObjectSpace(vWorld - a.prevVel) / spm
-		local hz = Vector3.new(dv.X, 0, dv.Z)
-		if hz.Magnitude > Damage.MinImpact and os.clock() - (a.lastImpact or 0) > 0.15 then
+		local dw = a.prevAng and cf:VectorToObjectSpace(wWorld - a.prevAng) or Vector3.zero
+		local dir, strength = (Damage.Measure or function() end)(dv, dw, cf.UpVector.Y)
+		if dir and os.clock() - (a.lastImpact or 0) > 0.15 then
 			a.lastImpact = os.clock()
-			local dir = -hz.Unit
 			-- envoyé hors de la boucle physique (BindToSimulation : un FireServer fait ici n'arrivait jamais au
 			-- serveur, mesuré 2026-11-16) : gardé, envoyé au prochain Heartbeat (le plus fort s'il y en a plusieurs)
-			if not a.pendingImpact or a.pendingImpact[3] < hz.Magnitude then
-				a.pendingImpact = { dir.X, dir.Z, hz.Magnitude }
+			if not a.pendingImpact or a.pendingImpact[3] < strength then
+				a.pendingImpact = { dir.X, dir.Z, strength, dir.Y }
 			end
 		end
 	end
+	a.prevAng = wWorld
 	a.prevVel = vWorld
 	local ctx = {
 		vBody = cf:VectorToObjectSpace(vWorld) / spm,
@@ -401,7 +410,7 @@ function Drive.Start(car)
 			a.pendingImpact = nil
 			local remote = folder:FindFirstChild("VehicleEvent")
 			if remote then
-				remote:FireServer(car, "Impact", imp[1], imp[2], imp[3])
+				remote:FireServer(car, "Impact", imp[1], imp[2], imp[3], imp[4])
 			end
 		end
 	end))

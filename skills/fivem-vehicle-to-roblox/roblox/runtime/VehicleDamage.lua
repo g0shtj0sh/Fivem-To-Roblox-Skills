@@ -37,6 +37,17 @@ Damage.WindowMin = 13
 Damage.DetachAt = 22 -- m/s (≈ 80 km/h dans un mur) : un ouvrant du côté du choc est arraché ; il TOMBE
 -- (copie physique) et disparaît après VehicleCustomization.DebrisLifetime s, comme les éclats de vitre
 Damage.DetachRadius = 1.0 -- m
+-- TONNEAUX (2026-11-18, utilisateur : « on fait plein de tonneaux et on ressort avec rien ») : avant, seule la
+-- variation de vitesse HORIZONTALE dans le repère de la voiture comptait ; un choc sur le toit (axe Y de la voiture) ou
+-- une rotation stoppée net ne faisaient rien. Damage.Measure compte maintenant aussi :
+Damage.VerticalWeight = 0.85 -- la part verticale (repère voiture) du choc : toit, dessous, réception d'un saut
+Damage.SpinArm = 0.9 -- m : un arrêt brutal de rotation = choc de Δω × bras de levier au coin de la caisse
+Damage.SpinUpright = 0.6 -- vecteur haut (Y) sous lequel la voiture est « hors d'aplomb » et la rotation compte
+Damage.RollMin = 16 -- m/s : choc de toit appliqué à CHAQUE passage sur le toit (un tonneau), au moins cette force,
+-- sinon la vitesse de la voiture à cet instant. Mesuré (Play Studio, m422 projetée en tonneaux) : les chocs pris image
+-- par image restaient faibles (5 à 13 m/s : l'impact s'étale sur plusieurs images) → 4 tonneaux ≈ −30 moteur seulement.
+Damage.RollEngineMin = 0.6 -- proximité minimale du moteur pour un choc de toit / dessous (une voiture qui fait
+-- plusieurs tonneaux finit par fumer, même si le toit est loin du moteur)
 
 -- PANNES (2026-11-18, demande de l'utilisateur). Tirées par le serveur (Damage.Tick, toutes les TickEvery s, moteur
 -- allumé) et à chaque choc. Probabilités PAR SECONDE moteur allumé (au ralenti ×0,5) :
@@ -80,6 +91,12 @@ function Damage.ImpactPoint(cfg, dir)
 	local half = (mx - mn) / 2
 	local tx = math.abs(dir.X) > 1e-3 and half.X / math.abs(dir.X) or math.huge
 	local tz = math.abs(dir.Z) > 1e-3 and half.Z / math.abs(dir.Z) or math.huge
+	local horizontal = Vector3.new(dir.X, 0, dir.Z).Magnitude
+	if horizontal < 0.7 and math.abs(dir.Y) > 1e-3 then
+		-- choc par le toit ou le dessous (tonneau, réception) : point sur la face du haut / du bas
+		local t = math.min(tx, tz, half.Y / math.abs(dir.Y))
+		return c + dir * t
+	end
 	local t = math.min(tx, tz)
 	return Vector3.new(c.X + dir.X * t, c.Y + 0.15 * half.Y, c.Z + dir.Z * t)
 end
@@ -98,6 +115,23 @@ local function partCenters(model, cfg, prefix)
 	return n > 0 and sum / n or nil
 end
 
+-- Choc d'un pas physique (client du conducteur ou serveur) : dv = variation de vitesse (m/s), dw = variation de
+-- vitesse angulaire (rad/s), toutes deux dans le repère du véhicule. Rend direction (du centre vers le point touché,
+-- repère du véhicule) et force (m/s), ou nil sous le seuil.
+function Damage.Measure(dv, dw, upY)
+	local lin = Vector3.new(dv.X, dv.Y * Damage.VerticalWeight, dv.Z)
+	-- rotation stoppée net : seulement hors d'aplomb (tonneau, voiture sur le flanc) ; à plat sur ses roues, la
+	-- rotation ne compte pas (évite les faux chocs de lacet : dérapage, prise en main)
+	local tumbling = upY == nil or upY < Damage.SpinUpright
+	local spin = tumbling and (dw and dw.Magnitude or 0) * Damage.SpinArm or 0
+	local strength = math.max(lin.Magnitude, spin)
+	if strength <= Damage.MinImpact then
+		return nil
+	end
+	local dir = lin.Magnitude > 1 and -lin.Unit or Vector3.yAxis -- rotation stoppée sans choc net : le toit / un coin
+	return dir, strength
+end
+
 -- SERVEUR. dir : direction (repère du véhicule) du centre vers le point touché ; strength : m/s.
 function Damage.Apply(model, dir, strength)
 	if model:GetAttribute("NoDamage") == true or not model.PrimaryPart then
@@ -108,11 +142,12 @@ function Damage.Apply(model, dir, strength)
 	if over <= 0 then
 		return
 	end
-	dir = Vector3.new(dir.X, 0, dir.Z)
+	dir = Vector3.new(dir.X, dir.Y or 0, dir.Z)
 	if dir.Magnitude < 1e-3 then
 		return
 	end
 	dir = dir.Unit
+	local vertical = Vector3.new(dir.X, 0, dir.Z).Magnitude < 0.7 -- toit / dessous
 	local cfg = cfgOf(model)
 	local h = cfg.Handling or {}
 	local P = Damage.ImpactPoint(cfg, dir)
@@ -124,6 +159,9 @@ function Damage.Apply(model, dir, strength)
 
 	local enginePos = cfg.EnginePosition and v3(cfg.EnginePosition) or Vector3.new(0, 0, -1.4)
 	local near = math.clamp(1.4 - (P - enginePos).Magnitude / 1.6, 0.12, 1)
+	if vertical then
+		near = math.max(near, Damage.RollEngineMin)
+	end
 	local engine = model:GetAttribute("EngineHealth") or 1000
 	engine -= energy * Damage.EngineK * (h.EngineDamageMult or 1) * near
 	engine = math.max(-100, math.floor(engine))
@@ -153,7 +191,7 @@ function Damage.Apply(model, dir, strength)
 		end
 	end
 	-- ouvrant arraché sur un très gros choc de son côté
-	if strength >= Damage.DetachAt then
+	if strength >= Damage.DetachAt and not vertical then
 		local custom = script.Parent:FindFirstChild("VehicleCustomization")
 		local ok, Custom = pcall(function()
 			return custom and require(custom)

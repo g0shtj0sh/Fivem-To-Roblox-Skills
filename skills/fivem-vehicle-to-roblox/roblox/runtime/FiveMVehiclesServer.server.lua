@@ -222,17 +222,21 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		model:SetAttribute("Door_" .. key, cur > 0.5 and 0 or 1)
 	elseif action == "Impact" then
 		-- choc mesuré par le client du conducteur (VehicleDrive) : direction (x, z du repère du véhicule) et force
-		local dx, dz, strength = key, value, ...
+		local dx, dz, strength, dy = key, value, ...
+		dy = dy or 0 -- composante verticale (toit / dessous) : clients d'avant 2026-11-18 sans elle
 		if not Damage or not isDriver(player, model) or not allowed(player, "impact") then
 			return
 		end
 		if type(dx) ~= "number" or type(dz) ~= "number" or type(strength) ~= "number" then
 			return
 		end
+		if type(dy) ~= "number" or dy ~= dy or math.abs(dy) > 1.01 then
+			return
+		end
 		if dx ~= dx or dz ~= dz or strength ~= strength or math.abs(dx) > 1.01 or math.abs(dz) > 1.01 then
 			return
 		end
-		Damage.Apply(model, Vector3.new(dx, 0, dz), strength)
+		Damage.Apply(model, Vector3.new(dx, dy, dz), strength)
 	elseif action == "Fit" then
 		-- corps de l'occupant adapté à l'habitacle (VehicleSeatFit) ; validé et borné côté serveur
 		if allowed(player, "fit") then
@@ -376,26 +380,54 @@ if Damage then
 	local RunService = game:GetService("RunService")
 	local lastVel = setmetatable({}, { __mode = "k" })
 	local lastHit = setmetatable({}, { __mode = "k" })
+	local lastAng = setmetatable({}, { __mode = "k" })
+	local armedAt = setmetatable({}, { __mode = "k" })
+	local lastUp = setmetatable({}, { __mode = "k" })
+	local lastRoll = setmetatable({}, { __mode = "k" })
 	RunService.Heartbeat:Connect(function()
 		for _, model in ipairs(CollectionService:GetTagged(TAG)) do
 			local root = model.PrimaryPart
 			local seat = model:FindFirstChild("DriverSeat", true)
+			-- tonneau : chaque passage sur le toit (vecteur haut qui passe sous l'horizontale) = un choc de toit, quel que
+			-- soit celui qui tient la physique (le serveur voit la position répliquée)
+			if root and not root.Anchored then
+				local upY = root.CFrame.UpVector.Y
+				local prevUp = lastUp[model]
+				lastUp[model] = upY
+				if prevUp and prevUp >= -0.2 and upY < -0.2 and os.clock() - (lastRoll[model] or 0) > 0.4 then
+					lastRoll[model] = os.clock()
+					local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
+					local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
+					local speed = root.AssemblyLinearVelocity.Magnitude / spm
+					Damage.Apply(model, Vector3.yAxis, math.max(Damage.RollMin or 14, speed))
+				end
+			else
+				lastUp[model] = nil
+			end
 			if root and not root.Anchored and not (seat and seat.Occupant) then
 				local v = root.AssemblyLinearVelocity
 				local prev = lastVel[model]
 				lastVel[model] = v
-				if prev then
+				local w = root.AssemblyAngularVelocity
+				local prevW = lastAng[model]
+				lastAng[model] = w
+				if not prev then
+					armedAt[model] = os.clock() + 0.5 -- reprise de la physique par le serveur : vitesses discontinues
+				end
+				if prev and os.clock() >= (armedAt[model] or 0) then
 					local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
 					local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
 					local dv = root.CFrame:VectorToObjectSpace(v - prev) / spm
-					local hz = Vector3.new(dv.X, 0, dv.Z)
-					if hz.Magnitude > Damage.MinImpact and os.clock() - (lastHit[model] or 0) > 0.15 then
+					local dw = prevW and root.CFrame:VectorToObjectSpace(w - prevW) or Vector3.zero
+					local dir, strength = Damage.Measure(dv, dw, root.CFrame.UpVector.Y)
+					if dir and os.clock() - (lastHit[model] or 0) > 0.15 then
 						lastHit[model] = os.clock()
-						Damage.Apply(model, -hz.Unit, hz.Magnitude)
+						Damage.Apply(model, dir, strength)
 					end
 				end
 			else
 				lastVel[model] = nil
+				lastAng[model] = nil
 			end
 		end
 	end)

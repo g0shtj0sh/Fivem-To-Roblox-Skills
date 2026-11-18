@@ -562,29 +562,33 @@ end
 -- tournées vers le sol. JAMAIS d'image, de SurfaceGui ou d'« UI » pour dessiner la nappe (essayé le 2026-11-18 :
 -- rejeté, « ce n'est pas une UI »). Méthode :
 --   · position de chaque tube MESURÉE sur le véhicule (rayons tirés du dessous contre ses pièces de collision) ;
---   · tube latéral long (de l'avant de la roue avant à l'arrière de la roue arrière), incliné vers l'extérieur
---     (SideTilt) ; tubes avant / arrière peu inclinés (EndTilt) : sinon leur lumière porte trop loin ;
---   · SurfaceLight sur la face du dessous, Angle 150 (120 : rectangles à bords nets ; 170 : lumière qui file le long
---     de la voiture), sans ombres. Résultat mesuré (Play Studio, m422, nuit, caméra posée 2 s) : nappe continue
---     autour de la voiture, pneus et sol éclairés, carrosserie et habitacle NON teintés.
---   · Une PointLight sous la caisse teinte toute la carrosserie et l'habitacle dans cette place : à éviter.
+--   · DEUX SurfaceLight par tube, comme une source linéaire qui éclaire tout autour d'elle : une vers le bas et
+--     l'extérieur (face Bottom du tube incliné), une vers le bas et l'intérieur, SOUS la voiture (face latérale
+--     intérieure) — demande du 2026-11-18 : « les néons devraient pointer vers le sol et faire une zone plus large
+--     […] là c'est trop sur les bords ». Angle 150, sans ombres.
+--   · Essais (Play Studio, m422, nuit, caméra posée 2,5 s) : une seule lumière inclinée vers l'extérieur → nappe
+--     seulement au bord, rien sous la voiture ; une seule lumière droite vers le bas (angle 170–175) → trop rasante,
+--     nappe collée à la caisse ou cachée dessous ; Angle 120 → rectangles à bords nets ; PointLight sous la caisse →
+--     carrosserie et habitacle teintés.
 --   · Juger une lumière caméra POSÉE depuis ~2 s : juste après un déplacement de caméra, le rendu des petites lumières
---     n'est pas encore à jour (captures « frame » trompeuses : SurfaceLight vue « éteinte » à tort).
-Custom.NeonLayoutVersion = 10
+--     n'est pas encore à jour (captures « frame » trompeuses).
+Custom.NeonLayoutVersion = 11
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (invisible)
 	SideInset = 0.1, -- m : rentré sous le bas de caisse depuis son bord
 	EndInset = 0.12, -- m : rentré sous le bouclier depuis son bord
 	ArchGap = 1.08, -- × rayon de roue : zone de mesure du bas de caisse, entre les arches
 	SideFraction = 0.82, -- part de cette zone sondée
-	SideReach = 1.2, -- × rayon de roue au-delà des axes : longueur du tube latéral (la lumière éclaire aussi les roues)
+	SideReach = 0.45, -- × rayon de roue au-delà des axes : longueur du tube latéral
 	EndFraction = 0.86, -- largeur du tube avant / arrière sous le bouclier
-	SideTilt = 35, -- ° : lumière latérale tournée vers l'extérieur
-	EndTilt = 12, -- ° : avant / arrière (tubes plus hauts : au-delà, la nappe file loin derrière)
+	SideTilt = 45, -- ° : inclinaison du tube latéral (une lumière vers le bas-extérieur, une vers le bas-intérieur)
+	EndTilt = 30, -- ° : avant / arrière
 	Angle = 150,
-	SideRange = 1.5, -- m
-	EndRange = 1.3, -- m
-	Brightness = 9,
+	SideOutRange = 1.4, -- m : lumière latérale vers l'extérieur
+	SideInRange = 1.65, -- m : … vers le dessous de la voiture
+	EndOutRange = 1.15, -- m
+	EndInRange = 1.4, -- m
+	Brightness = 8,
 }
 
 local function neonBodyParts(model)
@@ -701,7 +705,9 @@ function Custom.LayoutNeons(model)
 		strips[sgn < 0 and "Left" or "Right"] = {
 			cf = CFrame.new(x, y, (frontZ + rearZ) / 2) * CFrame.Angles(0, 0, math.rad(sgn * N.SideTilt)),
 			size = Vector3.new(tube, tube, (rearZ - frontZ) + 2 * radius * N.SideReach),
-			range = N.SideRange,
+			outRange = N.SideOutRange,
+			inRange = N.SideInRange,
+			inFace = sgn > 0 and Enum.NormalId.Left or Enum.NormalId.Right,
 		}
 	end
 	-- tubes avant / arrière : sous le bouclier, devant / derrière les roues
@@ -751,7 +757,9 @@ function Custom.LayoutNeons(model)
 		strips[name] = {
 			cf = CFrame.new(0, y, z) * CFrame.Angles(math.rad(-sgn * N.EndTilt), 0, 0),
 			size = Vector3.new(half * 2, tube, tube),
-			range = N.EndRange,
+			outRange = N.EndOutRange,
+			inRange = N.EndInRange,
+			inFace = sgn < 0 and Enum.NormalId.Back or Enum.NormalId.Front,
 		}
 	end
 
@@ -789,14 +797,17 @@ function Custom.LayoutNeons(model)
 		p.Transparency = 1
 		p.Size = st.size
 		p.CFrame = rcf * st.cf
-		local light = Instance.new("SurfaceLight")
-		light.Face = Enum.NormalId.Bottom
-		light.Angle = N.Angle
-		light.Range = st.range * spm
-		light.Brightness = N.Brightness
-		light.Shadows = false
-		light.Enabled = false
-		light.Parent = p
+		for _, l in ipairs({ { "NeonOut", Enum.NormalId.Bottom, st.outRange }, { "NeonIn", st.inFace, st.inRange } }) do
+			local light = Instance.new("SurfaceLight")
+			light.Name = l[1]
+			light.Face = l[2]
+			light.Angle = N.Angle
+			light.Range = l[3] * spm
+			light.Brightness = N.Brightness
+			light.Shadows = false
+			light.Enabled = false
+			light.Parent = p
+		end
 		local w = Instance.new("WeldConstraint")
 		w.Part0, w.Part1, w.Parent = root, p, p
 	end
