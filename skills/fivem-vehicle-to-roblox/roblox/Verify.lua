@@ -1105,7 +1105,8 @@ function groups.custom()
 	for _, p in ipairs((model:FindFirstChild("Neons") or Instance.new("Folder")):GetChildren()) do
 		if p:IsA("BasePart") then
 			neonParts += 1
-			if p.Transparency == 0 and p.Color == pink then
+			-- tube allumé (NeonLit) ; depuis 2026-11-18 le tube est invisible quand la nappe dessinée existe
+			if (p:GetAttribute("NeonLit") == true or p.Transparency == 0) and p.Color == pink then
 				lit += 1
 			end
 		end
@@ -1237,7 +1238,7 @@ function groups.custom()
 	for _, p in ipairs((model:FindFirstChild("Neons") or Instance.new("Folder")):GetChildren()) do
 		if p:IsA("BasePart") then
 			neonTotal += 1
-			if p.Transparency < 1 then
+			if p:GetAttribute("NeonLit") == true or p.Transparency < 1 then
 				litAfter += 1
 			end
 		end

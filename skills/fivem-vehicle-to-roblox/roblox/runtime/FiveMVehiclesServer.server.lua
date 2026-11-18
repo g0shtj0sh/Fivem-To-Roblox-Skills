@@ -29,6 +29,7 @@ local TOGGLES = {
 	Horn = "boolean",
 	ExtraLights = "boolean",
 	InteriorLight = "boolean",
+	ParkingBrake = "boolean", -- frein à main serré (touche P) : reste serré à la sortie, comme le moteur
 }
 local VALID = {
 	Indicator = { Off = true, Left = true, Right = true, Hazard = true },
@@ -191,6 +192,11 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		end
 		if key == "Engine" and value == true and model:GetAttribute("EngineDead") == true then
 			return -- moteur détruit (VehicleDamage) : il faut réparer
+		end
+		if key == "Engine" then
+			-- moteur coupé par le conducteur : il le reste à la sortie et quand on remonte (GTA) ; sinon, en sortant, le
+			-- moteur continue de tourner (2026-11-18, demande de l'utilisateur)
+			model:SetAttribute("EngineOffByDriver", value == false or nil)
 		end
 		model:SetAttribute(key, value)
 	elseif action == "Door" then
@@ -497,7 +503,9 @@ local function setupVehicle(model)
 					model:SetAttribute("DriverUserId", plr and plr.UserId or 0)
 					Access.OnDriverChanged(model, plr)
 					-- le moteur démarre quand le conducteur s'assoit (comme GTA)
-					if model:GetAttribute("AutoStartEngine") ~= false and model:GetAttribute("EngineDead") ~= true then
+					-- … sauf s'il a été coupé exprès (touche moteur) : il reste coupé jusqu'à ce qu'on le relance
+					if model:GetAttribute("AutoStartEngine") ~= false and model:GetAttribute("EngineDead") ~= true
+						and model:GetAttribute("EngineOffByDriver") ~= true then
 						model:SetAttribute("Engine", true)
 					end
 				end

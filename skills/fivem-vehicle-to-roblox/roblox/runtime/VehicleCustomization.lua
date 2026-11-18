@@ -569,7 +569,7 @@ end
 -- l'éclairage unifié) : SpotLight / SurfaceLight vers le sol n'éclairent rien, même à luminosité 40 ; une PointLight
 -- sous la caisse éclaire le sol mais teinte TOUTE la caisse et l'habitacle (la lumière y traverse les pièces), et le
 -- rendu des petites lumières se recalcule pendant ~2 s après un déplacement de caméra (captures trompeuses).
-Custom.NeonLayoutVersion = 7
+Custom.NeonLayoutVersion = 9
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (sous la caisse)
 	SideInset = 0.1, -- m : rentré sous le bas de caisse depuis son bord
@@ -577,16 +577,18 @@ Custom.Neon = {
 	ArchGap = 1.08, -- × rayon de roue : écart entre le tube latéral et l'axe de la roue
 	SideFraction = 0.82, -- longueur du tube latéral entre les arches
 	EndFraction = 0.86, -- largeur du tube avant / arrière sous le bouclier
-	-- nappe au sol (m)
+	-- nappe au sol (m) : texture de halo lisse (dégradé continu, 9-slice) — une couche « liseré » serrée autour des
+	-- tubes + une couche « ovale » large et diffuse ; un côté seul allumé = halo en gélule le long de son tube
+	GlowImage = "rbxassetid://123849681000287", -- halo blanc, alpha cos² du centre au bord (scripts/neon-glow du jeu)
 	GlowLift = 0.03, -- au-dessus du sol (roues au repos)
-	GlowInner = 0.45, -- sous la voiture, depuis le tube
-	GlowOuter = 0.95, -- hors de la voiture, depuis le tube
-	GlowOverhangSide = 1.1, -- au-delà des bouts du tube latéral (rejoint les nappes avant / arrière, sous les roues)
-	GlowOverhangEnd = 0.5, -- au-delà des bouts du tube avant / arrière
-	GlowPeak = 0.18, -- transparence au droit du tube (0 = opaque)
-	GlowBrightness = 2.2, -- SurfaceGui.Brightness
-	GlowLayers = { 1, 0.78, 0.56 }, -- longueur de chaque couche (fondu aux bouts par empilement)
-	GlowLayerTransparency = 0.5,
+	EdgeFalloff = 0.75, -- m : étendue du liseré au-delà des tubes
+	EdgeTransparency = 0.3,
+	StripFalloff = 1.15, -- m : un côté allumé seul (gélule le long de son tube)
+	OvalFalloff = 2.1, -- m : étendue de l'ovale
+	OvalCoreX = 0.34, -- noyau de l'ovale : part de l'écart entre tubes latéraux…
+	OvalCoreZ = 0.72, -- … et entre tubes avant / arrière
+	OvalTransparency = 0.2,
+	GlowBrightness = 1.4, -- SurfaceGui.Brightness
 	PixelsPerStud = 12,
 }
 
@@ -602,32 +604,37 @@ local function neonBodyParts(model)
 	return out
 end
 
--- Nappe au sol des néons : une plaque invisible au ras du sol, une bande en dégradé par côté (voir l'en-tête).
+-- Nappe au sol des néons : une plaque invisible au ras du sol porte une SurfaceGui auto-éclairée ; des ImageLabel
+-- en 9-slice d'une texture de halo lisse (SliceCenter au centre) dessinent un halo autour d'un rectangle noyau.
 -- strips[side] = { cf, size } en studs dans le repère du VehicleRoot.
+local GLOW_SLICE = Rect.new(127, 127, 129, 129)
+local GLOW_RADIUS_PX = 127
 function Custom.BuildNeonGlow(model, root, strips, groundY, spm)
 	local N = Custom.Neon
 	local old = model:FindFirstChild("NeonGlow")
 	if old then
 		old:Destroy()
 	end
-	local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
-	local bands = {}
+	-- noyaux (x0, x1, z0, z1, étendue) : liseré et ovale autour des 4 tubes, une gélule par tube
+	local L, R, F, B = strips.Left, strips.Right, strips.Front, strips.Back
+	local sx = math.min(math.abs(L.cf.X), math.abs(R.cf.X))
+	local fz, bz = F.cf.Z, B.cf.Z
+	local edgeF, ovalF = N.EdgeFalloff * spm, N.OvalFalloff * spm
+	local midZ = (fz + bz) / 2
+	local halos = {
+		{ name = "Edge", all = true, x0 = -sx, x1 = sx, z0 = fz, z1 = bz, f = edgeF, t = N.EdgeTransparency, z = 2 },
+		{ name = "Oval", all = true, x0 = -sx * N.OvalCoreX, x1 = sx * N.OvalCoreX,
+			z0 = midZ + (fz - midZ) * N.OvalCoreZ, z1 = midZ + (bz - midZ) * N.OvalCoreZ, f = ovalF, t = N.OvalTransparency, z = 1 },
+	}
 	for side, st in pairs(strips) do
 		local c, sz = st.cf.Position, st.size
-		local lateral = side == "Left" or side == "Right"
-		local outward = lateral and Vector3.new(math.sign(c.X), 0, 0) or Vector3.new(0, 0, math.sign(c.Z))
-		local along = lateral and sz.Z or sz.X
-		local len = along + 2 * (lateral and N.GlowOverhangSide or N.GlowOverhangEnd) * spm
-		local inner, outer = N.GlowInner * spm, N.GlowOuter * spm
-		-- bande : centre, demi-tailles en X / Z (studs, repère du VehicleRoot)
-		local across = inner + outer
-		local centre = Vector3.new(c.X, 0, c.Z) + outward * ((outer - inner) / 2)
-		local hx = lateral and across / 2 or len / 2
-		local hz = lateral and len / 2 or across / 2
-		bands[side] = { centre = centre, hx = hx, hz = hz, lateral = lateral, outward = outward,
-			peak = inner / across }
-		minX, maxX = math.min(minX, centre.X - hx), math.max(maxX, centre.X + hx)
-		minZ, maxZ = math.min(minZ, centre.Z - hz), math.max(maxZ, centre.Z + hz)
+		table.insert(halos, { name = side, side = side, x0 = c.X - sz.X / 2, x1 = c.X + sz.X / 2,
+			z0 = c.Z - sz.Z / 2, z1 = c.Z + sz.Z / 2, f = N.StripFalloff * spm, t = N.EdgeTransparency, z = 3 })
+	end
+	local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+	for _, h in ipairs(halos) do
+		minX, maxX = math.min(minX, h.x0 - h.f), math.max(maxX, h.x1 + h.f)
+		minZ, maxZ = math.min(minZ, h.z0 - h.f), math.max(maxZ, h.z1 + h.f)
 	end
 	local plate = Instance.new("Part")
 	plate.Name = "NeonGlow"
@@ -635,8 +642,7 @@ function Custom.BuildNeonGlow(model, root, strips, groundY, spm)
 	plate.CanCollide, plate.CanQuery, plate.CanTouch, plate.Massless = false, false, false, true
 	plate.CastShadow = false
 	plate.Size = Vector3.new(maxX - minX, 0.05, maxZ - minZ)
-	local mid = Vector3.new((minX + maxX) / 2, groundY + N.GlowLift * spm, (minZ + maxZ) / 2)
-	plate.CFrame = root.CFrame * CFrame.new(mid)
+	plate.CFrame = root.CFrame * CFrame.new((minX + maxX) / 2, groundY + N.GlowLift * spm, (minZ + maxZ) / 2)
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "Glow"
 	gui.Face = Enum.NormalId.Top
@@ -644,67 +650,39 @@ function Custom.BuildNeonGlow(model, root, strips, groundY, spm)
 	gui.PixelsPerStud = N.PixelsPerStud
 	gui.LightInfluence = 0
 	gui.Brightness = N.GlowBrightness
-	gui.AlwaysOnTop = false
-	gui.ZOffset = 0
 	gui.Enabled = false
 	gui.Adornee = plate
 	gui.Parent = plate
 	-- SurfaceGui sur la face du DESSUS (mesuré en Play, 2026-11-18) : l'axe X de l'interface suit −Z de la pièce
-	-- (de l'arrière vers l'avant), l'axe Y suit +X ; une UIGradient à Rotation 0 suit donc −Z, à 90 suit +X.
+	-- (de l'arrière vers l'avant), l'axe Y suit +X.
 	local W, D = plate.Size.X, plate.Size.Z
-	for side, bd in pairs(bands) do
-		-- conteneur du côté (allumé / éteint par RefreshNeons)
-		local group = Instance.new("Frame")
-		group.Name = side
-		group.BackgroundTransparency = 1
-		group.AnchorPoint = Vector2.new(0.5, 0.5)
-		group.Position = UDim2.fromScale((maxZ - bd.centre.Z) / D, (bd.centre.X - minX) / W)
-		group.Size = UDim2.fromScale(2 * bd.hz / D, 2 * bd.hx / W)
-		group.Visible = false
-		group:SetAttribute("NeonSide", side)
-		group.Parent = gui
-		-- dégradé en travers : sous la voiture → tube (le plus vif) → dehors
-		local outwardPositive = (bd.lateral and bd.outward.X > 0) or (not bd.lateral and bd.outward.Z < 0)
-		local pk = outwardPositive and bd.peak or 1 - bd.peak
-		local function k(t, v)
-			return NumberSequenceKeypoint.new(math.clamp(t, 0, 1), v)
-		end
-		local keys
-		if outwardPositive then
-			keys = { k(0, 1), k(pk * 0.5, 0.72), k(pk, N.GlowPeak), k(pk + (1 - pk) * 0.45, 0.62), k(1, 1) }
+	for _, h in ipairs(halos) do
+		local img = Instance.new("ImageLabel")
+		img.Name = h.name
+		img.BackgroundTransparency = 1
+		img.Image = N.GlowImage
+		img.ImageTransparency = h.t
+		img:SetAttribute("BaseTransparency", h.t) -- le client l'atténue de jour (FiveMVehiclesClient)
+		img.ScaleType = Enum.ScaleType.Slice
+		img.SliceCenter = GLOW_SLICE
+		img.SliceScale = h.f * N.PixelsPerStud / GLOW_RADIUS_PX
+		local a, b, c, d = h.x0 - h.f, h.x1 + h.f, h.z0 - h.f, h.z1 + h.f
+		img.Position = UDim2.fromScale((maxZ - d) / D, (a - minX) / W)
+		img.Size = UDim2.fromScale((d - c) / D, (b - a) / W)
+		img.ZIndex = h.z
+		img.Visible = false
+		if h.side then
+			img:SetAttribute("NeonSide", h.side)
 		else
-			keys = { k(0, 1), k(pk * 0.55, 0.62), k(pk, N.GlowPeak), k(pk + (1 - pk) * 0.5, 0.72), k(1, 1) }
+			img:SetAttribute("NeonAll", true)
 		end
-		local seq = NumberSequence.new(keys)
-		-- fondu aux bouts : couches en gélule de plus en plus courtes, empilées (une UIGradient posée sur un
-		-- CanvasGroup n'a AUCUN effet dans une SurfaceGui, mesuré le 2026-11-18 : une seule UIGradient par couche)
-		for i, frac in ipairs(N.GlowLayers) do
-			local band = Instance.new("Frame")
-			band.Name = "Band"
-			band.BorderSizePixel = 0
-			band.BackgroundTransparency = N.GlowLayerTransparency
-			band.BackgroundColor3 = Color3.new(1, 1, 1)
-			band.AnchorPoint = Vector2.new(0.5, 0.5)
-			band.Position = UDim2.fromScale(0.5, 0.5)
-			-- le long = axe X de l'interface pour une bande latérale (−Z), axe Y pour l'avant / l'arrière (+X)
-			band.Size = bd.lateral and UDim2.fromScale(frac, 1) or UDim2.fromScale(1, frac)
-			band.ZIndex = i
-			band.Parent = group
-			local corner = Instance.new("UICorner")
-			corner.CornerRadius = UDim.new(0.5, 0)
-			corner.Parent = band
-			local across = Instance.new("UIGradient")
-			across.Rotation = bd.lateral and 90 or 0
-			across.Transparency = seq
-			across.Parent = band
-		end
+		img.Parent = gui
 	end
 	local w = Instance.new("WeldConstraint")
 	w.Part0, w.Part1, w.Parent = root, plate, plate
 	plate.Parent = model
 	return plate
 end
-
 
 -- Calcule et pose les 4 tubes d'après la géométrie du véhicule (serveur, une fois par version de calage).
 -- Rend true si le calage est fait (ou déjà fait).
@@ -917,7 +895,9 @@ function Custom.RefreshNeons(model)
 			-- épave (VehicleDamage : véhicule en feu) : plus d'électricité, néons coupés jusqu'à la réparation
 			local on = side ~= nil and neonOn(model, side) and not hidden and model:GetAttribute("Wrecked") ~= true
 			p.Color = color
-			p.Transparency = on and 0 or 1
+			-- tube invisible quand la nappe dessinée existe (GTA V : on ne voit pas les barres, demande du 2026-11-18)
+			p.Transparency = (on and not model:FindFirstChild("NeonGlow")) and 0 or 1
+			p:SetAttribute("NeonLit", on)
 			for _, light in ipairs(p:GetDescendants()) do
 				if light:IsA("Light") then
 					light.Color = color
@@ -929,18 +909,22 @@ function Custom.RefreshNeons(model)
 	local plate = model:FindFirstChild("NeonGlow")
 	local gui = plate and plate:FindFirstChild("Glow")
 	if gui then
-		local any = false
-		for _, g in ipairs(gui:GetChildren()) do
-			local side = g:GetAttribute("NeonSide")
-			if side then
-				local on = neonOn(model, side) and not hidden and model:GetAttribute("Wrecked") ~= true
-				g.Visible = on
-				for _, band in ipairs(g:GetChildren()) do
-					if band:IsA("Frame") then
-						band.BackgroundColor3 = color
-					end
+		local present = Custom.NeonSidesPresent(model)
+		local all, any = true, false
+		local sideOn = {}
+		for side in pairs(present) do
+			sideOn[side] = neonOn(model, side) and not hidden and model:GetAttribute("Wrecked") ~= true
+			all = all and sideOn[side]
+			any = any or sideOn[side]
+		end
+		for _, img in ipairs(gui:GetChildren()) do
+			if img:IsA("ImageLabel") then
+				img.ImageColor3 = color
+				if img:GetAttribute("NeonAll") then
+					img.Visible = all and any
+				else
+					img.Visible = not all and sideOn[img:GetAttribute("NeonSide")] == true
 				end
-				any = any or on
 			end
 		end
 		gui.Enabled = any
@@ -1983,6 +1967,7 @@ OPS.Engine = function(model, on)
 	if on and model:GetAttribute("EngineDead") == true then
 		return false, "engine_dead" -- moteur HS ou véhicule en feu (VehicleDamage) : il faut réparer
 	end
+	model:SetAttribute("EngineOffByDriver", on == false or nil) -- coupé exprès : pas de redémarrage auto à l'assise
 	model:SetAttribute("Engine", on)
 	return true
 end

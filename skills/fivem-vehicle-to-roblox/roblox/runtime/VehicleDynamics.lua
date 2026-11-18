@@ -180,6 +180,8 @@ Dyn.Tuning = {
 	EngineBrakeG = 0.9, -- frein moteur (en g) au rupteur, gaz relâchés (proportionnel au régime). MESURÉ :
 	-- en roue libre rapport engagé, 110 → 30 km/h en 115 m ; traînée retirée, le frein moteur vaut 2,7 à
 	-- 3,0 m/s² sur toute la plage (≈ 0,29 g). Valeur calée pour reproduire les 115 m sur banc longitudinal.
+	CoastBrakeG = 0.27, -- plancher (g) gaz relâchés : la voiture s'arrête seule (25 km/h → 0 en ~2,6 s, ~9 m)
+	CoastBrakeFreewheelG = 0.08, -- même plancher pour un véhicule FREEWHEEL_NO_GAS (roue libre GTA)
 	LowSpeedFade = 8, -- m/s : vitesse où la perte d'adhérence au démarrage (burnout) disparaît
 	-- BURN façon GTA V (2026-11-14) : W + S tenus ensemble, arrêté ou presque, en marche avant → les roues
 	-- motrices sont libérées du frein et patinent, les autres restent freinées (native SET_VEHICLE_BURNOUT :
@@ -1150,6 +1152,12 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		end
 		-- frein moteur, gaz relâchés, embrayé (sauf FREEWHEEL_NO_GAS)
 		local engBrake = (not P.freewheel and thr < 0.05 and S.clutch >= 1 and running) and T.EngineBrakeG * P.g * (S.rpm - 0.2) / 0.8 or 0
+		-- plancher de décélération gaz relâchés (2026-11-18, demande : « au bout d'un moment je ne décélère plus […] dans
+		-- GTA le véhicule s'arrête tout seul ») : le frein moteur ci-dessus suit le régime et s'annule au ralenti, la
+		-- voiture roulait alors sans fin à basse vitesse. MESURÉ dans GTA (roue libre m422) : 2,7 à 3,0 m/s² sur TOUTE
+		-- la plage → plancher constant, réparti sur toutes les roues (roulement + transmission), même embrayage ouvert.
+		local coast = (thr < 0.05 and brakeIn < 0.05 and not inp.Handbrake and not burnout)
+			and (P.freewheel and T.CoastBrakeFreewheelG or T.CoastBrakeG) * P.g or 0
 
 		for i, w in ipairs(P.wheels) do
 			local c = contacts[i] or { grounded = false, vLong = 0, vLat = 0, grip = 1 }
@@ -1170,8 +1178,12 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			if hand then
 				brakeA += P.handbrake * P.g
 			end
-			if w.driveShare > 0 and engBrake > 0 then
-				brakeA += engBrake * w.driveShare
+			if engBrake >= coast then
+				if w.driveShare > 0 and engBrake > 0 then
+					brakeA += engBrake * w.driveShare
+				end
+			elseif coast > 0 then
+				brakeA += coast * w.massFrac
 			end
 			local omega = S.omega[i]
 			local Fx, Fy = 0, 0

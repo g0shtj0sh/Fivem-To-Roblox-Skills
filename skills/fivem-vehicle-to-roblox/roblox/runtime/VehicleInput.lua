@@ -23,6 +23,8 @@ Input.Bindings = {
 	SteerLeft = { Enum.KeyCode.A },
 	SteerRight = { Enum.KeyCode.D },
 	Handbrake = { Enum.KeyCode.Space, Enum.KeyCode.ButtonR1 },
+	-- frein à main serré / desserré (bascule, demande de l'utilisateur 2026-11-18) ; Espace reste le frein à main tenu
+	ParkingBrake = { Enum.KeyCode.P },
 	Horn = { Enum.KeyCode.E, Enum.KeyCode.ButtonL3 },
 	Headlights = { Enum.KeyCode.H, Enum.KeyCode.DPadRight },
 	IndicatorLeft = { Enum.KeyCode.Left },
@@ -43,7 +45,8 @@ Input.Bindings = {
 -- Libellés des actions (panneau des touches du jeu, menus) : même ordre d'affichage que la liste
 Input.Labels = {
 	{ "Throttle", "Accélérer" }, { "Brake", "Freiner / marche arrière" }, { "SteerLeft", "Tourner à gauche" },
-	{ "SteerRight", "Tourner à droite" }, { "Handbrake", "Frein à main" }, { "GearUp", "Monter un rapport" },
+	{ "SteerRight", "Tourner à droite" }, { "Handbrake", "Frein à main (maintenu)" },
+	{ "ParkingBrake", "Frein à main (serrer / desserrer)" }, { "GearUp", "Monter un rapport" },
 	{ "GearDown", "Descendre un rapport" }, { "Cruise", "Régulateur de vitesse" }, { "Limiter", "Limiteur de vitesse" },
 	{ "Headlights", "Phares (code / route / éteints)" }, { "IndicatorLeft", "Clignotant gauche" },
 	{ "IndicatorRight", "Clignotant droit" }, { "Hazard", "Warnings" }, { "InteriorLight", "Plafonnier" }, { "Horn", "Klaxon" },

@@ -212,7 +212,7 @@ local function step(a, dt)
 	-- entrées
 	local ctrl = Input.Controls
 	local inp = {
-		Throttle = ctrl.Throttle, Brake = ctrl.Brake, Steer = ctrl.Steer, Handbrake = ctrl.Handbrake,
+		Throttle = ctrl.Throttle, Brake = ctrl.Brake, Steer = ctrl.Steer, Handbrake = ctrl.Handbrake or car:GetAttribute("ParkingBrake") == true,
 		Engine = car:GetAttribute("Engine") ~= false,
 		GearUp = a.gearUp, GearDown = a.gearDown,
 	}
