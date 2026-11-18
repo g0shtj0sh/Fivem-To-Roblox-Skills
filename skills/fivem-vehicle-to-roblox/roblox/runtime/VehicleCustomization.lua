@@ -572,23 +572,24 @@ end
 --     carrosserie et habitacle teintés.
 --   · Juger une lumière caméra POSÉE depuis ~2 s : juste après un déplacement de caméra, le rendu des petites lumières
 --     n'est pas encore à jour (captures « frame » trompeuses).
-Custom.NeonLayoutVersion = 11
+Custom.NeonLayoutVersion = 12
 Custom.Neon = {
 	Tube = 0.035, -- m : épaisseur du tube (invisible)
 	SideInset = 0.1, -- m : rentré sous le bas de caisse depuis son bord
 	EndInset = 0.12, -- m : rentré sous le bouclier depuis son bord
 	ArchGap = 1.08, -- × rayon de roue : zone de mesure du bas de caisse, entre les arches
 	SideFraction = 0.82, -- part de cette zone sondée
-	SideReach = 0.45, -- × rayon de roue au-delà des axes : longueur du tube latéral
+	SideReach = -0.3, -- × rayon de roue au-delà des axes (négatif : le tube s'arrête avant l'axe, roues moins éclairées)
 	EndFraction = 0.86, -- largeur du tube avant / arrière sous le bouclier
-	SideTilt = 45, -- ° : inclinaison du tube latéral (une lumière vers le bas-extérieur, une vers le bas-intérieur)
-	EndTilt = 30, -- ° : avant / arrière
+	SideTilt = 25, -- ° : inclinaison du tube latéral (une lumière vers le bas-extérieur, une vers le bas-intérieur)
+	EndTilt = 15, -- ° : avant / arrière
 	Angle = 150,
-	SideOutRange = 1.4, -- m : lumière latérale vers l'extérieur
-	SideInRange = 1.65, -- m : … vers le dessous de la voiture
-	EndOutRange = 1.15, -- m
-	EndInRange = 1.4, -- m
-	Brightness = 8,
+	SideOutRange = 0.85, -- m : lumière latérale vers l'extérieur (bande serrée au ras de la caisse, comme GTA V)
+	SideInRange = 1.0, -- m : … vers le dessous de la voiture
+	EndOutRange = 0.75, -- m
+	EndInRange = 0.9, -- m
+	OutBrightness = 14,
+	InBrightness = 10,
 }
 
 local function neonBodyParts(model)
@@ -797,13 +798,14 @@ function Custom.LayoutNeons(model)
 		p.Transparency = 1
 		p.Size = st.size
 		p.CFrame = rcf * st.cf
-		for _, l in ipairs({ { "NeonOut", Enum.NormalId.Bottom, st.outRange }, { "NeonIn", st.inFace, st.inRange } }) do
+		for _, l in ipairs({ { "NeonOut", Enum.NormalId.Bottom, st.outRange, N.OutBrightness },
+			{ "NeonIn", st.inFace, st.inRange, N.InBrightness } }) do
 			local light = Instance.new("SurfaceLight")
 			light.Name = l[1]
 			light.Face = l[2]
 			light.Angle = N.Angle
 			light.Range = l[3] * spm
-			light.Brightness = N.Brightness
+			light.Brightness = l[4]
 			light.Shadows = false
 			light.Enabled = false
 			light.Parent = p
@@ -894,6 +896,12 @@ function Custom.SetNeonSide(model, side, enabled)
 	end
 	model:SetAttribute("Neon", any)
 	paintNeons(model)
+end
+
+-- Couleur du plafonnier (lumière intérieure, touche I / portière ouverte) ; nil = blanc chaud d'origine
+-- (demande de l'utilisateur, 2026-11-18 : « la lumière intérieure on doit pouvoir la custom aussi »).
+function Custom.SetInteriorLightColor(model, color)
+	model:SetAttribute("InteriorLightColor", color)
 end
 
 function Custom.SetNeonColor(model, color)
@@ -1164,7 +1172,7 @@ local SAVE_PREFIXES = { "Mod_", "Color_", "Paint_", "Finish_", "Extra_", "Perf_"
 -- réapparition (VehiclePlates.UseStyles avec Random). Le serveur réapplique la config propre de chaque véhicule à
 -- son apparition : un style présent dans la sauvegarde ne veut donc PAS dire « choisi ».
 local SAVE_KEYS = {
-	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "TyreSmokeColor",
+	"Livery", "WindowTint", "WindowTintStock", "TintPreset", "Neon", "NeonColor", "XenonColor", "InteriorLightColor", "TyreSmokeColor",
 	"PlateText", "PlateStyle", "PlateStyleChosen", "EngineSound", "PaintFade", "HornSound", "DirtLevel", "KeepClean",
 	"BodyHealth", "EngineHealth", "EngineDead", "Wrecked", "NoDamage",
 }
@@ -1213,7 +1221,7 @@ end
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_", "LightBroken_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
+local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "InteriorLightColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
 	"HornSound", "DirtLevel", "KeepClean", "BodyHealth", "EngineHealth", "EngineDead", "Wrecked", "NoDamage" }
 
 function Custom.Apply(model, data)
@@ -1718,6 +1726,25 @@ OPS.Neon = function(model, side, enabled)
 		return false, "absent"
 	end
 	Custom.SetNeonSide(model, side, enabled)
+	return true
+end
+
+OPS.InteriorLight = function(model, on)
+	if type(on) ~= "boolean" then
+		return false, "invalid"
+	end
+	if model:GetAttribute("Wrecked") == true then
+		return false, "wrecked"
+	end
+	model:SetAttribute("InteriorLight", on)
+	return true
+end
+
+OPS.InteriorColor = function(model, color)
+	if color ~= nil and not validColor(color) then
+		return false, "invalid"
+	end
+	Custom.SetInteriorLightColor(model, color and clampColor(color) or nil)
 	return true
 end
 

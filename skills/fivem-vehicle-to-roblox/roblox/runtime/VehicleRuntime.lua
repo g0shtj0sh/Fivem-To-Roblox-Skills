@@ -713,6 +713,14 @@ function Runtime:_cabinLight(kind, on)
 		self.CabinLightObjs[kind] = l
 	end
 	on = on and (self.LodTier or 0) < 2
+	if l and kind == "interior" then
+		-- couleur personnalisée du plafonnier (VehicleCustomization.SetInteriorLightColor), sinon blanc chaud
+		local c = self.Model:GetAttribute("InteriorLightColor")
+		c = typeof(c) == "Color3" and c or Runtime.CabinLights.interior.color
+		if l.Color ~= c then
+			l.Color = c
+		end
+	end
 	if l and l.Enabled ~= on then
 		l.Enabled = on
 	end

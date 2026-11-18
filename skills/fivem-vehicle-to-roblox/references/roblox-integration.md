@@ -545,7 +545,9 @@ serveur, attribut `Neons.Layout`) :
 - tubes **invisibles** (`Transparency = 1`, `NeonLit` dit s'ils sont allumés) ;
 - **deux `SurfaceLight` par tube** (une source linéaire éclaire tout autour d'elle) : `NeonOut` face `Bottom` du tube
   incliné (vers le bas et l'extérieur) et `NeonIn` face latérale intérieure (vers le bas et SOUS la voiture) ;
-  `Angle` 150, sans ombres, `Brightness` 8 ; tubes latéraux inclinés de 45°, avant / arrière de 30° ;
+  `Angle` 150, sans ombres ; bande SERRÉE au ras de la caisse comme GTA V (portées 0,75–1 m, `Brightness` 14 dehors /
+  10 dessous, tubes latéraux inclinés de 25°, avant / arrière de 15°, tube latéral arrêté avant les axes des roues) —
+  des portées de 1,2–1,65 m donnaient une nappe trop diffuse (refusée le 2026-11-18) ;
 - à éviter : une seule lumière inclinée vers l'extérieur (nappe seulement au bord, rien dessous : refusé, « trop sur
   les bords ») ; une seule lumière droite vers le bas (trop rasante, nappe cachée sous la caisse) ; `PointLight` sous
   la caisse (teinte toute la carrosserie et l'habitacle) ; `Angle` 120 (rectangles à bords nets).
@@ -683,6 +685,8 @@ Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a a
    | `"Tint"` | n de `Custom.WindowTints` (1 = d'origine … 7 = vert) | `SetWindowTintPreset` |
    | `"Neon"` | `"Front"`/`"Back"`/`"Left"`/`"Right"`/`"All"`, booléen | `SetNeonSide` / `SetNeon` |
    | `"NeonColor"` | `Color3` | `SetNeonColor` |
+   | `"InteriorColor"` | `Color3` ou rien (d'origine) | `SetInteriorLightColor` (attribut `InteriorLightColor`, sauvegardé) |
+   | `"InteriorLight"` | booléen | plafonnier allumé / éteint |
    | `"Xenon"` | booléen, `Color3` ou nil (xénon de série) | `SetXenon` |
    | `"TyreSmoke"` | booléen, `Color3` ou nil | `SetTyreSmoke` (attribut `TyreSmokeColor`) |
    | `"Plate"` | texte (vide = plaque générée) | `VehiclePlates.RequestCustom` (filtré pour le joueur) |
