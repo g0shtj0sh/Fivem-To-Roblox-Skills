@@ -607,6 +607,14 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         carriers.append(cname)
     glb_path = out / f"{name}.glb"
     glb.save(glb_path)
+    limit = getattr(args, "glb_compact_mb", 20.0)
+    if limit and glb_path.stat().st_size > limit * 1e6:
+        # envoi refusé au-delà de ~25 Mo (VibeStarter upload_file : 413, 325e le 2026-11-19) : f2r/glb_compact.py
+        from f2r.glb_compact import compact_glb
+        c = compact_glb(glb_path)
+        report.info(f"GLB allégé pour l'envoi : {c['before_mb']} -> {c['after_mb']} Mo ({c['jpeg']} texture(s) opaque(s) "
+                    f"en JPEG, {c['png_kept']} gardée(s) en PNG pour leur transparence, index de {c['indices16']} "
+                    f"maillage(s) en 16 bits ; seuil --glb-compact-mb {limit}).")
     if store.missing:
         # quelles pièces perdent quoi : une diffuse absente = pièce unie (souvent blanchâtre), une spec ou une
         # normale absente = reflets / relief par défaut seulement
@@ -1047,6 +1055,9 @@ def main(argv=None) -> int:
     ap.add_argument("--max-tris", type=int, default=19000, help="triangles max par MeshPart (limite Roblox 20k)")
     ap.add_argument("--max-texture", type=int, default=2048,
                     help="taille max des textures (px) ; Roblox garde 2048 et réduit 4096 à 2048 (mesuré le 2026-11-15)")
+    ap.add_argument("--glb-compact-mb", type=float, default=20.0,
+                    help="au-delà de cette taille (Mo), textures opaques en JPEG et index 16 bits (0 = jamais) : "
+                         "l'envoi VibeStarter refuse ~25 Mo (413)")
     ap.add_argument("--livery-uv", default="auto", choices=["auto", "uv0", "uv1"])
     ap.add_argument("--no-collision", action="store_true",
                     help="ne pas reprendre la collision du .yft (hitbox = boîte englobante)")

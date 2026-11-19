@@ -273,6 +273,23 @@ En parallèle :
 - Relancer la conversion avec `--sound-ids <sortie>/<nom>/sounds/sound_ids.json` (cache : ~15 s) pour
   intégrer les SoundId au Setup. Le GLB est identique d'une conversion à l'autre (déterministe) :
   pas de nouvel upload.
+- **Taille du GLB** : `upload_file` refuse au-delà de ~25 Mo (« Upload failed (413) » ; 21,4 Mo passait, 25,4 Mo
+  non, 325e le 2026-11-19). Au-delà de `--glb-compact-mb` (20 par défaut), la conversion réécrit le GLB
+  (`f2r/glb_compact.py`) : textures opaques en JPEG q92 (celles qui ont de la transparence restent en PNG), index
+  des maillages en 16 bits. 325e : 29,6 → 18,0 Mo, accepté par Roblox. Ne pas baisser `--max-texture` ni passer en
+  `--lod med` pour ça (sans effet si le mod n'a pas de vrai LOD moyen, et dégradant).
+- **Masques d'émission et textures de verre** (`emissive/*.png`, `glass/*.png`) : même chemin que les sons, ids dans
+  le même JSON (`--sound-ids`). Une texture déjà publiée pour un autre véhicule (même empreinte md5) se réutilise.
+
+## Pièces de custom dessinées dans le repère de leur os (automatique)
+
+Certains mods (325e de HRH) ont des pièces de custom dont le squelette se réduit à sa racine (`325e_bona_ng`,
+HasSkin 1 mais aucun os du véhicule) : GTA les affiche à l'os d'attache du modkit (`bonnet`, `boot`, `bumper_f/r`,
+`steeringwheel`), donc leurs sommets sont relatifs à cet os. `VehicleBuilder._attach_bone_local` applique alors la
+matrice monde de l'os du véhicule (rotation comprise : un volant est incliné), seulement si le recalage rapproche
+la pièce de la géométrie d'origine du même os, ou, sans géométrie d'origine, si elle reste dans la carrosserie
+(+30 cm). Rapport : « Mod … recalée sur cet os ». Les mods dont le squelette reprend les os du véhicule (rm3e36,
+m422) ne sont pas touchés (rm3e36 : GLB identique à l'octet). Contrôle : `Verify` « pièces de custom sur leur os ».
 
 ## Hitbox fidèle (automatique)
 
@@ -347,7 +364,8 @@ SoundId oubliés : `run("ApplySoundIds", { target = modèle, ids = T.<nom>_sound
 
 **Edit** — `require(T.Verify:Clone())({ model = <modèle> })` : runtime installé ; pièces présentes et
 nommées (`F2RExpectedParts`) ; véhicule droit, avant vers −Z ; échelle (empattement à 1 % près) ;
-phares devant les feux ; pièces dans l'emprise ; posé au sol ; roues à leur place et du bon côté ;
+phares devant les feux ; pièces dans l'emprise ; **pièces de custom sur leur os** (chaque option `Mod_<slot>_<n>`
+chevauche, à 0,3 m près, la géométrie d'origine du même os) ; posé au sol ; roues à leur place et du bon côté ;
 hitbox (morceaux et roues présents, invisibles et solides, soudés à leur os, précision réglée, boîte
 neutralisée, **fidélité par 400 rayons** depuis les 6 faces comparée à la carrosserie visible et à la
 boîte : ≥ 80 % à moins de 15 cm) ;

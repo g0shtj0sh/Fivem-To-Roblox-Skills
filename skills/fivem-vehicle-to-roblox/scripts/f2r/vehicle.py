@@ -659,8 +659,11 @@ class VehicleBuilder:
                                       shaders=child.shaders or frag.main.shaders, bone_remap=remap))
         if not parts:
             return 0
+        if self._attach_bone_local(frag, parts, attach, mod):
+            body = []  # déjà recalée : l'heuristique ci-dessous ne doit pas la décaler une seconde fois
+        else:
+            body = [p for p in self.parts if p.mod is None]
         # Heuristique : si la pièce a été modélisée relativement à son os d'attache, on la replace.
-        body = [p for p in self.parts if p.mod is None]
         if body:
             lo = np.min([p.bbox()[0] for p in body], axis=0) - 0.75
             hi = np.max([p.bbox()[1] for p in body], axis=0) + 0.75
@@ -673,6 +676,54 @@ class VehicleBuilder:
                     self.report.warn(f"Mod {mod['model']} : géométrie hors carrosserie, recalée sur l'os {attach}.")
         self.parts.extend(parts)
         return len(parts)
+
+    def _attach_bone_local(self, frag: Fragment, parts: list, attach: str, mod: dict) -> bool:
+        """Pièce de custom non skinnée dessinée dans le repère de son os d'attache (GTA l'affiche à l'os).
+
+        Constat (325e, BMW E30 de HRH, 2026-11-19) : capots, coffres, pare-chocs et volants du mod ont une géométrie
+        dont le squelette de mod est réduit à sa racine (HasSkin 1 mais aucun os du véhicule) : leurs sommets sont relatifs à l'os
+        d'attache (bonnet, boot, bumper_f/r, steeringwheel). Sans recalage, les capots tombaient au milieu du toit,
+        les volants au centre de la voiture, les pare-chocs au milieu ; l'ancienne heuristique (centre hors de la
+        carrosserie) ne les voyait pas car ils restaient DANS la carrosserie.
+        Règle : on applique la matrice monde de l'os du véhicule (rotation comprise : un volant est incliné) quand la
+        géométrie n'est pas skinnée, que l'os n'est pas la racine, et que le recalage rapproche la pièce de la
+        géométrie d'origine du même os (s'il y en a une) ; sans géométrie d'origine, on recale si le résultat reste dans
+        la carrosserie (+30 cm) et que l'os est loin de l'origine (> 5 cm). Renvoie True si la pièce a été recalée."""
+        if attach == self.skel.root_name:
+            return False
+        # un squelette de mod qui reprend des os du véhicule (m422, rm3e36) place déjà ses sommets dans le repère du
+        # véhicule ; celui de la 325e n'a qu'une racine (« 325e_bona_ng ») : HasSkin 1 mais sommets relatifs à l'os
+        vehicle_bones = set(self.skel.by_name) - {self.skel.root_name}
+        if {b.name for b in (frag.main.bones or [])} & vehicle_bones:
+            return False
+        b = self.skel.by_name.get(attach)
+        M = self.skel.worlds.get(b.index) if b is not None else None
+        if M is None or np.linalg.norm(M[:3, 3]) < 0.05:
+            return False
+        R = GTA2L @ M[:3, :3] @ GTA2L.T
+        t = GTA2L @ M[:3, 3]
+        c_before = np.mean([pp.center() for pp in parts], axis=0)
+        c_after = R @ c_before + t
+        stock = [pp for pp in self.parts if pp.mod is None and pp.owner == attach]
+        if stock:
+            sc = np.mean([pp.center() for pp in stock], axis=0)
+            if np.linalg.norm(c_after - sc) >= np.linalg.norm(c_before - sc) - 0.05:
+                return False
+        else:
+            # pas de pièce d'origine sur cet os (bumper_f de la 325e) : le recalage doit garder la pièce dans la
+            # carrosserie (+30 cm). 325e_bumfd, déjà dans le repère du véhicule, aurait fini 1,5 m devant la voiture.
+            body = [pp for pp in self.parts if pp.mod is None]
+            if body:
+                lo = np.min([pp.bbox()[0] for pp in body], axis=0) - 0.3
+                hi = np.max([pp.bbox()[1] for pp in body], axis=0) + 0.3
+                if np.any(c_after < lo) or np.any(c_after > hi):
+                    return False
+        for pp in parts:
+            pp.pos = (pp.pos.astype(np.float64) @ R.T + t).astype(np.float32)
+            pp.nrm = (pp.nrm.astype(np.float64) @ R.T).astype(np.float32)
+        self.report.info(f"Mod {mod['model']} : géométrie dans le repère de l'os {attach}, recalée sur cet os "
+                         f"(rotation comprise).")
+        return True
 
     # -- infos pour la config Roblox
     def bounds(self):

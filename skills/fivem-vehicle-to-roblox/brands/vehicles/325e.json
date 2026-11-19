@@ -1,0 +1,598 @@
+{
+ "about": "325e (BMW 325e E30 « Turbo » de HRH) -> Bavren 355e Turbo. Logos peints relevés le 2026-11-19 sur les textures converties (pixels, haut-gauche, taille = PNG mesurée) ; lettrages modélisés : planche _rebadge/lettrages_modelises.png (grappes 9, 59, 125).",
+ "textures": {
+  "doortags": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      26,
+      141,
+      348,
+      249
+     ],
+     "why": "étiquette jaune « … BMW … » (pneus)"
+    },
+    {
+     "op": "fill_disc",
+     "c": [
+      48,
+      290
+     ],
+     "r": 20,
+     "why": "rond BMW"
+    },
+    {
+     "op": "logo",
+     "c": [
+      48,
+      290
+     ],
+     "size": 34,
+     "why": "logo du jeu à la place"
+    },
+    {
+     "op": "fill_disc",
+     "c": [
+      279,
+      290
+     ],
+     "r": 20,
+     "why": "rond BMW"
+    },
+    {
+     "op": "logo",
+     "c": [
+      279,
+      290
+     ],
+     "size": 34,
+     "why": "logo du jeu à la place"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      8,
+      340,
+      158,
+      358
+     ],
+     "why": "rond BMW + « M3 » de la plaque constructeur",
+     "color": [
+      0.06,
+      0.06,
+      0.07,
+      1.0
+     ]
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      8,
+      358,
+      300,
+      377
+     ],
+     "why": "« MFD BY BMW Motorsport GmbH Muenchen »",
+     "color": [
+      0.06,
+      0.06,
+      0.07,
+      1.0
+     ]
+    }
+   ]
+  },
+  "j_details": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      373,
+      140
+     ],
+     "r": 143,
+     "why": "grand rond BMW (emblèmes capot, coffre, centres de roue)",
+     "ring": [
+      146,
+      152
+     ]
+    },
+    {
+     "op": "logo",
+     "c": [
+      373,
+      140
+     ],
+     "size": 230,
+     "why": "logo du jeu à la place"
+    },
+    {
+     "op": "fill_disc",
+     "c": [
+      478,
+      262
+     ],
+     "r": 27,
+     "why": "petit badge rond « R10 »"
+    }
+   ]
+  },
+  "00c006d0": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      418,
+      176
+     ],
+     "r": 81,
+     "why": "rond BMW du moyeu de volant",
+     "ring": [
+      84,
+      90
+     ]
+    },
+    {
+     "op": "logo",
+     "c": [
+      418,
+      176
+     ],
+     "size": 120,
+     "why": "logo du jeu à la place"
+    }
+   ]
+  },
+  "symbols": {
+   "size": [
+    1024,
+    1024
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      836,
+      500,
+      940,
+      546
+     ],
+     "why": "mot « BMW »"
+    }
+   ]
+  },
+  "symbols_em": {
+   "size": [
+    1024,
+    1024
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      836,
+      500,
+      940,
+      546
+     ],
+     "why": "mot « BMW » (version éclairée)"
+    }
+   ]
+  },
+  "e30cockpit": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      390,
+      112,
+      452,
+      166
+     ],
+     "why": "logos STACK"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      166,
+      298,
+      218,
+      468
+     ],
+     "why": "étiquette SCHROTH Racing du harnais"
+    },
+    {
+     "op": "fill_disc",
+     "c": [
+      98,
+      492
+     ],
+     "r": 16,
+     "why": "pastille ronde du harnais"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      212,
+      103,
+      240,
+      116
+     ],
+     "why": "VDO (couleur du cadran)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      316,
+      103,
+      342,
+      116
+     ],
+     "why": "VDO (couleur du cadran)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      212,
+      206,
+      240,
+      220
+     ],
+     "why": "VDO (couleur du cadran)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      316,
+      206,
+      342,
+      220
+     ],
+     "why": "VDO (couleur du cadran)"
+    }
+   ]
+  },
+  "gauges": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      96,
+      150,
+      138,
+      164
+     ],
+     "why": "VDO"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      294,
+      148,
+      334,
+      162
+     ],
+     "why": "VDO"
+    }
+   ]
+  },
+  "gaugesem": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      96,
+      150,
+      138,
+      164
+     ],
+     "why": "VDO (éclairé)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      294,
+      148,
+      334,
+      162
+     ],
+     "why": "VDO (éclairé)"
+    }
+   ]
+  },
+  "pioneerdeh": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      296,
+      50,
+      372,
+      78
+     ],
+     "why": "logo Pioneer"
+    }
+   ]
+  },
+  "pioneerdehem": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      296,
+      50,
+      372,
+      78
+     ],
+     "why": "logo Pioneer (éclairé)"
+    }
+   ]
+  },
+  "armat1": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      120,
+      189,
+      186,
+      203
+     ],
+     "why": "« BMW BAVARIA C » de l'autoradio d'origine",
+     "color": [
+      0.06,
+      0.06,
+      0.07,
+      1.0
+     ]
+    }
+   ]
+  },
+  "ex1": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      220,
+      12,
+      492,
+      68
+     ],
+     "why": "filigrane « autocity Imports »"
+    }
+   ]
+  },
+  "vehiclegeneric256": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      190,
+      60
+     ],
+     "r": 44,
+     "why": "logo NARDI TORINO du moyeu",
+     "ring": [
+      47,
+      52
+     ]
+    },
+    {
+     "op": "logo",
+     "c": [
+      190,
+      60
+     ],
+     "size": 64,
+     "why": "logo du jeu à la place"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      256,
+      256,
+      512,
+      386
+     ],
+     "why": "autocollant K&N"
+    }
+   ]
+  },
+  "generic_steeringwheel_momo_tuner_diffuse": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      106,
+      172,
+      150,
+      190
+     ],
+     "why": "« momo »"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      304,
+      60,
+      360,
+      82
+     ],
+     "why": "« momo » du moyeu"
+    }
+   ]
+  },
+  "eng1": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      368,
+      155
+     ],
+     "r": 44,
+     "why": "rond BMW frappé sur le couvre-culasse"
+    }
+   ]
+  },
+  "eng2": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      275,
+      50
+     ],
+     "r": 30,
+     "why": "rond BMW frappé"
+    }
+   ]
+  },
+  "m3_001_diff": {
+   "size": [
+    512,
+    128
+   ],
+   "ops": [
+    {
+     "op": "fill_all",
+     "color": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "why": "décalque « ///M3 » entier"
+    }
+   ]
+  },
+  "m_001_diff": {
+   "size": [
+    256,
+    128
+   ],
+   "ops": [
+    {
+     "op": "fill_all",
+     "color": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "why": "décalque « M » entier"
+    }
+   ]
+  }
+ },
+ "geometry": [
+  {
+   "op": "remove_islands",
+   "part": "mod_SteeringWheel_5__steeringwheel__paint2",
+   "box": [
+    [
+     0.0691,
+     -0.0227,
+     -0.0498
+    ],
+    [
+     0.114,
+     0.0111,
+     -0.0233
+    ]
+   ],
+   "why": "lettrage modélisé du volant (grappe 9)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_SteeringWheel_5__steeringwheel__mesh",
+   "box": [
+    [
+     0.0692,
+     -0.0227,
+     -0.0498
+    ],
+    [
+     0.1099,
+     -0.0074,
+     -0.0237
+    ]
+   ],
+   "why": "« sparco » (grappe 125)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_SteeringWheel_5__steeringwheel__mesh",
+   "box": [
+    [
+     -0.0205,
+     -0.0034,
+     -0.0556
+    ],
+    [
+     0.0196,
+     0.0079,
+     -0.0535
+    ]
+   ],
+   "why": "« sparco » du centre (grappe 59)"
+  }
+ ]
+}

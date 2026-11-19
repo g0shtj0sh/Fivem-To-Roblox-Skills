@@ -22,6 +22,17 @@
     "https://www.bmwgroup-classic.com/en/models/bmw-classics/product-description-page.ad-1519-1.bmw-m3-e36-321-hp.html"
    ],
    "checked": "2026-11-19"
+  },
+  "325e": {
+   "class": "VC_SEDAN",
+   "mod_class": "?",
+   "real_model": "BMW 325e (E30) berline 4 portes, Europe, avant restylage (1986)",
+   "body": "berline 4 portes (le Readme du mod : « Pre-facelift sedan E30 EU-Spec bodyshell »)",
+   "sources": [
+    "https://en.wikipedia.org/wiki/BMW_E30",
+    "https://www.encycarpedia.com/bmw/86-325e-sedan"
+   ],
+   "checked": "2026-11-19"
   }
  }
 }

@@ -290,6 +290,50 @@ function groups.structure()
 		end
 	end
 	check(outside == 0, "pièces dans l'emprise du véhicule", fmt("%d pièce(s) hors des bornes (+0,5 stud)", outside))
+	-- pièces de custom à leur place : chaque option (dossier Mod_<slot>_<n>) doit chevaucher la géométrie d'origine
+	-- de son os (marge 0,3 m). Constat 325e (2026-11-19) : capots au milieu du toit, volants au centre, pare-chocs
+	-- au milieu (géométrie du mod dans le repère de l'os, non recalée) ; l'emprise ci-dessus ne voyait que 3 pièces.
+	local function grow(box, p)
+		local c = root.CFrame:PointToObjectSpace(p.Position)
+		local h = p.Size / 2
+		local r = math.max(h.X, h.Y, h.Z)
+		local e = Vector3.new(r, r, r)
+		box[1] = box[1] and box[1]:Min(c - e) or c - e
+		box[2] = box[2] and box[2]:Max(c + e) or c + e
+	end
+	local stockBox, modBox = {}, {}
+	for _, p in ipairs(model:GetDescendants()) do
+		local bone = p:IsA("BasePart") and p:GetAttribute("Bone")
+		if bone and p:GetAttribute("Kind") ~= "collision" and not p.Name:match("^col__") then
+			if p:GetAttribute("ModSlot") then
+				local key = p.Parent.Name .. "|" .. bone
+				modBox[key] = modBox[key] or {}
+				grow(modBox[key], p)
+			elseif p:GetAttribute("Extra") == nil then
+				stockBox[bone] = stockBox[bone] or {}
+				grow(stockBox[bone], p)
+			end
+		end
+	end
+	local misplaced, compared = {}, 0
+	local margin = 0.3 * spm
+	for key, b in pairs(modBox) do
+		local bone = key:match("|(.+)$")
+		local sb = stockBox[bone]
+		if sb and bone ~= (CONFIG.RootBone or "chassis") then
+			compared += 1
+			local m = Vector3.new(margin, margin, margin)
+			local lo, hi = sb[1] - m, sb[2] + m
+			local apart = b[2].X < lo.X or b[1].X > hi.X or b[2].Y < lo.Y or b[1].Y > hi.Y or b[2].Z < lo.Z or b[1].Z > hi.Z
+			if apart then
+				table.insert(misplaced, key)
+			end
+		end
+	end
+	table.sort(misplaced)
+	check(#misplaced == 0, "pièces de custom sur leur os",
+		#misplaced == 0 and fmt("%d option(s) comparée(s) à la pièce d'origine de leur os", compared)
+			or fmt("%d option(s) loin de la pièce d'origine : %s", #misplaced, table.concat(misplaced, ", ", 1, math.min(#misplaced, 6))))
 	local seat = model:FindFirstChild("DriverSeat", true)
 	check(seat ~= nil and seat:IsA("Seat"), "DriverSeat", seat and seat:GetFullName() or "absent")
 	-- posé au sol : bas des roues sur la surface située dessous

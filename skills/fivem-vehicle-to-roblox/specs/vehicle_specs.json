@@ -64,6 +64,36 @@
     "https://en.wikipedia.org/wiki/BMW_S50"
    ],
    "checked": "2026-11-19"
+  },
+  "325e": {
+   "real_model": "BMW 325e (E30) berline, Europe sans catalyseur (M20B27 « eta », 1986)",
+   "Drivetrain": "RWD",
+   "Engine": "M20B27 6 cylindres en ligne 2,7 l atmosphérique « eta » (couple à bas régime)",
+   "PowerKw": 95,
+   "PowerPs": 129,
+   "PowerRpm": 4250,
+   "TorqueNm": 240,
+   "TorqueRpm": 3250,
+   "RedlineRpm": 4800,
+   "ZeroTo100S": 10.1,
+   "TopSpeedKmh": 193,
+   "TopSpeedLimited": false,
+   "Gears": 5,
+   "Transmission": "manuelle 5 rapports",
+   "ShiftTimeS": 0.5,
+   "notes": [
+    "Le mod ajoute un kit turbo (« Single turbocharger kit », absent de la vraie 325e) : la fiche est celle de la voiture de série ; le turbo du mod passe par l'amélioration Turbo du garage (Readme : « Use turbo tuning with engine tuning »).",
+    "Version européenne sans catalyseur 1985-1987 (129 ch, 240 Nm) ; avec catalyseur : 122 ch, 230 Nm.",
+    "Rupteur 4 800 tr/min (moteur eta à bas régime, Wikipedia BMW M20).",
+    "ShiftTimeS est une ESTIMATION (boîte manuelle 0,4-0,6 s)."
+   ],
+   "sources": [
+    "https://en.wikipedia.org/wiki/BMW_M20",
+    "https://www.encycarpedia.com/bmw/86-325e-sedan",
+    "https://www.auto-abc.eu/BMW-3-serija/v2096-1986",
+    "https://en.wikipedia.org/wiki/BMW_E30"
+   ],
+   "checked": "2026-11-19"
   }
  }
 }
