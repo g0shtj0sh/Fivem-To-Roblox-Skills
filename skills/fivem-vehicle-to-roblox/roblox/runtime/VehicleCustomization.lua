@@ -1348,7 +1348,10 @@ local function readableModLabel(label, slotLabel, index, opt, number)
 	-- sans pare-chocs arrière, échappement caché). « Essuie-glaces 3 » ne disait pas ce qu'elle fait.
 	if type(opt) == "table" and opt.HasGeometry == false then
 		if type(opt.TurnOffBones) == "table" and #opt.TurnOffBones > 0 then
-			return "Sans " .. string.lower(slotLabel:sub(1, 1)) .. slotLabel:sub(2)
+			-- minuscule initiale ; string.lower ne connaît que l'ASCII (« Sans Échappement » sinon)
+			local first, rest = slotLabel:match("^([%z\1-\127\194-\244][\128-\191]*)(.*)$")
+			local lowerAccents = { ["É"] = "é", ["È"] = "è", ["Ê"] = "ê", ["À"] = "à", ["Â"] = "â", ["Î"] = "î", ["Ô"] = "ô" }
+			return "Sans " .. (lowerAccents[first] or string.lower(first or "")) .. (rest or "")
 		end
 		return slotLabel .. " " .. index .. " (absent du mod)"
 	end
