@@ -288,6 +288,15 @@ cylindres (rayons et contacts ; solides avec `--wheel-collision`) et neutralise 
 15 cm de la carrosserie visible contre 34 % avec la boîte ; un joueur se pose sur le capot à +1,55 stud
 au lieu de +3,17. Voir la hitbox : rendre `Collision` visible (Transparency 0,5) le temps d'une capture.
 
+**Collision comblée (kits larges, automatique)** : quand la carrosserie visible dépasse la collision du mod de plus de
+8 cm (ailes élargies), `f2r/collision_fill.py` ajoute des pièces convexes `col__<os>__fill<n>`, os par os (caisse,
+capot, coffre, portières : elles suivent l'os). Chaque pièce est l'enveloppe des sommets découverts et de leurs
+points les plus proches sur la collision ; elle ne descend jamais sous le bas de la collision d'origine (garde au sol
+inchangée). Les enveloppes sont vérifiées manifold : le Setup y creuse les passages de roues par CSG, comme dans la
+collision d'origine. Une pièce entièrement dans un volume de roue n'est pas créée. Rapport : « Collision comblée : N
+pièce(s) ». rm3e36 : 75 % → 83 % de fidélité, passages de roues dégagés. `--collision-fill-avoid-wheels` écarte les
+pièces des roues au lieu de les creuser ; `--no-collision-fill` désactive le comblement.
+
 ## 3. Préparer les scripts pour Studio (sans recopier 100 Ko de code)
 
 La conversion écrit `<sortie>/<nom>/studio/` : `FiveMRuntime.lua` (runtime, une fois par place),
@@ -387,6 +396,13 @@ Pièges des essais (rm3e36, 2026-11-19) :
   et toujours `SetOverride(nil)`. `SetOverride` prend une seule table `{ Throttle, Brake, Steer, Handbrake }`.
   Vitesse de pointe : `Track.Tiles = 10` (4,8 km) ; le plateau exige deux fenêtres de 2 s sans gain ni passage.
 - Feux `Brake`/`Reverse` au volant : Verify passe par le moteur de conduite (frein maintenu), pas par l'attribut.
+- Verify rend l'état (moteur, phares…) après les groupes de rendu : `joints, lights, sounds, audio, drive_play` peuvent
+  tourner dans le même appel (avant : drive_play à 0 km/h, moteur laissé coupé). Le contrôle « reste droit et sur ses
+  roues » attend jusqu'à 2 s que la voiture se pose (arrière soulevé un instant après un freinage fort).
+- `drive_play` part tout droit sur 3 s (~25 m) : jamais depuis l'emplacement de la carte s'il y a un bord ou un véhicule
+  devant ; utiliser la piste (`Track.place`). Une chute détruit la voiture (dégâts) : `Custom.Repair` avant de rouler.
+- Corps adapté (`fit_play`) : dépend de l'avatar du testeur ; un avatar très carré laisse des points hors habitacle sur
+  tous les véhicules (m422 comprise) : comparer avec un véhicule de référence avant de conclure.
 - Menu du jeu sans interface : fonctions Flamework = RemoteEvents `FireServer(requestId, …)`, réponse
   `OnClientEvent(requestId, ok, résultat)`.
 

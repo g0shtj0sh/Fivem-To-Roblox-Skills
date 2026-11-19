@@ -148,7 +148,7 @@ def write_studio_bundle(out: Path, name: str, config: dict, parts_cfg: dict, sou
 # ------------------------------------------------------------------ collision (hitbox fidèle)
 
 def add_collision(frag_path: Path, vb: VehicleBuilder, glb: GlbWriter, parts_cfg: dict, args,
-                  report: Report) -> dict:
+                  report: Report, handling: dict | None = None) -> dict:
     """Ajoute au GLB la collision officielle du .yft (col__<os>__<n>) et renvoie CONFIG.Collision.
     Sans données de collision : hitbox = boîte englobante (comportement d'avant)."""
     if getattr(args, "no_collision", False):
@@ -175,6 +175,45 @@ def add_collision(frag_path: Path, vb: VehicleBuilder, glb: GlbWriter, parts_cfg
         parts_cfg[m.name] = {"Kind": "collision", "Bone": bone, "BoneChain": chain, "Owner": owner,
                              "Center": r4((lo + hi) / 2), "Tris": len(m.idx) // 3, "Convex": m.convex}
         pieces += 1
+    fill = 0
+    if not getattr(args, "no_collision_fill", False):
+        # kits larges : la carrosserie visible dépasse la collision d'origine -> pièces convexes qui comblent l'écart
+        from f2r import collision_fill
+        try:
+            # roues : le Setup creuse lui-même les passages (CSG, pièces manifold) ; --collision-fill-avoid-wheels
+            # les écarte plutôt à la conversion (moins de couverture autour des ailes)
+            bones = [root] + sorted({m.owner_group for m in coll.meshes
+                                     if m.owner_group in vb.skel.by_name and m.owner_group != root})
+            filled, st = collision_fill.fill_all_bones(vb.parts, coll.meshes, bones, wheels=coll.wheels,
+                                                       handling=handling,
+                                                       exclude_wheels=getattr(args, "collision_fill_avoid_wheels", False))
+        except Exception as exc:  # noqa: BLE001
+            filled, st = [], {}
+            report.warn(f"Comblement de la collision impossible ({exc}) : collision d'origine seule.")
+        for name, v, t, fbone in filled:
+            owner = vb.owner_of(fbone) if fbone in vb.skel.by_name else root
+            chain = "/".join(list(vb.skel.ancestors(fbone))) if fbone in vb.skel.by_name else fbone
+            # maillage FERMÉ à sommets partagés (pas flat_mesh, qui duplique les sommets par face) : le Setup creuse
+            # les passages de roues par CSG, qui refuse un maillage non manifold (« error -33 », rm3e36 2026-11-19)
+            tri = t.astype(np.int64)
+            fa, fb, fc = v[tri[:, 0]].astype(np.float64), v[tri[:, 1]].astype(np.float64), v[tri[:, 2]].astype(np.float64)
+            fn = np.cross(fb - fa, fc - fa)
+            if collision_mod._signed_volume(v.astype(np.float64), tri) < 0:
+                tri, fn = tri[:, [0, 2, 1]], -fn
+            vn = np.zeros((len(v), 3))
+            for k in range(3):
+                np.add.at(vn, tri[:, k], fn)
+            vn /= np.maximum(np.linalg.norm(vn, axis=1, keepdims=True), 1e-12)
+            P, N, I = v.astype(np.float32), vn.astype(np.float32), tri.reshape(-1).astype(np.uint32)
+            glb.add_mesh(name, P, N, np.zeros((len(P), 2), np.float32), I, mat)
+            lo, hi = v.min(axis=0), v.max(axis=0)
+            parts_cfg[name] = {"Kind": "collision", "Bone": fbone, "BoneChain": chain, "Owner": owner,
+                               "Center": r4((lo + hi) / 2), "Tris": len(t), "Convex": True, "Fill": True}
+            fill += 1
+        if fill:
+            report.info(f"Collision comblée : {fill} pièce(s) convexe(s) là où la carrosserie dépasse la collision "
+                        f"d'origine de plus de 8 cm ({st.get('uncovered', 0)} sommet(s) découverts sur {st.get('points', 0)} ; "
+                        f"{st.get('dropped_wheel', 0)} écartée(s) pour dégager les passages de roues).")
     wheels = {}
     for w in coll.wheels:
         if w.group in vb.skel.by_name:
@@ -183,7 +222,7 @@ def add_collision(frag_path: Path, vb: VehicleBuilder, glb: GlbWriter, parts_cfg
                 + (f" ; écartés : {', '.join(coll.skipped)}" if coll.skipped else "") + ".")
     if any(m.skipped_primitives for m in coll.meshes):
         report.warn("Collision : primitives (boîte / sphère / capsule) dans une géométrie, non converties.")
-    return {"Source": "gta", "Pieces": pieces, "Triangles": coll.triangles, "Wheels": wheels,
+    return {"Source": "gta", "Pieces": pieces + fill, "Filled": fill, "Triangles": coll.triangles, "Wheels": wheels,
             "WheelsCollide": not getattr(args, "no_wheel_collision", False)}
 
 
@@ -549,7 +588,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     if veiled:
         report.warn(f"{len(veiled)} pièce(s) opaque(s) gardent une alpha uniforme : Roblox les mélangera à leur couleur "
                     "(aspect délavé, ex. écrans). À aplatir dans make_material : " + ", ".join(veiled[:12]))
-    collision_cfg = add_collision(frag_path, vb, glb, parts_cfg, args, report)
+    collision_cfg = add_collision(frag_path, vb, glb, parts_cfg, args, report, handling)
     # garde-fou : une pièce qui perd sa texture ou sa transparence par rapport à la dernière conversion acceptée
     # de ce véhicule bloque la conversion (code 3) au lieu de passer inaperçue (texture_guard.py)
     tex_guard = texture_guard.check(name, tex_manifest, out, report,
@@ -1011,6 +1050,10 @@ def main(argv=None) -> int:
     ap.add_argument("--livery-uv", default="auto", choices=["auto", "uv0", "uv1"])
     ap.add_argument("--no-collision", action="store_true",
                     help="ne pas reprendre la collision du .yft (hitbox = boîte englobante)")
+    ap.add_argument("--collision-fill-avoid-wheels", action="store_true",
+                    help="pièces de comblement écartées des passages de roues (au lieu d'y être creusées par le Setup)")
+    ap.add_argument("--no-collision-fill", action="store_true",
+                    help="ne pas combler la collision là où la carrosserie la dépasse (kits larges)")
     ap.add_argument("--no-wheel-collision", action="store_true",
                     help="cylindres de roues non solides (moteur physique à roues propres) ; par défaut ils portent le véhicule")
     ap.add_argument("--texture-overrides",

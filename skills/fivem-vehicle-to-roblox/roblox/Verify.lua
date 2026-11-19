@@ -971,15 +971,22 @@ function groups.drive_play()
 	task.wait(0.3)
 	Drive.SetOverride(nil)
 	check(stopT ~= nil, "s'arrête au freinage", stopT and fmt("arrêt en %.2f s depuis %.1f km/h", stopT, v3 * 3.6) or "pas arrêté en 8 s")
-	local up = root.CFrame.UpVector.Y
-	local grounded = 0
-	local out = a.out
-	for i in ipairs(a.sim.P.wheels) do
-		if out and out.wheels[i] and out.wheels[i].Fz > 0 then
-			grounded += 1
+	-- mesuré une fois la voiture posée (jusqu'à 2 s) : à l'arrêt après un freinage fort, l'arrière se soulève un
+	-- instant (piqué de 5°, 2 roues au sol à 65 km/h, rm3e36 2026-11-19) puis retombe ; c'est le rebond, pas un défaut
+	local up, grounded = 0, 0
+	local tSettle = os.clock()
+	repeat
+		task.wait(0.05)
+		up = root.CFrame.UpVector.Y
+		grounded = 0
+		local out = a.out
+		for i in ipairs(a.sim.P.wheels) do
+			if out and out.wheels[i] and out.wheels[i].Fz > 0 then
+				grounded += 1
+			end
 		end
-	end
-	check(up > 0.95 and grounded >= 3, "reste droit et sur ses roues", fmt("UpVector.Y %.3f, %d roue(s) au sol", up, grounded))
+	until (up > 0.95 and grounded >= 3) or os.clock() - tSettle > 2
+	check(up > 0.95 and grounded >= 3, "reste droit et sur ses roues", fmt("UpVector.Y %.3f, %d roue(s) au sol (posé en %.2f s)", up, grounded, os.clock() - tSettle))
 end
 
 function groups.sounds()
@@ -1663,6 +1670,15 @@ function groups.audio()
 end
 
 -- ------------------------------------------------------------------ exécution
+-- Les groupes de rendu (joints, lights, sounds, audio) posent des attributs d'état sur le modèle (côté client :
+-- localement) et finissent moteur coupé. Le moteur de conduite les lit : un drive_play lancé après eux dans le même
+-- appel roulait à 0 km/h, moteur « coupé » (rm3e36, 2026-11-19). On rend l'état d'avant après chacun d'eux.
+local STATE_ATTRS = { "Headlights", "Brake", "Reverse", "Indicator", "Siren", "Engine", "Horn", "Steer" }
+local RENDER_GROUPS = { joints = true, lights = true, sounds = true, audio = true }
+local savedState = {}
+for _, k in ipairs(STATE_ATTRS) do
+	savedState[k] = model:GetAttribute(k)
+end
 for _, g in ipairs(opts.checks or DEFAULTS[context]) do
 	currentGroup = g
 	local fn = groups[g]
@@ -1672,6 +1688,11 @@ for _, g in ipairs(opts.checks or DEFAULTS[context]) do
 		local ok, err = pcall(fn)
 		if not ok then
 			rec("fail", g, "erreur : " .. tostring(err))
+		end
+		if RENDER_GROUPS[g] then
+			for _, k in ipairs(STATE_ATTRS) do
+				model:SetAttribute(k, savedState[k])
+			end
 		end
 	end
 end

@@ -173,6 +173,12 @@ function Collision.CarveWheelWells(model)
 						res[1]:Destroy()
 						table.insert(failed, name .. " : " .. tostring(err2))
 					end
+				elseif ok and type(res) == "table" and #res == 0 then
+					-- pièce entièrement dans le volume balayé par la roue : la soustraction ne laisse rien, on la
+					-- retire (avant : comptée en échec « table: 0x… » et laissée dans le passage de roue — pièces
+					-- de comblement d'un kit large, rm3e36 2026-11-19)
+					table.insert(carved, p.Name .. " (retirée)")
+					p:Destroy()
 				else
 					table.insert(failed, p.Name .. " : " .. tostring(res))
 				end
