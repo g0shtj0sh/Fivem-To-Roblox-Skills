@@ -424,6 +424,9 @@ for name, info in pairs(PARTS) do
 			if info.EmissiveMask and SOUND_IDS[info.EmissiveMask] then
 				p:SetAttribute("EmissiveMask", SOUND_IDS[info.EmissiveMask])
 			end
+			if type(info.EmissiveCoverage) == "number" then
+				p:SetAttribute("EmissiveCoverage", info.EmissiveCoverage) -- Neon entier ou masque (VehicleRuntime)
+			end
 			local role = info.Light or ("siren" .. tostring(info.Siren))
 			if info.LightOverlay then
 				p:SetAttribute("LightOverlay", true) -- couche posée sur un autre feu (VehicleRuntime.HideWhenOff)

@@ -57,6 +57,47 @@ local function boneChainHas(part, hidden)
 end
 
 -- Recalcule la visibilité de toutes les pièces à partir des attributs du modèle.
+-- Habitacle = boîte des vitres (pièces Kind=glass) dans le repère du véhicule, rétrécie de CabinInset sur les côtés
+-- (l'intérieur des vitres latérales) et descendue de CabinBelow sous leur bas (planche de bord). Renvoie une
+-- fonction point (monde) -> booléen, ou nil sans vitres.
+-- Vitres teintées : sous cette transparence (teintes Fumé clair et plus foncées ; d'origine 0,45 et Aucune 0,88 au-dessus),
+-- le verre passe en SmoothPlastic qui reflète un peu (voir Refresh).
+Custom.DarkTintBelow = 0.42
+Custom.DarkTintReflectance = 0.2
+Custom.CabinInset = 0.05 -- m
+Custom.CabinBelow = 0.45 -- m
+function Custom.CabinBox(model)
+	local root = model.PrimaryPart
+	if not root then
+		return nil
+	end
+	local spm = getConfig(model).StudsPerMeter or 3.571
+	local mn, mx
+	for _, part in ipairs(visualParts(model)) do
+		if part:GetAttribute("Kind") == "glass" and part:GetAttribute("Window") then
+			local cf = root.CFrame:ToObjectSpace(part.CFrame)
+			local h = part.Size / 2
+			for _, sx in ipairs({ -1, 1 }) do
+				for _, sy in ipairs({ -1, 1 }) do
+					for _, sz in ipairs({ -1, 1 }) do
+						local c = cf:PointToWorldSpace(Vector3.new(sx * h.X, sy * h.Y, sz * h.Z)) / spm
+						mn = mn and mn:Min(c) or c
+						mx = mx and mx:Max(c) or c
+					end
+				end
+			end
+		end
+	end
+	if not mn then
+		return nil
+	end
+	local inset, below = Custom.CabinInset, Custom.CabinBelow
+	return function(worldPos)
+		local l = root.CFrame:PointToObjectSpace(worldPos) / spm
+		return l.X > mn.X + inset and l.X < mx.X - inset and l.Z > mn.Z and l.Z < mx.Z and l.Y > mn.Y - below and l.Y < mx.Y
+	end
+end
+
 function Custom.Refresh(model)
 	local cfg = getConfig(model)
 	local hidden = {}
@@ -100,6 +141,7 @@ function Custom.Refresh(model)
 			end
 		end
 	end
+	local cabin = Custom.CabinBox(model)
 	for _, part in ipairs(visualParts(model)) do
 		local visible = true
 		local slot = part:GetAttribute("ModSlot")
@@ -134,6 +176,25 @@ function Custom.Refresh(model)
 			if gsa and gsa.AlphaMode ~= Enum.AlphaMode.Overlay then
 				gsa.AlphaMode = Enum.AlphaMode.Overlay
 			end
+			-- teinte FONCÉE : le matériau Glass de Roblox laisse voir l'habitacle même presque opaque (325e en Noir
+			-- intégral, transparence 0,044 : sièges nets à travers la lunette, capture 2026-11-19) -> SmoothPlastic
+			-- reflétant, vraiment sombre. Verre d'origine et « Aucune » restent en Glass (reflets de vrai verre).
+			-- Vu de l'intérieur, le joueur voit dehors (VehicleRuntime, vitre sans tain en vue intérieure).
+			if part:GetAttribute("Window") then
+				if part:GetAttribute("GlassMaterial") == nil then
+					part:SetAttribute("GlassMaterial", part.Material.Name)
+					part:SetAttribute("GlassReflectance", part.Reflectance)
+				end
+				local dark = base < Custom.DarkTintBelow
+				part.Material = dark and Enum.Material.SmoothPlastic or (Enum.Material[part:GetAttribute("GlassMaterial")] or Enum.Material.Glass)
+				part.Reflectance = dark and Custom.DarkTintReflectance or (part:GetAttribute("GlassReflectance") or 0)
+				part:SetAttribute("DarkTint", dark)
+			end
+		elseif base > 0 and part:GetAttribute("Kind") == "light" and cabin and cabin(part.Position) then
+			-- optique DANS l'habitacle (voyants du tableau de bord, plafonnier du mod…) : opaque. Transparente (0,15),
+			-- Roblox la triait avec les vitres et la dessinait parfois DEVANT une vitre teintée : on la voyait à
+			-- travers le noir intégral (signalé par l'utilisateur, 2026-11-19, 325e). Les feux extérieurs gardent 0,15.
+			base = 0
 		end
 		part.Transparency = visible and base or 1
 		part:SetAttribute("Visible", visible)

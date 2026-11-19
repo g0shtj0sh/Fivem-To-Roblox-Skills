@@ -48,3 +48,24 @@ def emissive_mask(color: Image.Image) -> Image.Image:
     blur = np.asarray(Image.fromarray(v.astype(np.uint8)).filter(ImageFilter.GaussianBlur(LOCAL_BLUR))).astype(np.float32)
     m = np.maximum(_ss(v, *SOLID), _ss(v, *LINE) * _ss(v - blur, *CONTRAST))
     return Image.fromarray((m * 255).astype(np.uint8)).convert("RGB")
+
+
+def mask_coverage(mask_png, uv: np.ndarray, idx: np.ndarray) -> float:
+    """Part (0..1) de l'optique qui s'allume par son masque : moyenne du masque aux sommets et au centre de chaque
+    triangle, pondérée par l'aire UV. Faible (< 0,2) = l'optique ne brillerait presque pas par sa texture (m422 :
+    clignotants 0,01 à 0,03, zone sombre du masque) -> le runtime l'allume en Neon entier ; forte = allumage par le
+    masque, sans Neon, qui ferait se battre les couches d'un même maillage (325e : clignotant 1,00, triangles jaunes
+    signalés par l'utilisateur 2026-11-19). Outil de contrôle : tools/light-coverage/coverage.py du dépôt."""
+    m = np.asarray(Image.open(mask_png).convert("L")).astype(np.float32) / 255.0
+    h, w = m.shape
+    uv = np.asarray(uv, np.float32).reshape(-1, 2) % 1.0
+    tri = uv[np.asarray(idx).reshape(-1, 3)]
+    if len(tri) == 0:
+        return 0.0
+    pts = np.concatenate([tri, tri.mean(1, keepdims=True)], 1).reshape(-1, 2)
+    px = np.clip((pts[:, 0] * w).astype(int), 0, w - 1)
+    py = np.clip((pts[:, 1] * h).astype(int), 0, h - 1)
+    vals = m[py, px].reshape(-1, 4).mean(1)
+    e1, e2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+    area = np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]) + 1e-9
+    return float((vals * area).sum() / area.sum())

@@ -40,6 +40,7 @@ from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.performance import apply_real_performance  # noqa: E402
 from f2r.plates import plate_zones  # noqa: E402
 from f2r.gta_colors import rgb as palette_rgb  # noqa: E402
+from f2r.light_emissive import mask_coverage  # noqa: E402
 from f2r.roblox import (build_runtime_install, build_setup,  # noqa: E402
                         runtime_version, split_for_execute_luau)
 from f2r.textures import TextureStore, alpha_kind, load_image  # noqa: E402
@@ -582,6 +583,11 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
             edir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(mat.emissive_png, edir / mat.emissive_png.name)
             info["EmissiveMask"] = mat.emissive_png.name
+            # part de l'optique couverte par son masque : décide Neon entier ou allumage par le masque (runtime)
+            try:
+                info["EmissiveCoverage"] = round(mask_coverage(mat.emissive_png, p.uv, p.idx), 3)
+            except (OSError, ValueError, IndexError):
+                pass
         if p.kind == "glass" and p.tex_diffuse:
             # texture des vitres (bordure sérigraphiée noire, dégivrage, teinte : vehicle_generic_glasswindows*) :
             # jetée avant le 2026-11-16 (verre uni). Mise en ligne à part comme les masques d'émission (glass/), id

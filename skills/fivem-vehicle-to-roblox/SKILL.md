@@ -339,6 +339,21 @@ nouveau véhicule** (banc `DriveBench`, piste `TestTrack`) : `Bench.corner(40, 1
 `minWheels = 4`, `rolledOver = false` ; `Bench.curb(60, 120)` sur la voie `curb` → `airborne = 0`, tangage < 5 °.
 Une voiture peut toujours se retourner sur un trottoir pris en travers, un choc ou un tremplin : c'est voulu.
 
+## Optiques, vitres teintées, son moteur (automatique, runtime)
+
+- **Clignotants** : la conversion mesure la part de chaque optique couverte par son masque d'émission
+  (`EmissiveCoverage`, `f2r/light_emissive.mask_coverage` ; contrôle : `tools/light-coverage/coverage.py <sortie>/<nom>`).
+  Sous 0,2 (m422 : 0,01-0,03), le clignotant s'allume en Neon entier ; au-dessus (325e : 1,00), par son masque. En Neon,
+  les couches d'un même maillage se battaient (triangles jaunes sur le feu arrière). Véhicule installé avant : poser
+  l'attribut à la main avec les valeurs de l'outil.
+- **Vitres teintées** : sous 0,42 de transparence (Fumé clair et plus foncé), le verre passe en SmoothPlastic
+  (`Custom.DarkTintBelow`) : le matériau Glass laissait voir les sièges même en Noir intégral. Vue intérieure : la
+  vitre redevient claire pour le joueur assis (`Runtime.TintSeeOut`). Optiques dans l'habitacle (`Custom.CabinBox`) :
+  opaques, sinon dessinées devant la vitre teintée.
+- **Son façon GTA V** (`Runtime.EngineAudio`) : moteur étouffé sous le capot (net capot ouvert), orienté vers
+  l'avant ; échappement plein derrière, voilé devant ; vue intérieure : tout étouffé, moins à chaque vitre baissée ou
+  cassée et à chaque portière ouverte.
+
 ## 3. Préparer les scripts pour Studio (sans recopier 100 Ko de code)
 
 La conversion écrit `<sortie>/<nom>/studio/` : `FiveMRuntime.lua` (runtime, une fois par place),

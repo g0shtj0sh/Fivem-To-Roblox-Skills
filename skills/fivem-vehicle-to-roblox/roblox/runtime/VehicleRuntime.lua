@@ -204,6 +204,9 @@ function Runtime.Attach(model)
 		if renderers[model] == self and string.sub(attr, 1, 13) == "WindowBroken_" and model:GetAttribute(attr) == true then
 			self:_shatter(string.sub(attr, 14))
 		end
+		if attr == "WindowTint" or attr == "TintPreset" then
+			self.GlassDirty = true -- teinte changée : la vue « sans tain » se recalcule (DarkTint des vitres)
+		end
 	end)
 	Runtime.PreloadGlass(model)
 	if (model:GetAttribute("GlassBreakSound") or Runtime.GlassBreakSound) ~= "" then
@@ -512,6 +515,12 @@ end
 -- est sombre dans le masque d'émission des feux de la m422, ils ne se voyaient pas du tout (constaté de jour et de
 -- nuit, 2026-11-16) ; les pièces de clignotant GTA sont des lentilles séparées, la pièce entière est la bonne forme.
 Runtime.NeonFamilies = { indicator = true } -- clignotants à lentille séparée (feux arrière m422) : Neon entier
+-- … SEULEMENT si le masque d'émission couvre peu l'optique (attribut EmissiveCoverage posé par la conversion, 0..1 ;
+-- absent = véhicule installé avant le 2026-11-19 : Neon comme avant). Un clignotant bien couvert par son masque
+-- s'allume par lui : en Neon, les couches de son maillage (lentille, réflecteur) se battaient (triangles jaunes sur
+-- le feu arrière de la 325e, signalé par l'utilisateur 2026-11-19 ; m422 0,01-0,03, 325e 1,00).
+Runtime.NeonCoverageMax = 0.2
+Runtime.FullMaskStrength = { indicator = 6 } -- masque plein : 22 (réglé pour les traits du masque m422) virait au jaune
 -- Clignotants posés EXACTEMENT sur un autre feu (m422 : la couche orange à traits du clignotant avant recouvre la
 -- couche blanche à traits du feu de jour, même géométrie) : les deux couches se battaient à l'écran (traits orange
 -- visibles sans clignoter, signalé par l'utilisateur 2026-11-16, et clignotant invisible). Ces familles sont MASQUÉES
@@ -528,7 +537,9 @@ local function setPart(part, on, color)
 		-- masqué éteint ; allumé par son masque d'émission (les traits de sa texture)
 		part.LocalTransparencyModifier = on and 0 or 1
 	end
-	if not overlay and family and Runtime.NeonFamilies[family] and (part:GetAttribute("EmissiveLit") or stashedSA[part]) then
+	local coverage = part:GetAttribute("EmissiveCoverage")
+	local weakMask = type(coverage) ~= "number" or coverage < Runtime.NeonCoverageMax
+	if not overlay and family and Runtime.NeonFamilies[family] and weakMask and (part:GetAttribute("EmissiveLit") or stashedSA[part]) then
 		if on then
 			local sa = part:FindFirstChildOfClass("SurfaceAppearance")
 			if sa then
@@ -562,7 +573,8 @@ local function setPart(part, on, color)
 			local c = color or Color3.new(1, 1, 1)
 			local m = math.max(c.R, c.G, c.B, 1e-3)
 			sa.EmissiveTint = Color3.new(c.R / m, c.G / m, c.B / m)
-			sa.EmissiveStrength = S[emissiveFamily(part, color)] or S.default
+			local fam = emissiveFamily(part, color)
+			sa.EmissiveStrength = (not weakMask and Runtime.FullMaskStrength[fam]) or S[fam] or S.default
 			sa.Color = Color3.new(1, 1, 1)
 		else
 			sa.EmissiveStrength = 0
@@ -1058,9 +1070,65 @@ Runtime.EngineAudio = {
 	VolumeRate = 16, -- 1/s : lissage des volumes
 	PitchMin = 0.5,
 	PitchMax = 2.0,
-	InteriorExhaustDb = { High = -14, Mid = -6, Low = 0 }, -- égaliseur de l'échappement en vue intérieure
-	InteriorEngineBoost = 1.25,
+	-- OCCULTATION façon GTA V (2026-11-19, utilisateur : « le moteur, on est censé pas trop l'entendre et surtout
+	-- étouffé vu que c'est sous le capot ; capot ouvert on doit bien l'entendre ; on doit très bien entendre
+	-- l'échappement ; dans la voiture le son doit être étouffé comme dans GTA V »). Avant : seule la vue intérieure
+	-- touchait le son (échappement étouffé, moteur ×1,25), le moteur sonnait à nu dehors.
+	-- Chaque cas = gain × égaliseur (dB) de la couche ; tout est interpolé, rien ne saute.
+	HoodClosed = { Gain = 0.55, High = -12, Mid = -4, Low = 1 }, -- moteur vu de dehors, capot fermé (tôle + isolant)
+	-- capot ouvert (os « bonnet ») : on revient vers le moteur à nu, en proportion de l'ouverture
+	ExhaustFront = { Gain = 0.6, High = -8, Mid = -2, Low = 0 }, -- échappement entendu de DEVANT : la caisse fait écran
+	-- (derrière la voiture : net et plein ; sur les côtés : entre les deux)
+	EngineRearGain = 0.75, -- moteur entendu de DERRIÈRE (il « regarde » vers l'avant) ; réglé prudemment, comme GTA
+	Interior = { -- vue intérieure (cockpit / capot de GTA en première personne) : habitacle fermé
+		engine = { Gain = 0.8, High = -14, Mid = -4, Low = 2 }, -- à travers le tablier : grave, sourd
+		exhaust = { Gain = 0.5, High = -20, Mid = -8, Low = 0 }, -- loin derrière, à travers la caisse
+	},
+	OpenWindowRelief = 0.3, -- part de l'étouffement intérieur retirée par vitre baissée ou cassée
+	OpenDoorRelief = 0.6, -- … par portière ouverte (la somme est plafonnée à 1 = son extérieur)
 }
+
+-- Occultation de l'instant, par couche : { engine = { Gain, High, Mid, Low }, exhaust = … }.
+function Runtime:_audioOcclusion(inside, cam)
+	local E = Runtime.EngineAudio
+	local function lerp(a, b, t)
+		return { Gain = a.Gain + (b.Gain - a.Gain) * t, High = a.High + (b.High - a.High) * t,
+			Mid = a.Mid + (b.Mid - a.Mid) * t, Low = a.Low + (b.Low - a.Low) * t }
+	end
+	local open = { Gain = 1, High = 0, Mid = 0, Low = 0 }
+	local hinge = self.Hinge or {}
+	if inside then
+		-- ouvertures de l'habitacle : vitres baissées ou cassées, portières ouvertes
+		local relief, seen = 0, {}
+		for attr, v in pairs(self.Model:GetAttributes()) do
+			local bone = string.match(attr, "^WindowDown_(.+)$") or string.match(attr, "^WindowBroken_(.+)$")
+			if bone and v == true and not seen[bone] and bone ~= "windscreen" then
+				seen[bone] = true
+				relief += E.OpenWindowRelief
+			end
+		end
+		for bone, frac in pairs(hinge) do
+			if string.find(bone, "door", 1, true) then
+				relief += E.OpenDoorRelief * math.clamp(frac, 0, 1)
+			end
+		end
+		relief = math.clamp(relief, 0, 1)
+		return { engine = lerp(E.Interior.engine, open, relief), exhaust = lerp(E.Interior.exhaust, open, relief) }
+	end
+	-- dehors : le moteur est sous le capot, l'échappement derrière la caisse
+	local hood = math.clamp(hinge.bonnet or hinge.hood or 0, 0, 1)
+	local behind = 0.5
+	if cam then
+		local rel = self.Root.CFrame:PointToObjectSpace(cam.CFrame.Position) -- l'arrière est +Z
+		if rel.Magnitude > 0.1 then
+			behind = (rel.Unit.Z + 1) / 2 -- 1 derrière, 0 devant
+		end
+	end
+	-- GTA oriente le moteur vers l'avant et l'échappement vers l'arrière (GDC 2014) : passage d'une voiture audible
+	local engine = lerp(E.HoodClosed, open, hood)
+	engine.Gain *= 1 + (E.EngineRearGain - 1) * behind
+	return { engine = engine, exhaust = lerp(E.ExhaustFront, open, behind) }
+end
 
 local function exhaustPosition(cfg)
 	if cfg.ExhaustPosition then
@@ -1347,19 +1415,23 @@ function Runtime:_updateAudio(dt, s)
 	local dist = cam and (cam.CFrame.Position - self.Root.Position).Magnitude or 0
 	local inside = interiorView(self)
 	local k = math.clamp(dt * E.VolumeRate, 0, 1)
+	local mix = self:_audioOcclusion(inside, cam)
 	for name, l in pairs(self.Layers or {}) do
 		local gain = (a.LayerGain and a.LayerGain[name]) or E.LayerGain[name] or 1
 		if name == "engine" and dist > E.LodDistance and not self.IsLocalOccupant then
 			gain = 0 -- version allégée de loin : l'échappement seul
 		end
-		if inside then
-			gain *= (name == "engine") and E.InteriorEngineBoost or 1
-		end
+		-- occultation (capot, caisse, habitacle) : gain et égaliseur de la couche, lissés
+		local o = mix[name] or { Gain = 1, High = 0, Mid = 0, Low = 0 }
+		gain *= o.Gain
 		if l.eq then
-			local muffle = inside and name == "exhaust"
-			l.eq.Enabled = muffle
-			if muffle then
-				l.eq.HighGain, l.eq.MidGain, l.eq.LowGain = E.InteriorExhaustDb.High, E.InteriorExhaustDb.Mid, E.InteriorExhaustDb.Low
+			l.eqHigh = (l.eqHigh or o.High) + (o.High - (l.eqHigh or o.High)) * k
+			l.eqMid = (l.eqMid or o.Mid) + (o.Mid - (l.eqMid or o.Mid)) * k
+			l.eqLow = (l.eqLow or o.Low) + (o.Low - (l.eqLow or o.Low)) * k
+			local on = math.abs(l.eqHigh) + math.abs(l.eqMid) + math.abs(l.eqLow) > 0.05
+			l.eq.Enabled = on
+			if on then
+				l.eq.HighGain, l.eq.MidGain, l.eq.LowGain = l.eqHigh, l.eqMid, l.eqLow
 			end
 		end
 		local hasOff = #l.off > ((l.idle and 1) or 0)
@@ -1507,6 +1579,22 @@ function Runtime:_smoothRemote(dt, s)
 	end
 end
 
+-- Vitres teintées « sans tain » : en vue intérieure, le joueur assis voit dehors à travers une teinte foncée (comme un
+-- vrai film teinté, dehors étant plus clair que l'habitacle) ; dehors, elles restent sombres. Local à ce client.
+Runtime.TintSeeOut = 0.7 -- LocalTransparencyModifier des vitres foncées (attribut DarkTint) en vue intérieure
+function Runtime:_updateGlassView()
+	local want = (self.IsLocalOccupant and interiorView(self)) and Runtime.TintSeeOut or 0
+	if want == self.GlassLtm and not self.GlassDirty then
+		return
+	end
+	self.GlassLtm, self.GlassDirty = want, false
+	for _, p in ipairs(self.Model:GetDescendants()) do
+		if p:IsA("BasePart") and p:GetAttribute("Kind") == "glass" then
+			p.LocalTransparencyModifier = (p:GetAttribute("DarkTint") == true) and want or 0
+		end
+	end
+end
+
 function Runtime:Update(dt)
 	local s = self:_state()
 	if not s.Suspension then
@@ -1516,6 +1604,7 @@ function Runtime:Update(dt)
 	self.State = s
 	self:_updateJoints(dt, s)
 	self:_updateLights(s)
+	self:_updateGlassView()
 	self:_updateAudio(dt, s)
 	local fxMod = tyreFxModule()
 	if fxMod then
