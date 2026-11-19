@@ -702,7 +702,7 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
             # sinon Roblox la mélange à la couleur de la pièce (écrans laiteux de la m422, 2026-11-16) ; une vraie
             # couche (Primary…) garde son alpha : c'est le mélange texture / peinture voulu, comme dans GTA
             flatten = p.kind != "decal" and (opaque_atlas or p.kind == "emissive" or (
-                (p.paint in (None, "Default")) and store.has_uniform_alpha(p.tex_diffuse)))
+                (p.paint in (None, "Default")) and (p.kind == "tire" or store.has_uniform_alpha(p.tex_diffuse))))
             color_png = store.get(p.tex_diffuse, "opaque" if flatten else "color")
             has_tex = color_png is not None
     elif p.kind in ("glass", "light", "siren"):
@@ -714,8 +714,11 @@ def make_material(p: Part, store: TextureStore, paint: dict, livery_names: list[
         # ou un fond blanc à la place du fond transparent)
         opaque_atlas = p.kind != "decal" and store.is_icon_atlas(p.tex_diffuse)
         # pièce opaque : sans alpha pour les écrans (emissive) et pour toute alpha uniforme, qui n'est pas une découpe
-        # (Roblox l'appliquerait en Overlay sur la couleur de la pièce : écran voilé de gris, m422 2026-11-16)
-        flatten = p.kind != "decal" and (opaque_atlas or p.kind == "emissive" or store.has_uniform_alpha(p.tex_diffuse))
+        # (Roblox l'appliquerait en Overlay sur la couleur de la pièce : écran voilé de gris, m422 2026-11-16) ;
+        # pneus toujours : le shader pneu de GTA est opaque, l'alpha de sa diffuse n'est pas une transparence
+        # (rm3e36 2026-11-19 : tyre_d à alpha moyenne 53/255 -> pneus gris clair, presque blancs, dans Roblox)
+        flatten = p.kind != "decal" and (opaque_atlas or p.kind in ("emissive", "tire")
+                                         or store.has_uniform_alpha(p.tex_diffuse))
         color_png = store.get(p.tex_diffuse, "opaque" if flatten else "color")
         has_tex = color_png is not None
         if p.custom_color and color_png is None:

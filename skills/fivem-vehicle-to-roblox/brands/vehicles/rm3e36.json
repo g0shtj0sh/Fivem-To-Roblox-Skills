@@ -44,12 +44,18 @@
     {
      "op": "fill_rect",
      "rect": [
-      214,
-      163,
-      248,
-      204
+      212,
+      108,
+      250,
+      206
      ],
-     "why": "bandes M de la plaque d'aile"
+     "color": [
+      0.082,
+      0.078,
+      0.082,
+      1.0
+     ],
+     "why": "même panneau (planche retournée)"
     }
    ]
   },
@@ -87,12 +93,18 @@
     {
      "op": "fill_rect",
      "rect": [
-      214,
-      163,
-      248,
-      204
+      212,
+      108,
+      250,
+      206
      ],
-     "why": "bandes M de la plaque d'aile"
+     "color": [
+      0.082,
+      0.078,
+      0.082,
+      1.0
+     ],
+     "why": "même panneau (planche retournée)"
     }
    ]
   },
@@ -139,12 +151,18 @@
     {
      "op": "fill_rect",
      "rect": [
-      214,
-      52,
-      248,
-      93
+      212,
+      50,
+      250,
+      148
      ],
-     "why": "bandes M de la plaque d'aile"
+     "color": [
+      0.082,
+      0.078,
+      0.082,
+      1.0
+     ],
+     "why": "panneau sombre de la bande latérale : bandes M + « M3 » estompé (vu sur la portière, 2026-11-19)"
     }
    ]
   },
@@ -490,6 +508,125 @@
     ]
    ],
    "why": "« M3 » modélisé (grappe 43)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "wheel_lf__tire_7",
+   "box": [
+    [
+     -0.8642,
+     0.1409,
+     -1.5744
+    ],
+    [
+     -0.8591,
+     0.1631,
+     -1.4005
+    ]
+   ],
+   "why": "« BORBET » modélisé en relief sur le cache-moyeu (lettres > 2 cm : la planche n'en montrait qu'une partie)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "wheel_rf__tire_7",
+   "box": [
+    [
+     0.8594,
+     0.1409,
+     -1.556
+    ],
+    [
+     0.8646,
+     0.1631,
+     -1.3821
+    ]
+   ],
+   "why": "« BORBET » modélisé en relief sur le cache-moyeu (lettres > 2 cm : la planche n'en montrait qu'une partie)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "wheel_lr__tire_7",
+   "box": [
+    [
+     -0.8508,
+     0.119,
+     1.1225
+    ],
+    [
+     -0.8456,
+     0.1411,
+     1.2963
+    ]
+   ],
+   "why": "« BORBET » modélisé en relief sur le cache-moyeu (lettres > 2 cm : la planche n'en montrait qu'une partie)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "wheel_rr__tire_7",
+   "box": [
+    [
+     0.8457,
+     0.119,
+     1.1409
+    ],
+    [
+     0.8509,
+     0.1411,
+     1.3148
+    ]
+   ],
+   "why": "« BORBET » modélisé en relief sur le cache-moyeu (lettres > 2 cm : la planche n'en montrait qu'une partie)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "boot__mesh",
+   "box": [
+    [
+     0.412,
+     0.716,
+     2.07
+    ],
+    [
+     0.547,
+     0.751,
+     2.099
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur le coffre (grappes 138 et 199, vu en gros plan)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "door_dside_f__mesh_9",
+   "box": [
+    [
+     -0.866,
+     0.29,
+     -0.667
+    ],
+    [
+     -0.848,
+     0.323,
+     -0.561
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur la bande de portière (toute la pièce : « ///M » 71 triangles + « 3 » 73 ; grappes 93/94 vues de profil sur la planche)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "door_pside_f__mesh_10",
+   "box": [
+    [
+     0.848,
+     0.292,
+     -0.666
+    ],
+    [
+     0.866,
+     0.325,
+     -0.56
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur la bande de portière (toute la pièce : « ///M » 71 triangles + « 3 » 73 ; grappes 93/94 vues de profil sur la planche)"
   }
  ]
 }
