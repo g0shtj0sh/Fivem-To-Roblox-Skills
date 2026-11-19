@@ -678,6 +678,91 @@
     ]
    ],
    "why": "aiguille FIXE du compte-tours"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_Spoiler_1__bodyshell__mesh",
+   "box": [
+    [
+     0.412,
+     0.716,
+     2.07
+    ],
+    [
+     0.547,
+     0.751,
+     2.099
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur le couvercle de coffre de l'option d'aileron (copie du coffre d'origine)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_Spoiler_2__bodyshell__mesh",
+   "box": [
+    [
+     0.412,
+     0.716,
+     2.07
+    ],
+    [
+     0.547,
+     0.751,
+     2.099
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur le couvercle de coffre de l'option d'aileron (copie du coffre d'origine)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_Spoiler_3__bodyshell__mesh_2",
+   "box": [
+    [
+     0.412,
+     0.716,
+     2.07
+    ],
+    [
+     0.547,
+     0.751,
+     2.099
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur le couvercle de coffre de l'option d'aileron (copie du coffre d'origine)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_Spoiler_4__bodyshell__mesh",
+   "box": [
+    [
+     0.412,
+     0.716,
+     2.07
+    ],
+    [
+     0.547,
+     0.751,
+     2.099
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur le couvercle de coffre de l'option d'aileron (copie du coffre d'origine)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_Spoiler_5__bodyshell__mesh_4",
+   "box": [
+    [
+     0.412,
+     0.716,
+     2.07
+    ],
+    [
+     0.547,
+     0.751,
+     2.099
+    ]
+   ],
+   "why": "« ///M3 » modélisé sur le couvercle de coffre de l'option d'aileron (copie du coffre d'origine)"
   }
  ]
 }

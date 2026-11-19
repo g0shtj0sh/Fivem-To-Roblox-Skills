@@ -1187,15 +1187,39 @@ function Custom.SetEngineSound(model, name)
 end
 
 -- ------------------------------------------------------------------ options & sauvegarde
+-- Noms affichés des emplacements de custom (menus du jeu en français, comme le reste du RMenu). Un mod ne donne souvent
+-- que des clés de texte GTA (« MNU_EXH1 », la même pour trois échappements) ou le nom de fichier du modèle
+-- (« e36_wing_1 ») : illisibles dans un menu (rm3e36, 2026-11-19). Ils deviennent « <emplacement> <n> ».
+Custom.ModSlotLabels = {
+	Spoiler = "Aileron", FrontBumper = "Pare-chocs avant", RearBumper = "Pare-chocs arrière", SideSkirt = "Bas de caisse",
+	Exhaust = "Échappement", Frame = "Arceau", Grille = "Calandre", Hood = "Capot", LeftFender = "Aile gauche",
+	RightFender = "Aile droite", Roof = "Toit", FrontWheels = "Jantes", RearWheels = "Jantes arrière",
+	PlateHolder = "Support de plaque", VanityPlate = "Plaque de fantaisie", TrimDesign = "Garniture",
+	Ornaments = "Ornements", Dashboard = "Tableau de bord", DialDesign = "Cadrans", DoorSpeaker = "Haut-parleurs de portière",
+	Seats = "Sièges", SteeringWheel = "Volant", ShiftLever = "Levier de vitesse", Plaque = "Plaque", Speakers = "Sono",
+	Trunk = "Coffre", Hydraulics2 = "Hydraulique", EngineBlock = "Bloc moteur", AirFilter = "Filtre à air",
+	Struts = "Barres anti-rapprochement", ArchCover = "Passages de roue", Aerials = "Antennes", Trim2 = "Garniture extérieure",
+	Tank = "Réservoir", LeftDoor = "Portière gauche", RightDoor = "Portière droite", Livery = "Décoration", Lightbar = "Rampe de lumières",
+}
+
+local function readableModLabel(label, slotLabel, index, opt)
+	local raw = type(label) == "string" and label or ""
+	local code = raw == "" or raw:match("^[%u%d_]+$") ~= nil -- clé de texte GTA (MNU_EXH1, CMOD_…)
+		or (type(opt) == "table" and opt.Model ~= nil and string.lower(raw) == string.lower(tostring(opt.Model)))
+		or raw:match("^[%l%d]+_[%l%d_]+$") ~= nil -- nom de fichier (e36_wing_1)
+	return code and (slotLabel .. " " .. index) or raw
+end
+
 function Custom.GetOptions(model)
 	local cfg = getConfig(model)
 	local mods = {}
 	for slot, info in pairs(cfg.Mods or {}) do
+		local slotLabel = Custom.ModSlotLabels[slot] or info.Label or slot
 		local labels = {}
 		for i, opt in ipairs(info.Options) do
-			labels[i] = opt.Label
+			labels[i] = readableModLabel(opt.Label, slotLabel, i, opt)
 		end
-		mods[slot] = { Label = info.Label, Options = labels }
+		mods[slot] = { Label = slotLabel, Options = labels }
 	end
 	local store = model:FindFirstChild("Liveries")
 	return {
