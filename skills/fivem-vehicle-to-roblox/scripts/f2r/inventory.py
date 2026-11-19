@@ -51,10 +51,45 @@ def _strip_ext(name: str, ext: str) -> str:
     return name[: -len(ext)] if name.lower().endswith(ext) else name
 
 
+def _enhanced_duplicate(p: Path) -> bool:
+    """Un mod peut livrer deux jeux de ressources : ``stream/`` (GTA V Legacy, FiveM) et ``stream_enhanced/``
+    (GTA V Enhanced), mêmes noms de fichiers. Sans tri, le second écrase le premier dans l'inventaire (ordre
+    alphabétique). On garde ``stream/`` : c'est le format de FiveM, celui que gta-extract lit."""
+    for parent in p.parents:
+        if parent.name.lower() == "stream_enhanced":
+            legacy = parent.with_name("stream")
+            return legacy.is_dir() and (legacy / p.relative_to(parent)).exists()
+    return False
+
+
+def extract_source(root: Path, staging: Path) -> Path:
+    """Dossier à donner à gta-extract : ``root`` tel quel, ou, s'il contient des doublons ``stream_enhanced/``,
+    une copie par liens (symboliques, sinon copie) sans eux — sinon gta-extract tente aussi les ressources
+    Enhanced (format qu'il ne lit pas : « Stream length must be non-negative… » par fichier) et leur sortie
+    XML pourrait écraser celle de ``stream/``."""
+    files = [p for p in sorted(root.rglob("*")) if p.is_file()]
+    if not any(_enhanced_duplicate(p) for p in files):
+        return root
+    import shutil
+    shutil.rmtree(staging, ignore_errors=True)
+    for p in files:
+        if _enhanced_duplicate(p):
+            continue
+        dst = staging / p.relative_to(root)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dst.symlink_to(p.resolve())
+        except OSError:
+            shutil.copy2(p, dst)
+    return staging
+
+
 def scan(root: Path, include_binaries: bool = True) -> Inventory:
     inv = Inventory(root=root)
     for p in sorted(root.rglob("*")):
         if not p.is_file():
+            continue
+        if _enhanced_duplicate(p):
             continue
         n = p.name.lower()
         if n.endswith(".yft.xml"):

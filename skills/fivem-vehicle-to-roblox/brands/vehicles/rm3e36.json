@@ -1,0 +1,495 @@
+{
+ "about": "rm3e36 (BMW M3 E36, kit Rocket Bunny) -> Bavren N3 Widebody. Logos peints relevés le 2026-11-19 sur les textures converties (pixels, haut-gauche, taille = celle de la PNG mesurée). Lettrages modélisés : planche _rebadge/lettrages_modelises.png de la même date.",
+ "textures": {
+  "bmw_m3_e36_badging_diffuse": {
+   "size": [
+    256,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      100.5,
+      95.5
+     ],
+     "r": 83,
+     "color": [
+      0.03,
+      0.03,
+      0.035,
+      1.0
+     ],
+     "why": "rond BMW (quartiers + lettres BMW de l'anneau noir)"
+    },
+    {
+     "op": "logo",
+     "c": [
+      100.5,
+      95.5
+     ],
+     "size": 120,
+     "why": "notre logo dans l'anneau chromé"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      4,
+      210,
+      214,
+      252
+     ],
+     "why": "bandes M + « M3 » du coffre"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      214,
+      163,
+      248,
+      204
+     ],
+     "why": "bandes M de la plaque d'aile"
+    }
+   ]
+  },
+  "bmw_m3_e36_badging_normals": {
+   "size": [
+    256,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      100.5,
+      95.5
+     ],
+     "r": 83,
+     "color": [
+      0.03,
+      0.03,
+      0.035,
+      1.0
+     ],
+     "why": "rond BMW (quartiers + lettres BMW de l'anneau noir)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      4,
+      210,
+      214,
+      252
+     ],
+     "why": "bandes M + « M3 » du coffre"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      214,
+      163,
+      248,
+      204
+     ],
+     "why": "bandes M de la plaque d'aile"
+    }
+   ]
+  },
+  "texture_bmw_m3_e36_alpha": {
+   "size": [
+    256,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      100.5,
+      160.5
+     ],
+     "r": 83,
+     "color": [
+      0.03,
+      0.03,
+      0.035,
+      1.0
+     ],
+     "why": "rond BMW"
+    },
+    {
+     "op": "logo",
+     "c": [
+      100.5,
+      160.5
+     ],
+     "size": 120,
+     "why": "notre logo"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      4,
+      4,
+      214,
+      46
+     ],
+     "why": "bandes M + « M3 »"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      214,
+      52,
+      248,
+      93
+     ],
+     "why": "bandes M de la plaque d'aile"
+    }
+   ]
+  },
+  "bmw_m3_e36_steeringwheel_diffuse": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      380,
+      83
+     ],
+     "r": 68,
+     "ring": [
+      70,
+      76
+     ],
+     "why": "rond BMW du volant"
+    },
+    {
+     "op": "logo",
+     "c": [
+      380,
+      83
+     ],
+     "size": 104,
+     "why": "notre logo sur le volant"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      104,
+      85,
+      150,
+      116
+     ],
+     "why": "badge ///M du volant"
+    }
+   ]
+  },
+  "bmw_m3_e36_steeringwheel_normals": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_disc",
+     "c": [
+      380,
+      83
+     ],
+     "r": 68,
+     "ring": [
+      70,
+      76
+     ],
+     "why": "rond BMW du volant"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      104,
+      85,
+      150,
+      116
+     ],
+     "why": "badge ///M du volant"
+    }
+   ]
+  },
+  "nodamage": {
+   "size": [
+    1024,
+    1024
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      484,
+      228,
+      580,
+      260
+     ],
+     "why": "///M3 (petite plaque)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      408,
+      265,
+      490,
+      291
+     ],
+     "why": "bandes M (pastilles de couleur)"
+    },
+    {
+     "op": "fill_disc",
+     "c": [
+      945,
+      465
+     ],
+     "r": 50,
+     "why": "rond BMW"
+    },
+    {
+     "op": "logo",
+     "c": [
+      945,
+      465
+     ],
+     "size": 86,
+     "why": "notre logo"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      895,
+      912,
+      990,
+      958
+     ],
+     "why": "logo AC Schnitzer"
+    }
+   ]
+  },
+  "bmw_m3_e36_engine_diffuse": {
+   "size": [
+    512,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      20,
+      28,
+      54,
+      154
+     ],
+     "color": [
+      0.12,
+      0.12,
+      0.12,
+      1.0
+     ],
+     "why": "« BMW M Power » du couvre-culasse"
+    }
+   ]
+  },
+  "bmw_m3_e36_cockpit_diffuse": {
+   "size": [
+    2048,
+    1024
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      296,
+      52,
+      384,
+      80
+     ],
+     "why": "« BMW » de la façade radio"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      1374,
+      320,
+      1446,
+      362
+     ],
+     "why": "badge ///M de la planche de bord"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      1264,
+      896,
+      1366,
+      948
+     ],
+     "why": "///M du pommeau (grille des vitesses)"
+    }
+   ]
+  },
+  "tyre_d": {
+   "size": [
+    2048,
+    2048
+   ],
+   "ops": [
+    {
+     "op": "fill_ring",
+     "c": [
+      1024,
+      1024
+     ],
+     "r": [
+      715,
+      975
+     ],
+     "why": "lettrage du flanc (Pirelli P Zero, cotes, DOT)"
+    }
+   ]
+  },
+  "wheel": {
+   "size": [
+    256,
+    256
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      4,
+      148,
+      106,
+      174
+     ],
+     "why": "BORBET (rayon)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      122,
+      164,
+      238,
+      183
+     ],
+     "why": "BORBET (cache-moyeu)"
+    }
+   ]
+  },
+  "bride_decals_1": {
+   "size": [
+    1024,
+    1024
+   ],
+   "ops": [
+    {
+     "op": "fill_all",
+     "color": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "why": "BRIDE et MAZIORA (sièges)"
+    }
+   ]
+  },
+  "bride_pattern1": {
+   "size": [
+    512,
+    512
+   ],
+   "ops": [
+    {
+     "op": "fill_all",
+     "why": "motif BRIDE du tissu des sièges -> tissu uni"
+    }
+   ]
+  },
+  "rm3e36_sign_1": {
+   "size": [
+    2048,
+    2048
+   ],
+   "ops": [
+    {
+     "op": "fill_rect",
+     "rect": [
+      492,
+      760,
+      548,
+      978
+     ],
+     "color": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "why": "autocollant ///M Performance (gauche)"
+    },
+    {
+     "op": "fill_rect",
+     "rect": [
+      1502,
+      770,
+      1558,
+      990
+     ],
+     "color": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "why": "autocollant ///M Performance (droite)"
+    }
+   ]
+  }
+ },
+ "geometry": [
+  {
+   "op": "remove_islands",
+   "part": "misc_e__mesh_4",
+   "box": [
+    [
+     -0.396,
+     0.724,
+     0.409
+    ],
+    [
+     -0.327,
+     0.745,
+     0.42
+    ]
+   ],
+   "why": "« M3 » modélisé (grappe 42)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "misc_e__mesh_4",
+   "box": [
+    [
+     0.327,
+     0.724,
+     0.409
+    ],
+    [
+     0.396,
+     0.745,
+     0.42
+    ]
+   ],
+   "why": "« M3 » modélisé (grappe 43)"
+  }
+ ]
+}

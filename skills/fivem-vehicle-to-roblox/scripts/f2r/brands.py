@@ -98,7 +98,7 @@ class BrandTable:
             # désignations sur deux mots (« Range Rover », « Type R »)
             two = norm(words[i] + (words[i + 1] if i + 1 < len(words) else ""))
             if i + 1 < len(words) and (two in models or two in labels):
-                out.append(models.get(two) or labels[two])
+                out.append(models[two] if two in models else labels[two])
                 i += 2
                 continue
             w = words[i]
@@ -125,7 +125,8 @@ class BrandTable:
                 else:
                     out.append("???")
                     provisional = True
-        return " ".join(out).strip(), provisional
+        # traduction vide = mot retiré (code de châssis « E36 » dont le décalage donnerait un vrai code, F36)
+        return " ".join(w for w in out if w).strip(), provisional
 
 
 def _shift(letters: str) -> str:

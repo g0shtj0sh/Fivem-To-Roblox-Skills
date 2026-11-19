@@ -6,8 +6,22 @@
    "mod_class": "VC_MUSCLE",
    "real_model": "BMW M4 Competition (G82, 2021+)",
    "body": "coupé 2 portes (la berline 4 portes est la M3 G80)",
-   "sources": ["https://en.wikipedia.org/wiki/BMW_M4", "https://www.bmw-m.com/en/all-models/overview-m-and-m-performance/bmw-m4-coupe/2024/bmw-m4-coupe-and-m4-competition-coupe.html"],
+   "sources": [
+    "https://en.wikipedia.org/wiki/BMW_M4",
+    "https://www.bmw-m.com/en/all-models/overview-m-and-m-performance/bmw-m4-coupe/2024/bmw-m4-coupe-and-m4-competition-coupe.html"
+   ],
    "checked": "2026-11-15"
+  },
+  "rm3e36": {
+   "class": "VC_COUPE",
+   "mod_class": "VC_SPORT",
+   "real_model": "BMW M3 (E36) 3.2 coupé, kit large Rocket Bunny (1996-1999)",
+   "body": "coupé 2 portes (le mod n'a que les portières avant ; l'E36 M3 existait aussi en berline et cabriolet)",
+   "sources": [
+    "https://ultimatespecs.com/car-specs/BMW/164/BMW-E36-3-Series-Coupe-M3-Evo.html",
+    "https://www.bmwgroup-classic.com/en/models/bmw-classics/product-description-page.ad-1519-1.bmw-m3-e36-321-hp.html"
+   ],
+   "checked": "2026-11-19"
   }
  }
 }

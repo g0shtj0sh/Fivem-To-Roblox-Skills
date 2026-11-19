@@ -31,7 +31,7 @@ from PIL import Image, ImageDraw
 
 from .util import Report
 
-BADGE_TEX = re.compile(r"badge|logo|emblem|emblm|marque|brand", re.I)
+BADGE_TEX = re.compile(r"badg|logo|emblem|emblm|marque|brand", re.I)  # badg : badge, badges, badging
 PLAIN_STD = 0.04        # écart-type des couleurs sous l'îlot en dessous duquel il est « uni »
 EMBLEM_MIN_M = 0.03     # 3 cm : en dessous, c'est un détail de lettrage
 EMBLEM_MAX_M = 0.40

@@ -110,11 +110,18 @@ def extract_archive(archive: Path, dest: Path, report: Report, depth: int = 0) -
                     shutil.copyfileobj(src, dst)
     elif name.endswith((".rar", ".7z")):
         seven = shutil.which("7z") or shutil.which("7za")
+        unrar = (shutil.which("unrar") or shutil.which("rar")) if name.endswith(".rar") else None
         if seven:
             subprocess.run([seven, "x", "-y", f"-o{dest}", str(archive)],
                            stdout=subprocess.DEVNULL, check=False)
+        elif unrar:
+            # unrar / rar (RARLAB) : « x » garde les dossiers, -o+ écrase, -inul silencieux. Les chemins
+            # absolus et « .. » sont refusés par unrar lui-même.
+            dest.mkdir(parents=True, exist_ok=True)
+            subprocess.run([unrar, "x", "-o+", "-inul", str(archive), str(dest) + "/"],
+                           stdout=subprocess.DEVNULL, check=False)
         else:
-            report.warn(f"Archive {archive.name} : format .rar/.7z non géré sans 7-Zip. "
+            report.warn(f"Archive {archive.name} : format .rar/.7z non géré sans 7-Zip (ni unrar pour un .rar). "
                         "Ré-emballez en .zip ou installez 7z puis relancez.")
     else:
         raise ValueError(f"Format d'archive inconnu : {archive}")

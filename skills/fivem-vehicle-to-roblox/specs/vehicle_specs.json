@@ -9,7 +9,10 @@
    "PowerPs": 510,
    "PowerRpm": 6250,
    "TorqueNm": 650,
-   "TorqueRpm": [2750, 5500],
+   "TorqueRpm": [
+    2750,
+    5500
+   ],
    "RedlineRpm": 7200,
    "ZeroTo100S": 3.5,
    "TopSpeedKmh": 250,
@@ -30,6 +33,37 @@
     "https://g80.bimmerpost.com/forums/showthread.php?t=1759748"
    ],
    "checked": "2026-11-16"
+  },
+  "rm3e36": {
+   "real_model": "BMW M3 (E36) 3.2 coupé, version européenne (S50B32, 1996-1999)",
+   "Drivetrain": "RWD",
+   "Engine": "S50B32 6 cylindres en ligne 3,2 l atmosphérique, double VANOS",
+   "PowerKw": 236,
+   "PowerPs": 321,
+   "PowerRpm": 7400,
+   "TorqueNm": 350,
+   "TorqueRpm": 3250,
+   "RedlineRpm": 7600,
+   "ZeroTo100S": 5.5,
+   "TopSpeedKmh": 250,
+   "TopSpeedLimited": true,
+   "Gears": 6,
+   "Transmission": "manuelle 6 rapports (SMG séquentielle en option dès 1997)",
+   "ShiftTimeS": 0.5,
+   "notes": [
+    "Le mod est en propulsion (fDriveBiasFront 0) comme la vraie voiture.",
+    "Vitesse de pointe : 250 km/h bridée électroniquement ; aucune source trouvée pour la vitesse débridée, donc pas de TopSpeedUnlimitedKmh : 250 km/h sans limiteur séparé.",
+    "Version 3.2 européenne retenue (321 ch) : les M3 E36 américaines (S52, 240 ch) sont une autre motorisation.",
+    "ShiftTimeS est une ESTIMATION (boîte manuelle, 0,4 à 0,6 s) : aucune donnée constructeur.",
+    "Le kit Rocket Bunny ne change pas le moteur : fiche de la M3 de série."
+   ],
+   "sources": [
+    "https://ultimatespecs.com/car-specs/BMW/164/BMW-E36-3-Series-Coupe-M3-Evo.html",
+    "https://www.bmwgroup-classic.com/en/models/bmw-classics/product-description-page.ad-1519-1.bmw-m3-e36-321-hp.html",
+    "https://supercarnostalgia.com/blog/bmw-e36-m3-evolution",
+    "https://en.wikipedia.org/wiki/BMW_S50"
+   ],
+   "checked": "2026-11-19"
   }
  }
 }

@@ -1064,7 +1064,7 @@ def main(argv=None) -> int:
                 return 2
             report.warn(msg)
         else:
-            ok = run_extractor(cmd, root, work / "xml", report)
+            ok = run_extractor(cmd, inventory.extract_source(root, work / "extract_src"), work / "xml", report)
             inv2 = inventory.scan(work / "xml", include_binaries=False)
             for attr in ("yft_xml", "ydr_xml", "ytd_xml", "dds", "images"):
                 getattr(inv, attr).update(getattr(inv2, attr))

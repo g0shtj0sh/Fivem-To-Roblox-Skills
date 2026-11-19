@@ -63,7 +63,10 @@
     "bmw"
    ],
    "models": {
-    "M4": "N4"
+    "M4": "N4",
+    "M3": "N3",
+    "E36": "",
+    "Rocket Bunny": "Widebody"
    },
    "labels": {
     "M": "BV"
