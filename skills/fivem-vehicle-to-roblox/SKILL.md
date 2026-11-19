@@ -474,6 +474,39 @@ Banc rejouable (jeu brolver-rp) : `scripts/vehicles/crash_pole_bench.lua`. Limit
 déformation). Pied au plancher à 92 km/h : 2 essais sur 2 plaqués au poteau avec ce runtime, mais un essai antérieur
 (débris isolés par un correctif provisoire) avait glissé autour du poteau et l'avait franchi : cas non exclu.
 
+**Chocs, suite (2026-11-19, banc `scripts/vehicles/crash_bench.lua` du jeu brolver-rp : murs, voitures garées,
+2 joueurs, piétons)** :
+- **Voiture garée** : ancrée après `ParkAnchorDelay` s, elle était un mur indestructible (m422 garée percutée de côté à
+  51 km/h : 0,00 m). `VehicleAccess` la **réveille** quand un véhicule conduit arrive (rayons + vitesse × `WakeLead` +
+  `WakeMargin`) : désancrée, physique confiée au client du conducteur qui arrive (les deux simulés ensemble), rendue
+  au serveur après `WakeHold` s, réancrée à l'arrêt comme avant. Ses cylindres de roues (solides seulement sans
+  conducteur) ont l'adhérence du caoutchouc (`ParkedTyreFriction` 0,9). Mesuré : poussée à 4,3 m/s, 0,5 m.
+- **Deux voitures conduites** : chacune n'est chez l'autre qu'une copie réseau, traitée comme une masse infinie qui
+  avance : face à face à 41 + 41 km/h, toutes deux repartaient en arrière à 35-42 km/h. `VehicleDrive` (pairImpact)
+  remplace, au choc, la vitesse dans l'axe des deux véhicules par celle d'un choc entre deux masses (quantité de
+  mouvement, `PairElasticity`), avec la vitesse de l'autre au pas précédent ; « l'autre » = `DriverUserId` d'un autre
+  joueur (`ReceiveAge` ne distingue pas). Mesuré : deux 355e → 0 km/h toutes les deux ; 355e contre m422 (1,9 × plus
+  lourde) → 15 km/h en arrière et 10 km/h en avant (théorie 12,8). Reste un à-coup d'un pas avant la correction.
+- **Piéton** : poussé DEBOUT devant la voiture comme par un chasse-neige (51 m à 40 km/h, aucun dégât). Le client du
+  conducteur le repère dans l'emprise de la voiture (`PedMinSpeed`), le serveur valide (« HitPed » : conducteur,
+  distance, vitesse plafonnée à celle qu'il voit, 1 coup par seconde et par victime), déclenche le BindableEvent
+  `FiveMVehicles.PedestrianHit` (victime, joueur, véhicule, conducteur, km/h, élan) pour le jeu (blessures…), puis le
+  renverse : `PlatformStand` + élan ≈ 0,9 × vitesse de la voiture vers l'avant et un peu vers le haut, relevé après
+  1 à 3,5 s (« Knockdown » chez la victime, sur le serveur pour un PNJ). Désactivable : attribut
+  `PedestrianKnockdown = false` ; immunité par joueur : attribut nommé par `KnockdownImmunityAttribute`.
+  Chez le conducteur, le piéton est une copie de masse infinie (la voiture s'y arrêtait net, ou le poussait selon
+  qui simulait le PNJ) : dès qu'il est repéré (anticipation = vitesse × (PedEvery + 0,03 s)), ses pièces ne touchent
+  plus cette voiture chez ce client ; le serveur pose le même groupe à tous pendant qu'il est à terre. Mesuré (Play,
+  40 km/h) : joueur 2 à pied renversé (élan 10,7 m/s), au sol 1,9 s, relevé, voiture sans à-coup ; PNJ : idem, mais
+  2 passages sur 4 la voiture roule sur le corps à terre (les rayons de suspension le voient comme une bosse : +0,3 à
+  0,5 m, −8 à −20 km/h). Projection courte (3,8 m à 40 km/h ; réel ≈ 5-10 m) : réglable dans « HitPed ».
+- **Joueur fantôme** : un véhicule supprimé pendant qu'on en descendait faisait échouer `ExitCFrame`, et le joueur
+  restait À JAMAIS dans le groupe des occupants, traversé par tous les véhicules. `EjectOccupant` rend désormais le
+  groupe dans tous les cas.
+- Murs : de face 51 et 97 km/h → arrêt net, recul ≤ 5 km/h, aucune hausse ; frottement à 15° et 80 km/h → garde
+  69 km/h le long du mur, roulis 13° passager. Un choc à 60° du mur (mal nommé « 30° » d'abord) arrête la voiture :
+  attendu.
+
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
 Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) : relancer le groupe.

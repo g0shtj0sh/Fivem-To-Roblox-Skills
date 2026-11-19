@@ -146,6 +146,197 @@ function Drive.Get()
 	return Drive.Active
 end
 
+-- ------------------------------------------------------------------ choc contre le véhicule d'un autre joueur
+-- Chaque conducteur simule SA voiture ; celle d'un autre joueur n'est chez lui qu'une copie reçue par le réseau, que
+-- le moteur physique traite comme un objet de masse infinie qui avance. Mesuré (Play 2 joueurs, 2026-11-19, 355e
+-- contre m422, 41 + 41 km/h de face) : chacune repartait EN ARRIÈRE à 35-38 km/h, comme une balle sur un mur qui
+-- avance. Correction : au pas du choc, la vitesse dans l'axe des deux véhicules est remplacée par celle d'un choc
+-- entre deux masses (quantité de mouvement conservée, rebond PairElasticity), calculée avec la vitesse de l'autre
+-- AVANT le choc ; les deux clients font le même calcul et trouvent le même résultat. Un véhicule dont ce client
+-- possède aussi la physique (voiture garée réveillée, VehicleAccess) n'est pas concerné : là, la physique est juste.
+Drive.PairImpactDv = 2 -- m/s de variation horizontale en un pas : seuil de choc
+Drive.PairElasticity = 0.05
+Drive.PairWindow = 0.35 -- s : la copie de l'autre continue d'avancer le temps d'un aller-retour réseau ; corrigé pendant
+local CollectionService = game:GetService("CollectionService")
+local XZ = Vector3.new(1, 0, 1)
+
+local radiusCache = setmetatable({}, { __mode = "k" })
+-- demi-diagonale horizontale de la boîte du véhicule (m), lue dans sa VehicleConfig
+local function radiusOf(model)
+	local r = radiusCache[model]
+	if r then
+		return r
+	end
+	r = 3
+	local m = model:FindFirstChild("VehicleConfig")
+	local ok, cfg = pcall(function()
+		return m and require(m)
+	end)
+	local b = ok and cfg and cfg.Bounds
+	if b then
+		local dx = math.max(math.abs(b.Min[1]), math.abs(b.Max[1]))
+		local dz = math.max(math.abs(b.Min[3]), math.abs(b.Max[3]))
+		r = math.sqrt(dx * dx + dz * dz)
+	end
+	radiusCache[model] = r
+	return r
+end
+
+local function otherVehicleInContact(car, root, spm)
+	local best, bestD = nil, math.huge
+	local myR = radiusOf(car) * spm
+	for _, other in ipairs(CollectionService:GetTagged("FiveMVehicle")) do
+		local oroot = other ~= car and other.PrimaryPart
+		-- conduite par un AUTRE joueur (DriverUserId posé par le serveur) : chez nous, une copie réseau. Une voiture
+		-- garée réveillée à notre approche est simulée par nous (VehicleAccess) : pas concernée. (ReceiveAge ne les
+		-- distingue pas : 0 aussi pour la copie, mesuré 2026-11-19.)
+		local driverId = other ~= car and other:GetAttribute("DriverUserId")
+		local me = Players.LocalPlayer
+		if oroot and not oroot.Anchored and type(driverId) == "number" and driverId ~= 0 and me and driverId ~= me.UserId then
+			local d = ((oroot.Position - root.Position) * XZ).Magnitude
+			local reach = myR + radiusOf(other) * spm + 1.5 * spm
+			if d < reach and d < bestD then
+				best, bestD = other, d
+			end
+		end
+	end
+	return best
+end
+
+-- vitesse corrigée (monde, studs/s) ou nil
+local function pairImpact(a, root, vWorld, now)
+	local spm = a.spm
+	local pair = a.pair
+	if not pair then
+		if not a.prevVel or ((vWorld - a.prevVel) * XZ).Magnitude / spm < Drive.PairImpactDv then
+			return nil
+		end
+		local other = otherVehicleInContact(a.car, root, spm)
+		if not other then
+			return nil
+		end
+		local oroot = other.PrimaryPart
+		pair = {
+			root = oroot,
+			mB = oroot.AssemblyMass,
+			vB = a.prevOther and a.prevOther[other] or oroot.AssemblyLinearVelocity,
+			vA = a.prevVel,
+			untilT = now + Drive.PairWindow,
+		}
+		a.pair = pair
+	end
+	if now > pair.untilT or not pair.root.Parent then
+		a.pair = nil
+		return nil
+	end
+	local d = (root.Position - pair.root.Position) * XZ
+	if d.Magnitude < 1e-3 then
+		return nil
+	end
+	local n = d.Unit -- de l'autre véhicule vers le nôtre
+	local mA = root.AssemblyMass
+	local uA, uB = pair.vA:Dot(n), pair.vB:Dot(n)
+	if uA - uB >= 0 then
+		return nil -- ne se rapprochaient pas dans cet axe
+	end
+	local e = Drive.PairElasticity
+	local u = (mA * uA + pair.mB * uB - pair.mB * e * (uA - uB)) / (mA + pair.mB)
+	-- seule la composante dans l'axe du choc est remplacée ; ce qui est transversal et vertical reste à la physique
+	local cur = vWorld:Dot(n)
+	if math.abs(cur - u) < 0.05 * spm then
+		return nil
+	end
+	return vWorld + n * (u - cur)
+end
+
+-- vitesses des autres véhicules au pas précédent (avant un choc, la copie reçue n'a pas encore bougé)
+local function rememberOthers(a)
+	local t = {}
+	for _, other in ipairs(CollectionService:GetTagged("FiveMVehicle")) do
+		local oroot = other ~= a.car and other.PrimaryPart
+		if oroot then
+			t[other] = oroot.AssemblyLinearVelocity
+		end
+	end
+	a.prevOther = t
+end
+
+-- ------------------------------------------------------------------ piéton percuté
+-- Sans rien, la voiture poussait un piéton DEBOUT devant elle comme un chasse-neige (mesuré, Play 2 joueurs
+-- 2026-11-19 : joueur à pied percuté à 40 km/h, porté 51 m devant le pare-chocs, toujours debout, aucun dégât).
+-- Le client du conducteur repère un personnage vivant et debout dans l'avant (ou l'arrière) de sa voiture qui
+-- s'en rapproche vite ; le serveur valide (FiveMVehiclesServer, « HitPed ») et le fait renverser.
+Drive.PedMinSpeed = 2.5 -- m/s de rapprochement : en dessous, on le pousse doucement, sans le renverser
+Drive.PedEvery = 1 / 30 -- s entre deux recherches
+Drive.PedCooldown = 1.5 -- s par victime
+local pedParams = OverlapParams.new()
+pedParams.FilterType = Enum.RaycastFilterType.Exclude
+pedParams.RespectCanCollide = false
+
+local function findPedestrians(a, root, cf, vWorld, now)
+	if now - (a.pedAt or 0) < Drive.PedEvery then
+		return
+	end
+	a.pedAt = now
+	local spm = a.spm
+	if (vWorld * XZ).Magnitude / spm < Drive.PedMinSpeed then
+		return
+	end
+	local b = a.cfg.Bounds
+	if not b then
+		return
+	end
+	local lo = Vector3.new(b.Min[1], b.Min[2], b.Min[3])
+	local hi = Vector3.new(b.Max[1], b.Max[2], b.Max[3])
+	-- anticipation : le piéton doit être repéré AVANT le contact (voir plus bas), à toute vitesse
+	local margin = 0.35 + (vWorld * XZ).Magnitude / spm * (Drive.PedEvery + 0.03)
+	local size = (hi - lo + Vector3.new(2 * margin, 0.6, 2 * margin)) * spm
+	local center = cf * CFrame.new((lo + hi) / 2 * spm + Vector3.new(0, 0.3 * spm, 0))
+	local me = Players.LocalPlayer
+	pedParams.FilterDescendantsInstances = { a.car, me and me.Character }
+	local seen = {}
+	for _, part in ipairs(Workspace:GetPartBoundsInBox(center, size, pedParams)) do
+		local model = part:FindFirstAncestorOfClass("Model")
+		local hum = model and model:FindFirstChildOfClass("Humanoid")
+		local hrp = hum and model:FindFirstChild("HumanoidRootPart")
+		if hrp and not seen[model] and hum.Health > 0 and not hum.SeatPart then
+			seen[model] = true
+			a.pedLast = a.pedLast or setmetatable({}, { __mode = "k" })
+			if now - (a.pedLast[model] or -math.huge) >= Drive.PedCooldown then
+				-- vitesse de rapprochement : vitesse de la voiture au point du piéton, moins la sienne, vers lui
+				local rel = root:GetVelocityAtPosition(hrp.Position) - hrp.AssemblyLinearVelocity
+				local toPed = (hrp.Position - root.Position) * XZ
+				local closing = toPed.Magnitude > 1e-3 and rel:Dot(toPed.Unit) / spm or 0
+				if closing >= Drive.PedMinSpeed then
+					a.pedLast[model] = now
+					a.pendingPeds = a.pendingPeds or {}
+					table.insert(a.pendingPeds, { model, vWorld })
+					-- Chez ce client, un piéton qu'il ne simule pas est une copie de masse infinie : la voiture s'y
+					-- arrêtait net comme sur un mur (PNJ à 40 km/h : 41 → 2 km/h en un pas, 2026-11-19), ou le poussait
+					-- quand Roblox nous en avait confié la physique. Un piéton (80 kg) ne freine presque pas une voiture :
+					-- ici, ses pièces ne touchent plus cette voiture ; le serveur le renverse (« HitPed ») et pose le même
+					-- groupe pour tous pendant qu'il est à terre.
+					local touched = {}
+					for _, d in ipairs(model:GetDescendants()) do
+						if d:IsA("BasePart") and d.CollisionGroup ~= "FiveMVehicleOccupant" then
+							touched[d] = d.CollisionGroup
+							d.CollisionGroup = "FiveMVehicleOccupant"
+						end
+					end
+					-- rendu après le renversement (≤ 3,5 s) ; le serveur, lui, rend le sien à la relève
+					task.delay(4, function()
+						for d, g in pairs(touched) do
+							if d.Parent and d.CollisionGroup == "FiveMVehicleOccupant" then
+								d.CollisionGroup = g
+							end
+						end
+					end)
+				end
+			end
+		end
+	end
+end
+
 local function step(a, dt)
 	local car, root, spm, sim = a.car, a.root, a.spm, a.sim
 	if not car.Parent or not root.Parent then
@@ -248,6 +439,15 @@ local function step(a, dt)
 	a.lastThrottle = inp.Throttle
 
 	local vWorld = root.AssemblyLinearVelocity
+	-- choc contre la voiture d'un autre joueur : vitesse corrigée (voir pairImpact) AVANT la mesure des dégâts, qui
+	-- comptait sinon le double (rebond sur une copie de masse infinie)
+	local fixed = pairImpact(a, root, vWorld, os.clock())
+	if fixed then
+		root.AssemblyLinearVelocity = fixed
+		vWorld = fixed
+	end
+	rememberOthers(a)
+	findPedestrians(a, root, cf, vWorld, os.clock())
 	-- choc : variation brutale de la vitesse horizontale en un pas (un freinage fort ≈ 0,2 m/s par pas) ; envoyée au
 	-- serveur (VehicleDamage.Apply), direction = du centre vers le point touché, dans le repère du véhicule
 	local wWorld = root.AssemblyAngularVelocity
@@ -411,6 +611,15 @@ function Drive.Start(car)
 			local remote = folder:FindFirstChild("VehicleEvent")
 			if remote then
 				remote:FireServer(car, "Impact", imp[1], imp[2], imp[3], imp[4])
+			end
+		end
+		-- piétons percutés (findPedestrians), envoyés hors de la boucle physique comme les chocs
+		local peds = a.pendingPeds
+		if peds then
+			a.pendingPeds = nil
+			local remote = folder:FindFirstChild("VehicleEvent")
+			for _, hit in ipairs(remote and peds or {}) do
+				remote:FireServer(car, "HitPed", hit[1], hit[2])
 			end
 		end
 	end))

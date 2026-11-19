@@ -210,6 +210,7 @@ local function unbindOccupantActions()
 	ContextActionService:UnbindAction("F2R_Recover")
 end
 
+local knockToken = nil -- renversement en cours (« Knockdown ») : le dernier reçu décide de la fin
 -- Descente : le serveur choisit où poser le personnage ; le client, qui possède sa physique, s'y place.
 remote.OnClientEvent:Connect(function(kind, cf, key, value)
 	if kind == "Resync" then
@@ -217,6 +218,30 @@ remote.OnClientEvent:Connect(function(kind, cf, key, value)
 		if typeof(cf) == "Instance" and type(key) == "string" then
 			cf:SetAttribute(key, value)
 		end
+		return
+	end
+	if kind == "Knockdown" then
+		-- renversé par une voiture (FiveMVehiclesServer, « HitPed ») : cf = élan (studs/s), key = durée (s). Le
+		-- personnage cesse de tenir debout (PlatformStand), part avec l'élan, retombe, puis se relève.
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hum or not hrp or hum.Health <= 0 or hum.SeatPart or typeof(cf) ~= "Vector3" then
+			return
+		end
+		local seconds = math.clamp(tonumber(key) or 2, 0.5, 5)
+		local token = {}
+		knockToken = token
+		hum.PlatformStand = true
+		hrp.AssemblyLinearVelocity = cf
+		hrp.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 6
+		task.delay(seconds, function()
+			if knockToken == token and hum.Parent and hum.Health > 0 then
+				knockToken = nil
+				hum.PlatformStand = false
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+		end)
 		return
 	end
 	if kind ~= "PlaceAt" or typeof(cf) ~= "CFrame" then

@@ -17,6 +17,15 @@ local SeatFit = require(folder:WaitForChild("VehicleSeatFit"))
 local damageModule = folder:FindFirstChild("VehicleDamage")
 local Damage = damageModule and require(damageModule) or nil
 local remote = folder:WaitForChild("VehicleEvent")
+-- (victime : Model, joueur victime ou nil, véhicule, conducteur, vitesse km/h, élan donné en studs/s) — à écouter
+-- par le jeu (blessures, amendes…) ; serveur seulement
+local pedestrianHit = folder:FindFirstChild("PedestrianHit")
+if not pedestrianHit then
+	pedestrianHit = Instance.new("BindableEvent")
+	pedestrianHit.Name = "PedestrianHit"
+	pedestrianHit.Parent = folder
+end
+local pedHits = setmetatable({}, { __mode = "k" })
 local telemetry = folder:WaitForChild("VehicleTelemetry")
 
 local TAG = "FiveMVehicle"
@@ -64,6 +73,7 @@ local RATES = {
 	set = { 8, 12 }, -- phares, clignotants, klaxon, sirène, moteur
 	window = { 4, 6 },
 	impact = { 6, 8 },
+	ped = { 6, 10 }, -- piétons percutés (VehicleDrive, « HitPed »)
 	fit = { 2, 3 },
 }
 local buckets = {}
@@ -237,6 +247,85 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 			return
 		end
 		Damage.Apply(model, Vector3.new(dx, dy, dz), strength)
+	elseif action == "HitPed" then
+		-- piéton percuté, repéré par le client du conducteur (VehicleDrive.findPedestrians). Le serveur vérifie le
+		-- conducteur, la distance (positions vues par le serveur) et plafonne la vitesse à celle qu'il voit ;
+		-- puis il déclenche FiveMVehicles.PedestrianHit (le jeu peut y ajouter blessures, sanctions…) et, sauf
+		-- attribut PedestrianKnockdown = false sur ReplicatedStorage.FiveMVehicles, renverse la victime.
+		local victim, vCar = key, value
+		if not isDriver(player, model) or not allowed(player, "ped") then
+			return
+		end
+		if typeof(victim) ~= "Instance" or not victim:IsA("Model") or typeof(vCar) ~= "Vector3" then
+			return
+		end
+		if vCar.X ~= vCar.X or vCar.Y ~= vCar.Y or vCar.Z ~= vCar.Z then
+			return
+		end
+		local hum = victim:FindFirstChildOfClass("Humanoid")
+		local hrp = victim:FindFirstChild("HumanoidRootPart")
+		local root = model.PrimaryPart
+		if not hum or not hrp or not root or hum.Health <= 0 or hum.SeatPart then
+			return
+		end
+		local cfg = require(model.VehicleConfig)
+		local spm = cfg.StudsPerMeter or 3.571
+		local b = cfg.Bounds or { Min = { -1, 0, -2.3 }, Max = { 1, 1, 2.3 } }
+		local radius = math.max(math.abs(b.Min[1]), b.Max[1], math.abs(b.Min[3]), b.Max[3])
+		if (hrp.Position - root.Position).Magnitude > (radius + 4) * spm then
+			return -- trop loin pour le serveur (latence comprise)
+		end
+		local seen = root.AssemblyLinearVelocity.Magnitude / spm
+		local speed = math.min(vCar.Magnitude / spm, seen + 5) -- m/s
+		if speed < 2.5 then
+			return
+		end
+		pedHits[victim] = pedHits[victim] or 0
+		if os.clock() - pedHits[victim] < 1 then
+			return
+		end
+		pedHits[victim] = os.clock()
+		local flat = vCar * Vector3.new(1, 0, 1)
+		local dir = flat.Magnitude > 1e-3 and flat.Unit or ((hrp.Position - root.Position) * Vector3.new(1, 0, 1)).Unit
+		-- projeté à peu près à la vitesse de la voiture, un peu vers le haut (choc sur le pare-chocs puis le capot)
+		local knock = (dir * speed * 0.9 + Vector3.new(0, 1.2 + 0.12 * speed, 0)) * spm
+		local seconds = math.clamp(1 + 0.08 * speed, 1.2, 3.5)
+		local victimPlayer = Players:GetPlayerFromCharacter(victim)
+		pedestrianHit:Fire(victim, victimPlayer, model, player, speed * 3.6, knock)
+		if folder:GetAttribute("PedestrianKnockdown") == false then
+			return
+		end
+		local immunity = folder:GetAttribute("KnockdownImmunityAttribute")
+		if victimPlayer and type(immunity) == "string" and victimPlayer:GetAttribute(immunity) == true then
+			return
+		end
+		-- renversé, il ne touche plus les véhicules jusqu'à se relever : sans ça la voiture le rattrapait et le
+		-- POUSSAIT au sol sur 8 m avant de lui passer dessus (PNJ, 40 km/h, mesuré 2026-11-19). Groupe posé par le
+		-- serveur : identique chez tous les clients.
+		task.delay(0.12, function()
+			if victim.Parent and hum.Health > 0 then
+				Access.SetOccupantGroup(victim, true)
+			end
+		end)
+		task.delay(seconds, function()
+			if victim.Parent and not hum.SeatPart then
+				Access.SetOccupantGroup(victim, false)
+			end
+		end)
+		if victimPlayer then
+			remote:FireClient(victimPlayer, "Knockdown", knock, seconds)
+		else
+			-- PNJ (physique du serveur) : renversé ici
+			hum.PlatformStand = true
+			hrp.AssemblyLinearVelocity = knock
+			hrp.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 6
+			task.delay(seconds, function()
+				if hum.Parent and hum.Health > 0 then
+					hum.PlatformStand = false
+					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+			end)
+		end
 	elseif action == "Fit" then
 		-- corps de l'occupant adapté à l'habitacle (VehicleSeatFit) ; validé et borné côté serveur
 		if allowed(player, "fit") then

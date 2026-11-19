@@ -54,6 +54,16 @@ Access.OccupantGrace = Access.DoorOpenTime + Access.DoorCloseDelay + 0.6
 Access.FlipUp = 0.5 -- UpVector.Y en dessous duquel le véhicule est « retourné ou sur le côté » (60°)
 Access.FlipDelay = 2
 Access.StillSpeed = 0.4 -- studs/s : « quasi immobile »
+-- Réveil d'un véhicule garé (ancré) à l'approche d'un véhicule conduit : sans lui, une voiture garée est un mur
+-- indestructible (355e dans une m422 garée, de côté à 51 km/h : m422 déplacée de 0,00 m, 355e arrêtée net ; Play
+-- 2026-11-19). Le véhicule garé est désancré et sa physique confiée au client du conducteur qui arrive : les deux
+-- assemblages sont alors simulés sur la même machine et le choc le pousse. Il se réancre comme avant, à l'arrêt
+-- depuis ParkAnchorDelay s.
+Access.WakeLead = 0.7 -- s : distance de réveil = rayons des deux véhicules + vitesse × WakeLead + WakeMargin
+Access.WakeMargin = 2 -- m
+Access.WakeMinSpeed = 1.5 -- m/s : un véhicule plus lent ne réveille rien
+Access.WakeHold = 2 -- s : propriétaire gardé au moins ce temps (pas de bascule d'un conducteur à l'autre à chaque pas)
+Access.ParkedTyreFriction = 0.9 -- cylindres de roues (solides seulement sans conducteur) : caoutchouc, pas plastique
 Access.StillSpin = 0.3 -- rad/s
 Access.VoidLookahead = 0.5 -- s : position prévue (vitesse de chute) comparée au seuil de destruction
 Access.SafeEvery = 0.5 -- s entre deux enregistrements de la position sûre
@@ -361,6 +371,12 @@ end
 
 function Access.EjectOccupant(model, seat, hum, char)
 	placedAt[char] = os.clock()
+	-- véhicule supprimé avec son occupant (menu, nettoyage) : plus de caisse pour calculer la sortie ; le joueur reste
+	-- où il est, rendu à son groupe de collision (avant : erreur « attempt to index nil with 'CFrame' », 2026-11-19)
+	if not model.Parent or not model.PrimaryPart or not seat.Parent then
+		setOccupantGroup(char, false)
+		return
+	end
 	-- taille d'origine rendue (VehicleSeatFit) avant de calculer où le poser
 	local okFit, SeatFit = pcall(require, script.Parent:FindFirstChild("VehicleSeatFit"))
 	if okFit and SeatFit and SeatFit.Restore(hum) then
@@ -374,7 +390,14 @@ function Access.EjectOccupant(model, seat, hum, char)
 	if hum.Sit then
 		hum.Sit = false
 	end
-	local cf, where = Access.ExitCFrame(model, seat, hum, char)
+	-- le véhicule a pu disparaître pendant les attentes ci-dessus (portière, taille rendue) : sans cette garde,
+	-- ExitCFrame échouait et le joueur restait À JAMAIS dans le groupe des occupants, traversé par tous les véhicules
+	-- (mesuré 2026-11-19 : voiture passée au travers d'un joueur à pied à 40 km/h)
+	local okExit, cf, where = pcall(Access.ExitCFrame, model, seat, hum, char)
+	if not okExit or not cf then
+		setOccupantGroup(char, false)
+		return
+	end
 	-- Le personnage appartient physiquement à son client : une téléportation faite par le serveur
 	-- seul est écrasée par le client qui le croit encore assis (mesuré). On demande donc au client
 	-- de se poser lui-même (VehicleEvent « PlaceAt »), et on pose aussi côté serveur en secours.
@@ -528,8 +551,70 @@ function Access.Unwatch(model)
 	watch[model] = nil
 end
 
+local function radiusOf(model)
+	local cfg = config(model)
+	local b = cfg.Bounds
+	if not b then
+		return 2.5
+	end
+	local dx = math.max(math.abs(b.Min[1]), math.abs(b.Max[1]))
+	local dz = math.max(math.abs(b.Min[3]), math.abs(b.Max[3]))
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- Véhicules conduits qui roulent : { root, player, speed (m/s), radius (m), spm }
+local function movers()
+	local out = {}
+	for model in pairs(watch) do
+		local root = model.PrimaryPart
+		local player = root and not root.Anchored and driverOf(model)
+		if player then
+			local spm = config(model).StudsPerMeter or 3.571
+			local speed = root.AssemblyLinearVelocity.Magnitude / spm
+			if speed >= Access.WakeMinSpeed then
+				table.insert(out, { model = model, root = root, player = player, speed = speed, radius = radiusOf(model), spm = spm })
+			end
+		end
+	end
+	return out
+end
+
+-- Véhicule sans conducteur : réveillé (désancré, physique au conducteur qui arrive) si un véhicule conduit va le toucher.
+local function wakeIfApproached(model, root, st, list, now)
+	local spm = config(model).StudsPerMeter or 3.571
+	local best, bestGap = nil, math.huge
+	for _, m in ipairs(list) do
+		if m.model ~= model then
+			local d = (m.root.Position - root.Position).Magnitude / spm
+			local reach = radiusOf(model) + m.radius + m.speed * Access.WakeLead + Access.WakeMargin
+			local gap = d - reach
+			if gap < 0 and gap < bestGap then
+				best, bestGap = m, gap
+			end
+		end
+	end
+	if not best then
+		return false
+	end
+	if root.Anchored then
+		root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+		root.Anchored = false
+		model:SetAttribute("Parked", false)
+	end
+	if st.wakeOwner ~= best.player and now >= (st.wakeUntil or 0) then
+		st.wakeOwner = best.player
+		pcall(function()
+			root:SetNetworkOwner(best.player)
+		end)
+	end
+	st.wakeUntil = now + Access.WakeHold
+	st.stillSince = nil
+	return true
+end
+
 function Access.Step()
 	local now = os.clock()
+	local list = movers()
 	for model, st in pairs(watch) do
 		local root = model.PrimaryPart
 		if not model.Parent or not root then
@@ -558,6 +643,19 @@ function Access.Step()
 			st.flipSince = nil
 			if model:GetAttribute("Flipped") == true then
 				model:SetAttribute("Flipped", false)
+			end
+		end
+		-- garé ou sans conducteur : réveillé si un véhicule conduit arrive dessus (Access.WakeLead)
+		if not hasDriver and #list > 0 and wakeIfApproached(model, root, st, list, now) then
+			continue
+		end
+		-- réveil fini : la physique revient au serveur
+		if not hasDriver and st.wakeOwner and now >= (st.wakeUntil or 0) then
+			st.wakeOwner = nil
+			if not root.Anchored then
+				pcall(function()
+					root:SetNetworkOwner(nil)
+				end)
 			end
 		end
 		-- stationnement : sans conducteur et à l'arrêt depuis ParkAnchorDelay s -> ancré
@@ -710,8 +808,10 @@ function Access.TagCollision(model)
 			p.CollisionGroup = Access.VehicleGroup
 			-- choc sans rebond (Access.CrashElasticity) ; densité et frottement inchangés
 			local cur = p.CurrentPhysicalProperties
-			p.CustomPhysicalProperties = PhysicalProperties.new(cur.Density, cur.Friction, Access.CrashElasticity,
-				cur.FrictionWeight, Access.CrashElasticityWeight)
+			local tyre = p:GetAttribute("Kind") == "collision_wheel"
+			p.CustomPhysicalProperties = PhysicalProperties.new(cur.Density,
+				tyre and Access.ParkedTyreFriction or cur.Friction, Access.CrashElasticity,
+				tyre and Access.CrashElasticityWeight or cur.FrictionWeight, Access.CrashElasticityWeight)
 		end
 	end
 end
