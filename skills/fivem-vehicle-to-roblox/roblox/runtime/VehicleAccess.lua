@@ -339,8 +339,9 @@ function Access.Enter(player, model, seatName, prompt)
 	end
 	openDoorBriefly(model, seat:GetAttribute("Door"))
 	task.wait(Access.DoorOpenTime)
-	-- l'état a pu changer pendant l'ouverture
-	ok, why = Access.CanEnter(player, model, seat)
+	-- l'état a pu changer pendant l'ouverture ; personnage et humanoïde relus (réapparu entre-temps : l'ancien était
+	-- assis à sa place ; audit 2026-11-19)
+	ok, why, hum, char = Access.CanEnter(player, model, seat)
 	if not ok then
 		return false, why
 	end
@@ -581,6 +582,11 @@ end
 
 -- Véhicule sans conducteur : réveillé (désancré, physique au conducteur qui arrive) si un véhicule conduit va le toucher.
 local function wakeIfApproached(model, root, st, list, now)
+	-- véhicule gelé par un menu (SetFrozen : vitrine, concession) : jamais réveillé, comme OnDriverChanged
+	-- (désancré et poussé avant ; audit 2026-11-19)
+	if model:GetAttribute("Frozen") == true then
+		return false
+	end
 	local spm = config(model).StudsPerMeter or 3.571
 	local best, bestGap = nil, math.huge
 	for _, m in ipairs(list) do
@@ -612,62 +618,73 @@ local function wakeIfApproached(model, root, st, list, now)
 	return true
 end
 
+-- Un véhicule : stationnement, retourné, réveil, vide. Séparé et protégé (pcall) : une erreur sur un véhicule
+-- (VehicleConfig en erreur…) arrêtait le tick pour tous les suivants (audit 2026-11-19).
+local function stepOne(model, st, list, now)
+	local root = model.PrimaryPart
+	if not model.Parent or not root then
+		watch[model] = nil
+		return
+	end
+	if not root.Anchored and inVoid(model, root) then
+		Access.RecoverFromVoid(model)
+		return
+	end
+	trackSafe(model, root, st, now)
+	local driverSeat = model:FindFirstChild("DriverSeat", true)
+	local hasDriver = driverSeat and driverSeat.Occupant ~= nil
+	if hasDriver then
+		Access.CheckPlausibility(model)
+	end
+	local still = root.Anchored
+		or (root.AssemblyLinearVelocity.Magnitude < Access.StillSpeed and root.AssemblyAngularVelocity.Magnitude < Access.StillSpin)
+	-- retourné / sur le côté, quasi immobile, depuis FlipDelay s
+	if Access.IsUpsideDown(model) and (still or root.AssemblyLinearVelocity.Magnitude < 1.5) then
+		st.flipSince = st.flipSince or now
+		if now - st.flipSince >= Access.FlipDelay and model:GetAttribute("Flipped") ~= true then
+			model:SetAttribute("Flipped", true)
+		end
+	else
+		st.flipSince = nil
+		if model:GetAttribute("Flipped") == true then
+			model:SetAttribute("Flipped", false)
+		end
+	end
+	-- garé ou sans conducteur : réveillé si un véhicule conduit arrive dessus (Access.WakeLead)
+	if not hasDriver and #list > 0 and wakeIfApproached(model, root, st, list, now) then
+		return
+	end
+	-- réveil fini : la physique revient au serveur
+	if not hasDriver and st.wakeOwner and now >= (st.wakeUntil or 0) then
+		st.wakeOwner = nil
+		if not root.Anchored then
+			pcall(function()
+				root:SetNetworkOwner(nil)
+			end)
+		end
+	end
+	-- stationnement : sans conducteur et à l'arrêt depuis ParkAnchorDelay s -> ancré
+	if not root.Anchored and not hasDriver and still then
+		st.stillSince = st.stillSince or now
+		if now - st.stillSince >= (model:GetAttribute("ParkAnchorDelay") or 5) then
+			root.Anchored = true
+			model:SetAttribute("Parked", true)
+			st.stillSince = nil
+		end
+	else
+		st.stillSince = nil
+	end
+end
+
+local stepWarned = setmetatable({}, { __mode = "k" })
 function Access.Step()
 	local now = os.clock()
 	local list = movers()
 	for model, st in pairs(watch) do
-		local root = model.PrimaryPart
-		if not model.Parent or not root then
-			watch[model] = nil
-			continue
-		end
-		if not root.Anchored and inVoid(model, root) then
-			Access.RecoverFromVoid(model)
-			continue
-		end
-		trackSafe(model, root, st, now)
-		local driverSeat = model:FindFirstChild("DriverSeat", true)
-		local hasDriver = driverSeat and driverSeat.Occupant ~= nil
-		if hasDriver then
-			Access.CheckPlausibility(model)
-		end
-		local still = root.Anchored
-			or (root.AssemblyLinearVelocity.Magnitude < Access.StillSpeed and root.AssemblyAngularVelocity.Magnitude < Access.StillSpin)
-		-- retourné / sur le côté, quasi immobile, depuis FlipDelay s
-		if Access.IsUpsideDown(model) and (still or root.AssemblyLinearVelocity.Magnitude < 1.5) then
-			st.flipSince = st.flipSince or now
-			if now - st.flipSince >= Access.FlipDelay and model:GetAttribute("Flipped") ~= true then
-				model:SetAttribute("Flipped", true)
-			end
-		else
-			st.flipSince = nil
-			if model:GetAttribute("Flipped") == true then
-				model:SetAttribute("Flipped", false)
-			end
-		end
-		-- garé ou sans conducteur : réveillé si un véhicule conduit arrive dessus (Access.WakeLead)
-		if not hasDriver and #list > 0 and wakeIfApproached(model, root, st, list, now) then
-			continue
-		end
-		-- réveil fini : la physique revient au serveur
-		if not hasDriver and st.wakeOwner and now >= (st.wakeUntil or 0) then
-			st.wakeOwner = nil
-			if not root.Anchored then
-				pcall(function()
-					root:SetNetworkOwner(nil)
-				end)
-			end
-		end
-		-- stationnement : sans conducteur et à l'arrêt depuis ParkAnchorDelay s -> ancré
-		if not root.Anchored and not hasDriver and still then
-			st.stillSince = st.stillSince or now
-			if now - st.stillSince >= (model:GetAttribute("ParkAnchorDelay") or 5) then
-				root.Anchored = true
-				model:SetAttribute("Parked", true)
-				st.stillSince = nil
-			end
-		else
-			st.stillSince = nil
+		local ok, err = pcall(stepOne, model, st, list, now)
+		if not ok and not stepWarned[model] then
+			stepWarned[model] = true -- une fois par véhicule (Step tourne à chaque image)
+			warn("[VehicleAccess] " .. model:GetFullName() .. " : " .. tostring(err))
 		end
 	end
 end
@@ -711,7 +728,7 @@ function Access.OnDriverChanged(model, player)
 		pcall(function()
 			root:SetNetworkOwner(player)
 		end)
-		plausibility[model] = { pos = root.Position, t = os.clock(), player = player }
+		plausibility[model] = { pos = root.Position, t = os.clock(), player = player, cf = root.CFrame } -- cf : une infraction au 1er contrôle remet ici (audit 2026-11-19)
 	else
 		setWheelColliders(model, true)
 		plausibility[model] = nil

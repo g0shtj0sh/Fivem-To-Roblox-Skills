@@ -649,13 +649,17 @@ function Runtime:_markLightOverlays()
 end
 
 function Runtime:_setRole(role, on, color, brightness)
-	local key = role .. (on and "1" or "0") .. (color and tostring(color) or "") .. tostring(brightness)
+	-- feu cassé par un choc (VehicleDamage) : dans la clé du cache, sinon un feu allumé au moment du choc restait
+	-- allumé, et un feu réparé (Damage.Reset) restait éteint jusqu'au prochain changement d'état des feux (audit
+	-- 2026-11-19)
+	local broken = self.Model:GetAttribute("LightBroken_" .. role) == true
+	local key = role .. (on and "1" or "0") .. (broken and "b" or "") .. (color and tostring(color) or "") .. tostring(brightness)
 	if self.LastLightState[role] == key then
 		return
 	end
 	self.LastLightState[role] = key
-	if on and self.Model:GetAttribute("LightBroken_" .. role) == true then
-		on = false -- feu cassé par un choc (VehicleDamage)
+	if on and broken then
+		on = false
 	end
 	for _, p in ipairs(self.LightParts[role] or {}) do
 		setPart(p, on, color)
@@ -947,6 +951,10 @@ function Runtime:_updateLights(s)
 		for role in pairs(self.LightParts or {}) do
 			self:_setRole(role, false)
 		end
+		-- plafonnier et lampe de plaque aussi : le return les sautait (allumés sur un véhicule invisible, audit
+		-- 2026-11-19 ; la condition « not s.Invisible » plus bas n'était jamais atteinte)
+		self:_cabinLight("interior", false)
+		self:_cabinLight("plate", false)
 		return
 	end
 	-- temps serveur : les clignotants et la sirène battent en même temps chez tous les joueurs (os.clock déphasait)

@@ -24,9 +24,15 @@ local PAINT_LAYERS = { "Primary", "Secondary", "Pearlescent", "Wheel", "Interior
 Custom.PaintLayers = PAINT_LAYERS
 
 -- Palette GTA (module VehiclePaints, voisin de celui-ci), chargée à la première peinture.
+-- Dossier du runtime : script.Parent, ou ReplicatedStorage.FiveMVehicles pour une copie sans parent (Setup, essais
+-- en Edit) ; script.Parent:… direct levait une erreur depuis une telle copie (audit 2026-11-19)
+local function runtimeFolder()
+	return script.Parent or game:GetService("ReplicatedStorage"):WaitForChild("FiveMVehicles")
+end
+
 local paintsModule
 local function paints()
-	paintsModule = paintsModule or require(script.Parent:WaitForChild("VehiclePaints"))
+	paintsModule = paintsModule or require(runtimeFolder():WaitForChild("VehiclePaints"))
 	return paintsModule
 end
 
@@ -63,6 +69,10 @@ end
 -- Vitres teintées : sous cette transparence (teintes Fumé clair et plus foncées ; d'origine 0,45 et Aucune 0,88 au-dessus),
 -- le verre passe en SmoothPlastic qui reflète un peu (voir Refresh).
 Custom.DarkTintBelow = 0.42
+-- Capots transparents des feux (verre sans os de vitre) : transparence minimale. Comparé sur les feux arrière de la
+-- 325e (Studio, 2026-11-19) : 0,85 = texture presque invisible ; 0,7 = points de la sérigraphie lisibles, couleurs du
+-- feu intactes (demande : « garder un peu la texture, l'aspect fonctionnel du feu ») ; 0,45 (avant) = feu terne.
+Custom.LightCoverTransparency = 0.7
 Custom.DarkTintReflectance = 0.2
 Custom.CabinInset = 0.05 -- m
 Custom.CabinBelow = 0.45 -- m
@@ -120,6 +130,20 @@ function Custom.Refresh(model)
 		if model:GetAttribute("DoorRemoved_" .. bone) == true then
 			hidden[bone] = true
 			removed[bone] = true
+		end
+	end
+	-- collision des pièces arrachées (col__<os> soudés à la charnière) : non solide, sinon une portière invisible et
+	-- solide restait sur la voiture (audit 2026-11-19) ; rendue à la réparation
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d:GetAttribute("Kind") == "collision" then
+			local gone = boneChainHas(d, removed)
+			if gone and d:GetAttribute("RemovedOff") ~= true then
+				d:SetAttribute("RemovedOff", true)
+				d.CanCollide, d.CanQuery, d.CanTouch = false, false, false
+			elseif not gone and d:GetAttribute("RemovedOff") == true then
+				d:SetAttribute("RemovedOff", nil)
+				d.CanCollide, d.CanQuery, d.CanTouch = true, true, true
+			end
 		end
 	end
 	local invisible = model:GetAttribute("Invisible") == true
@@ -191,9 +215,11 @@ function Custom.Refresh(model)
 		end
 		local base = part:GetAttribute("BaseTransparency") or 0
 		if part:GetAttribute("Kind") == "glass" and not part:GetAttribute("Window") then
-			-- capot transparent des feux : jamais teinté. Option du véhicule PlainLightCovers : masqué, les optiques
-			-- se voient en 3D unie (la conversion lui a posé la texture des vitres, sérigraphie à points de GTA :
-			-- feux arrière « texturés » sur la 325e, demande de l'utilisateur 2026-11-19).
+			-- capot transparent des feux : jamais teinté, et presque transparent (Custom.LightCoverTransparency) : sa
+			-- texture (la sérigraphie à points de GTA) se devine sur l'optique sans la cacher (utilisateur, 2026-11-19 :
+			-- « remets les textures mais beaucoup moins opaques, qu'on garde l'aspect fonctionnel du feu ») ; à 0,45
+			-- (avant) les feux arrière de la 325e paraissaient texturés et ternes. Option PlainLightCovers : masqué.
+			base = math.max(base, Custom.LightCoverTransparency)
 			if model:GetAttribute("PlainLightCovers") == true then
 				visible = false
 			end
@@ -224,11 +250,19 @@ function Custom.Refresh(model)
 				part.Reflectance = dark and Custom.DarkTintReflectance or (part:GetAttribute("GlassReflectance") or 0)
 				part:SetAttribute("DarkTint", dark)
 			end
+		elseif base > 0 and part:GetAttribute("Kind") == "light" and part:GetAttribute("EmissiveLit") then
+			-- optique à masque d'émission (VehicleLights.EmissiveSetup) : opaque, comme EmissiveSetup la pose ; le
+			-- client n'écrit jamais sa transparence (VehicleRuntime, setPart), Refresh lui remettait le 0,15 du Setup
+			-- (audit 2026-11-19)
+			base = 0
 		elseif base > 0 and part:GetAttribute("Kind") == "light" and cabin and cabin(part.Position) then
 			-- optique DANS l'habitacle (voyants du tableau de bord, plafonnier du mod…) : opaque. Transparente (0,15),
 			-- Roblox la triait avec les vitres et la dessinait parfois DEVANT une vitre teintée : on la voyait à
 			-- travers le noir intégral (signalé par l'utilisateur, 2026-11-19, 325e). Les feux extérieurs gardent 0,15.
+			-- OffTransparency aussi : le client la remet à chaque extinction (VehicleRuntime, setPart), ce qui
+			-- annulait ce correctif (audit 2026-11-19)
 			base = 0
+			part:SetAttribute("OffTransparency", 0)
 		end
 		part.Transparency = visible and base or 1
 		part:SetAttribute("Visible", visible)
@@ -1455,7 +1489,9 @@ end
 -- restaurer une sauvegarde annule aussi ce qui a été activé APRÈS elle (néons, xénons, mods,
 -- extras, vitres, perfs). Les couleurs, la livrée, la teinte et la plaque absentes sont gardées.
 local RESET_PREFIXES = { "Mod_", "Extra_", "Perf_", "WindowDown_", "Neon_", "Tune_", "LightBroken_" }
-local RESET_KEYS = { "Neon", "NeonColor", "XenonColor", "InteriorLightColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
+-- TintPreset : sinon le préréglage d'avant (Noir intégral…) était réappliqué par-dessus une sauvegarde sans teinte
+-- choisie (audit 2026-11-19)
+local RESET_KEYS = { "TintPreset", "Neon", "NeonColor", "XenonColor", "InteriorLightColor", "TyreSmokeColor", "PlateStyleChosen", "EngineSound", "PaintFade",
 	"HornSound", "DirtLevel", "KeepClean", "BodyHealth", "EngineHealth", "EngineDead", "Wrecked", "NoDamage" }
 
 function Custom.Apply(model, data)
@@ -1501,6 +1537,9 @@ function Custom.Apply(model, data)
 	local tint = model:GetAttribute("TintPreset")
 	if type(tint) == "number" and Custom.WindowTints[tint] then
 		Custom.SetWindowTintPreset(model, tint)
+	elseif data.WindowTint == nil and model:GetAttribute("WindowTintStock") ~= nil then
+		-- sauvegarde sans teinte sur une voiture déjà teintée : verre d'origine (transparence et couleur)
+		Custom.SetWindowTintPreset(model, 1)
 	end
 	paintNeons(model)
 	Custom.SetPaintFade(model, model:GetAttribute("PaintFade") or 0)
@@ -1596,7 +1635,7 @@ function Custom.RemoveDoor(model, bone, keepDebris)
 			end
 			debris.PrimaryPart = first
 			-- groupe des débris AVANT d'entrer dans le monde : né dans la coque du véhicule, il ne doit pas la toucher
-			local okAccess, Access = pcall(require, script.Parent:WaitForChild("VehicleAccess", 5))
+			local okAccess, Access = pcall(require, runtimeFolder():WaitForChild("VehicleAccess", 5))
 			if okAccess and Access and Access.TagDebris then
 				Access.TagDebris(debris)
 			end
@@ -1636,7 +1675,7 @@ end
 
 function Custom.Repair(model)
 	model:SetAttribute("DirtLevel", 0)
-	local dm = script.Parent:FindFirstChild("VehicleDamage")
+	local dm = runtimeFolder():FindFirstChild("VehicleDamage")
 	local okD, Damage = pcall(function()
 		return dm and require(dm)
 	end)
@@ -1710,6 +1749,8 @@ end
 Custom.TuneKeys = {
 	PowerMult = "number", TorqueMult = "number", SpeedLimitKmh = "number",
 	DriftTyres = "boolean", WinterTyres = "boolean", RaceTyres = "boolean",
+	-- pneus increvables (vMenu « Pneus increvables ») : ni herse ni choc ne les crèvent (VehicleDamage)
+	BulletproofTyres = "boolean",
 }
 for _, r in ipairs(Custom.PrepRanges) do
 	Custom.TuneKeys[r.key] = "number"
@@ -1733,8 +1774,6 @@ function Custom.SetTune(model, key, value)
 		end
 	elseif key == "SpeedLimitKmh" then
 		value = (value and value > 0) and math.clamp(value, 5, 600) or nil
-	-- pneus increvables (vMenu « Pneus increvables ») : ni herse ni choc ne les crèvent (VehicleDamage)
-	BulletproofTyres = "boolean",
 	elseif t == "boolean" then
 		value = value == true or nil
 		if value and table.find(Custom.TyreKeys, key) then
@@ -2002,7 +2041,9 @@ OPS.Extra = function(model, n, enabled)
 	if not integer(n) or type(enabled) ~= "boolean" then
 		return false, "invalid"
 	end
-	local present = (getConfig(model).Extras or {})[n] ~= nil
+	-- Extras est une LISTE de numéros (Setup : ipairs) : {1, 3}[2] valait 3, l'extra 2 inexistant était accepté
+	-- (audit 2026-11-19)
+	local present = table.find(getConfig(model).Extras or {}, n) ~= nil
 	if not present then
 		for _, part in ipairs(visualParts(model)) do
 			if part:GetAttribute("Extra") == n then

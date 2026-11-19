@@ -203,7 +203,11 @@ function groups.structure()
 		return
 	end
 	-- pièces attendues (le Setup les a retrouvées par leur nom dans le modèle importé)
+	-- pièces de collision retirées volontairement au creusement des passages de roue (VehicleCollision) : sinon
+	-- ce contrôle échouait sur chaque véhicule concerné (rm3e36 ; audit 2026-11-19)
+	local removedCol = model:GetAttribute("CollisionPiecesRemoved") or 0
 	local expected = model:GetAttribute("F2RExpectedParts")
+	expected = expected and expected - removedCol
 	local missingNames = model:GetAttribute("F2RMissingParts") or ""
 	local found = partsWhere(function()
 		return true
@@ -403,7 +407,8 @@ function groups.collision()
 			table.insert(wheelsCol, d)
 		end
 	end
-	check(#pieces == (col.Pieces or -1), "morceaux de collision", fmt("%d/%d", #pieces, col.Pieces or 0))
+	local colExpected = (col.Pieces or -1) - (model:GetAttribute("CollisionPiecesRemoved") or 0)
+	check(#pieces == colExpected, "morceaux de collision", fmt("%d/%d", #pieces, colExpected))
 	local nWheels = 0
 	for _ in pairs(col.Wheels or {}) do
 		nWheels += 1
@@ -947,7 +952,10 @@ function groups.fit_play()
 		task.wait(0.1)
 	end
 	local res = tostring(char:GetAttribute("F2RFitResult"))
-	local pts = Fit.Sample(char, root, g.spm)
+	-- mêmes points que l'adaptation (VehicleSeatFit.RunClient) : en posture de conduite, mains et jambes posées au
+	-- contact (Fit.PoseSkip) ne comptent pas ; sans ça, faux échec quand l'adaptation a réussi (audit 2026-11-19)
+	local hip = Fit.PoseHip and Fit.PoseHip(model, seat)
+	local pts = Fit.Sample(char, root, g.spm, hip and Fit.PoseSkip or nil)
 	local bad = Fit.CountBad(g, pts)
 	check(bad == 0, "corps dans l'habitacle (" .. seat.Name .. ")", fmt("%d point(s) hors habitacle sur %d ; résultat %s", bad, #pts, res))
 	-- posé : 6 cm plus bas, le corps entrerait dans le coussin ou le plancher (sinon il flotte)

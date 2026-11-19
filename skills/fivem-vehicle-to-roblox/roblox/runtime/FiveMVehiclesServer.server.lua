@@ -174,19 +174,69 @@ local function canReachDoor(player, model, bone, cfg)
 	return (root.Position - at).Magnitude <= DOOR_REACH_M * (cfg.StudsPerMeter or 3.571)
 end
 
+-- Vitesse de pointe récente de chaque véhicule vue par le serveur (m/s, linéaire + rotation × 2 m), relevée toutes
+-- les 0,1 s, gardée 1,5 s : plafond des chocs annoncés par un client (« Impact »).
+local speedPeak = setmetatable({}, { __mode = "k" }) -- model -> { peak, at }
+local knockToken = setmetatable({}, { __mode = "k" }) -- victime -> numéro du dernier renversement
+local function spmOf(model)
+	local cfgModule = model:FindFirstChild("VehicleConfig")
+	local ok, cfg = pcall(require, cfgModule)
+	return (ok and type(cfg) == "table" and cfg.StudsPerMeter) or 3.571
+end
+task.spawn(function()
+	while true do
+		task.wait(0.1)
+		local now = os.clock()
+		for _, m in ipairs(CollectionService:GetTagged(TAG)) do
+			local r = m.PrimaryPart
+			if r and not r.Anchored then
+				local spm = spmOf(m)
+				local v = r.AssemblyLinearVelocity.Magnitude / spm + r.AssemblyAngularVelocity.Magnitude * 2
+				local rec = speedPeak[m]
+				if not rec or v >= rec[1] or now - rec[2] > 1.5 then
+					speedPeak[m] = { v, now }
+				end
+			end
+		end
+	end
+end)
+local function impactCap(model)
+	local now = os.clock()
+	local function peak(m)
+		local rec = speedPeak[m]
+		return (rec and now - rec[2] <= 1.6) and rec[1] or 0
+	end
+	local cap = peak(model)
+	local root = model.PrimaryPart
+	if root then
+		for _, other in ipairs(CollectionService:GetTagged(TAG)) do
+			local r = other ~= model and other.PrimaryPart
+			if r and (r.Position - root.Position).Magnitude < 12 * spmOf(model) then
+				cap = math.max(cap, peak(model) + peak(other))
+			end
+		end
+	end
+	return cap * 1.3 + 6
+end
+
 remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 	if typeof(model) ~= "Instance" or not CollectionService:HasTag(model, TAG) then
 		return
 	end
 	if action == "Set" then
 		local t = TOGGLES[key]
-		if not t or typeof(value) ~= t or not isDriver(player, model) or not allowed(player, "set") then
+		if not t or typeof(value) ~= t then
 			return
 		end
 		-- demande refusée : le client a déjà écrit la valeur chez lui (retour visuel immédiat) ; on lui renvoie la
 		-- vraie, sinon il garde par ex. un moteur HS « allumé » et conduit quand même (bug signalé le 2026-11-18)
 		local function refuse()
 			remote:FireClient(player, "Resync", model, key, model:GetAttribute(key))
+		end
+		-- débit dépassé ou plus conducteur : renvoyée aussi (avant : return silencieux, Engine local divergeait en
+		-- martelant la touche ; audit 2026-11-19)
+		if not isDriver(player, model) or not allowed(player, "set") then
+			return refuse()
 		end
 		if model:GetAttribute("Wrecked") == true then
 			return refuse() -- véhicule en feu / épave (VehicleDamage) : plus rien ne marche jusqu'à la réparation
@@ -226,6 +276,11 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if type(key) ~= "string" or #key > 64 or not (cfg.Hinges and cfg.Hinges[key]) then
 			return
 		end
+		-- pièce arrachée (Custom.RemoveDoor) : sa collision invisible pivotait, le plafonnier s'allumait et le son
+		-- changeait (audit 2026-11-19)
+		if model:GetAttribute("DoorRemoved_" .. key) == true then
+			return
+		end
 		if not canReachDoor(player, model, key, cfg) then
 			return
 		end
@@ -247,6 +302,10 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if dx ~= dx or dz ~= dz or strength ~= strength or math.abs(dx) > 1.01 or math.abs(dz) > 1.01 then
 			return
 		end
+		-- force plafonnée par ce que le serveur a vu : vitesse de pointe récente de cette voiture et des véhicules
+		-- proches (choc reçu à l'arrêt), rotation comprise (tonneaux). Avant : jusqu'à MaxImpact (45) même à l'arrêt,
+		-- un client pouvait mettre sa voiture en feu avec ses passagers (audit 2026-11-19)
+		strength = math.min(strength, impactCap(model))
 		Damage.Apply(model, Vector3.new(dx, dy, dz), strength)
 	elseif action == "Spike" then
 		-- roue sur une herse (tag SpikeStrip), signalée par le client du conducteur : le serveur vérifie qu'une herse
@@ -315,8 +374,11 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if (hrp.Position - root.Position).Magnitude > (radius + 4) * spm then
 			return -- trop loin pour le serveur (latence comprise)
 		end
+		-- vitesse plafonnée par celle que voit le serveur (+30 % et 1,5 m/s de marge pour la latence). Avant :
+		-- seen + 5, soit 5 m/s pour une voiture À L'ARRÊT -> un client pouvait renverser tout le monde à ~6 m
+		-- (audit 2026-11-19)
 		local seen = root.AssemblyLinearVelocity.Magnitude / spm
-		local speed = math.min(vCar.Magnitude / spm, seen + 5) -- m/s
+		local speed = math.min(vCar.Magnitude / spm, seen * 1.3 + 1.5) -- m/s
 		if speed < 2.5 then
 			return
 		end
@@ -342,13 +404,17 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		-- renversé, il ne touche plus les véhicules jusqu'à se relever : sans ça la voiture le rattrapait et le
 		-- POUSSAIT au sol sur 8 m avant de lui passer dessus (PNJ, 40 km/h, mesuré 2026-11-19). Groupe posé par le
 		-- serveur : identique chez tous les clients.
+		-- jeton : un second renversement annule les fins du premier (sinon la collision revenait, ou un PNJ se
+		-- relevait, en plein second renversement ; audit 2026-11-19)
+		knockToken[victim] = (knockToken[victim] or 0) + 1
+		local token = knockToken[victim]
 		task.delay(0.12, function()
 			if victim.Parent and hum.Health > 0 then
 				Access.SetOccupantGroup(victim, true)
 			end
 		end)
 		task.delay(seconds, function()
-			if victim.Parent and not hum.SeatPart then
+			if knockToken[victim] == token and victim.Parent and not hum.SeatPart then
 				Access.SetOccupantGroup(victim, false)
 			end
 		end)
@@ -360,7 +426,7 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 			hrp.AssemblyLinearVelocity = knock
 			hrp.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 6
 			task.delay(seconds, function()
-				if hum.Parent and hum.Health > 0 then
+				if knockToken[victim] == token and hum.Parent and hum.Health > 0 then
 					hum.PlatformStand = false
 					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 				end
@@ -477,29 +543,33 @@ task.spawn(function()
 	while true do
 		task.wait(DIRT_TICK)
 		for _, model in ipairs(CollectionService:GetTagged(TAG)) do
-			local root = model.PrimaryPart
-			local seat = model:FindFirstChild("DriverSeat", true)
-			if root and not root.Anchored and seat and seat.Occupant and model:GetAttribute("KeepClean") ~= true then
-				local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
-				local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
-				local speed = root.AssemblyLinearVelocity.Magnitude / spm
-				if speed > DIRT_MIN_SPEED then
-					params.FilterDescendantsInstances = { model }
-					local hit = workspace:Raycast(root.Position, Vector3.new(0, -4 * spm, 0), params)
-					local mult = (hit and OFFROAD[hit.Material.Name]) and DIRT_OFFROAD_MULT or 1
-					local shown = model:GetAttribute("DirtLevel") or 0
-					local cur = math.max(dirtCarry[model] or 0, shown)
-					if shown < (dirtShown[model] or shown) then
-						cur = shown -- lavé ou réglé entre-temps
+			-- protégé : une erreur sur un véhicule (attribut du jeu de mauvais type…) arrêtait la saleté pour tout le
+			-- serveur (audit 2026-11-19)
+			pcall(function()
+				local root = model.PrimaryPart
+				local seat = model:FindFirstChild("DriverSeat", true)
+				if root and not root.Anchored and seat and seat.Occupant and model:GetAttribute("KeepClean") ~= true then
+					local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
+					local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
+					local speed = root.AssemblyLinearVelocity.Magnitude / spm
+					if speed > DIRT_MIN_SPEED then
+						params.FilterDescendantsInstances = { model }
+						local hit = workspace:Raycast(root.Position, Vector3.new(0, -4 * spm, 0), params)
+						local mult = (hit and OFFROAD[hit.Material.Name]) and DIRT_OFFROAD_MULT or 1
+						local shown = model:GetAttribute("DirtLevel") or 0
+						local cur = math.max(dirtCarry[model] or 0, shown)
+						if shown < (dirtShown[model] or shown) then
+							cur = shown -- lavé ou réglé entre-temps
+						end
+						local new = math.min(1, cur + DIRT_TICK * mult / DIRT_FULL_S)
+						dirtCarry[model] = new -- reste sous le pas gardé ici (un attribut serait répliqué à tous)
+						if math.floor(new * 100) ~= math.floor(shown * 100) then
+							model:SetAttribute("DirtLevel", math.floor(new * 100) / 100)
+						end
+						dirtShown[model] = model:GetAttribute("DirtLevel") or 0
 					end
-					local new = math.min(1, cur + DIRT_TICK * mult / DIRT_FULL_S)
-					dirtCarry[model] = new -- reste sous le pas gardé ici (un attribut serait répliqué à tous)
-					if math.floor(new * 100) ~= math.floor(shown * 100) then
-						model:SetAttribute("DirtLevel", math.floor(new * 100) / 100)
-					end
-					dirtShown[model] = model:GetAttribute("DirtLevel") or 0
 				end
-			end
+			end)
 		end
 	end
 end)
@@ -604,29 +674,32 @@ if Damage then
 					continue
 				end
 				local ok = pcall(Damage.Tick, model, dt)
-				if ok and model:GetAttribute("Burning") == true then
-					local occupants = {}
-					for _, seat in ipairs((model:FindFirstChild("Seats") or Instance.new("Folder")):GetChildren()) do
-						local hum = (seat:IsA("Seat") or seat:IsA("VehicleSeat")) and seat.Occupant
-						if hum and hum.Parent then
-							occupants[hum.Parent] = true
-							Damage.Ignite(hum.Parent, Damage.OccupantAfterburn, Damage.OccupantBurnDps)
+				-- feu protégé aussi : une erreur ici arrêtait flammes et brûlures pour tout le serveur (audit 2026-11-19)
+				pcall(function()
+					if ok and model:GetAttribute("Burning") == true then
+						local occupants = {}
+						for _, seat in ipairs((model:FindFirstChild("Seats") or Instance.new("Folder")):GetChildren()) do
+							local hum = (seat:IsA("Seat") or seat:IsA("VehicleSeat")) and seat.Occupant
+							if hum and hum.Parent then
+								occupants[hum.Parent] = true
+								Damage.Ignite(hum.Parent, Damage.OccupantAfterburn, Damage.OccupantBurnDps)
+							end
 						end
-					end
-					local firePos, spm = Damage.FirePosition(model)
-					if firePos then
-						local reach = Damage.NearFireRadius * spm
-						for _, plr in ipairs(Players:GetPlayers()) do
-							local char = plr.Character
-							local hrp = char and char:FindFirstChild("HumanoidRootPart")
-							if hrp and not occupants[char] and (hrp.Position - firePos).Magnitude < reach then
-								Damage.Ignite(char, Damage.NearBurnTime, 0)
+						local firePos, spm = Damage.FirePosition(model)
+						if firePos then
+							local reach = Damage.NearFireRadius * spm
+							for _, plr in ipairs(Players:GetPlayers()) do
+								local char = plr.Character
+								local hrp = char and char:FindFirstChild("HumanoidRootPart")
+								if hrp and not occupants[char] and (hrp.Position - firePos).Magnitude < reach then
+									Damage.Ignite(char, Damage.NearBurnTime, 0)
+								end
 							end
 						end
 					end
-				end
+				end)
 			end
-			Damage.BurnTick(dt)
+			pcall(Damage.BurnTick, dt)
 		end
 	end)
 end
@@ -674,10 +747,20 @@ local function noTouchSeats(model)
 	end
 end
 
+-- véhicules déjà branchés : un modèle tagué retiré puis remis (Parent nil puis workspace : garage, dépôt ; tag
+-- retiré puis remis) repassait ici et doublait toutes les connexions (invite de portière basculée deux fois = rien ;
+-- audit 2026-11-19)
+local setupDone = setmetatable({}, { __mode = "k" })
+
 local function setupVehicle(model)
 	Access.TagCollision(model)
 	Access.Watch(model)
 	noTouchSeats(model)
+	if setupDone[model] then
+		refreshPrompts(model)
+		return
+	end
+	setupDone[model] = true
 	-- vitres texturées installées avant le 2026-11-18 (AlphaMode Transparency : teinte ignorée) -> Overlay
 	for _, p in ipairs(model:GetDescendants()) do
 		if p:IsA("BasePart") and p:GetAttribute("Kind") == "glass" then
@@ -757,7 +840,11 @@ local function setupVehicle(model)
 		if prompt:GetAttribute("HingeBone") then
 			prompt.Triggered:Connect(function(player)
 				local bone = prompt:GetAttribute("HingeBone")
-				-- invite (tactile / manette) : mêmes règles que Alt + clic (VehicleTarget)
+				-- invite (tactile / manette) : mêmes règles que Alt + clic (VehicleTarget) ; pièce arrachée : plus rien
+				-- à ouvrir (audit 2026-11-19)
+				if model:GetAttribute("DoorRemoved_" .. bone) == true then
+					return
+				end
 				if not doorAllowed(player) or not canReachDoor(player, model, bone, require(model.VehicleConfig)) then
 					return
 				end

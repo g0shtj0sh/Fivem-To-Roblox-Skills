@@ -321,7 +321,13 @@ local function onSeated(active, seat)
 end
 
 local function hookCharacter(char)
-	Dashboard.Stop() -- réapparition : plus au volant
+	-- réapparition : plus au volant ni à bord. Un personnage remplacé assis (LoadCharacter, coma du jeu…) ne
+	-- déclenche pas toujours Seated(false) : conduite, touches (ZQSD capturées) et invites masquées restaient
+	-- actives sur le nouveau personnage (audit 2026-11-19)
+	if driving or occupying then
+		onSeated(false, nil)
+	end
+	Dashboard.Stop()
 	local hum = char:WaitForChild("Humanoid")
 	hum.Seated:Connect(onSeated)
 	if hum.SeatPart then

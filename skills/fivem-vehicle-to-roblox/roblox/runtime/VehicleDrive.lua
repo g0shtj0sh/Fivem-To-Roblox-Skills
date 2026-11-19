@@ -316,8 +316,13 @@ local function findPedestrians(a, root, cf, vWorld, now)
 					-- quand Roblox nous en avait confié la physique. Un piéton (80 kg) ne freine presque pas une voiture :
 					-- ici, ses pièces ne touchent plus cette voiture ; le serveur le renverse (« HitPed ») et pose le même
 					-- groupe pour tous pendant qu'il est à terre.
+					-- sauf joueur immunisé (attribut du jeu, KnockdownImmunityAttribute) : le serveur ne le renversera pas,
+					-- la voiture le traversait debout pendant 4 s (audit 2026-11-19)
 					local touched = {}
-					for _, d in ipairs(model:GetDescendants()) do
+					local immunity = folder:GetAttribute("KnockdownImmunityAttribute")
+					local victimPlayer = game:GetService("Players"):GetPlayerFromCharacter(model)
+					local immune = victimPlayer ~= nil and type(immunity) == "string" and victimPlayer:GetAttribute(immunity) == true
+					for _, d in ipairs(immune and {} or model:GetDescendants()) do
 						if d:IsA("BasePart") and d.CollisionGroup ~= "FiveMVehicleOccupant" then
 							touched[d] = d.CollisionGroup
 							d.CollisionGroup = "FiveMVehicleOccupant"
@@ -380,6 +385,10 @@ local function step(a, dt)
 			Dyn.reset(sim)
 			a.xPrev = {}
 		end
+		-- vitesses d'avant l'ancrage oubliées : au désancrage (Access.Teleport, rattrapage du vide, reprise par le
+		-- contrôle de vraisemblance), la vitesse passait d'un coup de l'ancienne à 0 -> faux choc à pleine force
+		-- (27 m/s à 100 km/h ; audit 2026-11-19). Sans prevVel, la mesure de choc attend 0,5 s (plus bas).
+		a.prevVel, a.prevAng = nil, nil
 		return
 	end
 	a.wasAnchored = false
@@ -640,6 +649,9 @@ function Drive.Start(car)
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = excludeList(car)
 	params.IgnoreWater = true
+	-- règles de collision du véhicule : les rayons des roues ignorent ce que la caisse traverse (débris d'ouvrants
+	-- arrachés, corps renversés) ; sans ça les roues montaient sur une portière tombée (audit 2026-11-19)
+	params.CollisionGroup = "FiveMVehicle"
 	local a = {
 		car = car, cfg = cfg, sim = sim, root = root, spm = spm, vf = vf, tq = tq, params = params,
 		filterAge = 0, xPrev = {}, conns = {}, margin = 0.3 * spm, extraReach = 0.25 * spm,

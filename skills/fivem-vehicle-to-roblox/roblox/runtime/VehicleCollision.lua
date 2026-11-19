@@ -178,6 +178,8 @@ function Collision.CarveWheelWells(model)
 					-- retire (avant : comptée en échec « table: 0x… » et laissée dans le passage de roue — pièces
 					-- de comblement d'un kit large, rm3e36 2026-11-19)
 					table.insert(carved, p.Name .. " (retirée)")
+					-- compté : Verify retire ces pièces des nombres attendus (pièces, morceaux de collision)
+					model:SetAttribute("CollisionPiecesRemoved", (model:GetAttribute("CollisionPiecesRemoved") or 0) + 1)
 					p:Destroy()
 				else
 					table.insert(failed, p.Name .. " : " .. tostring(res))

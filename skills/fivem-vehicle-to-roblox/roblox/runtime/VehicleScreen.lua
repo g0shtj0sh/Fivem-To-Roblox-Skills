@@ -390,6 +390,17 @@ function Screen.Start()
 			active = ok and built or nil
 			if not ok then
 				warn("[VehicleScreen] " .. tostring(built))
+				-- construction interrompue : pièce et SurfaceGui déjà créées détruites (restaient orphelines, audit
+				-- 2026-11-19)
+				local orphan = m:FindFirstChild("F2R_ClusterScreen")
+				if orphan then
+					orphan:Destroy()
+				end
+				local pg = Players.LocalPlayer:FindFirstChild("PlayerGui")
+				local gui = pg and pg:FindFirstChild("F2R_Cluster")
+				if gui then
+					gui:Destroy()
+				end
 			end
 			if not active then
 				-- pas de combiné décrit pour ce véhicule : on ne réessaie qu'au prochain véhicule

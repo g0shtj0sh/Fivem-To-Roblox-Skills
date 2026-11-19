@@ -949,10 +949,15 @@ local function leave(char)
 		setBody(char, false)
 		if not wasPov and player.CameraMode ~= Enum.CameraMode.LockFirstPerson then
 			-- la caméra de Roblox reprend au plus près : on l'éloigne une image par la distance minimale
-			local was = player.CameraMinZoomDistance
+			-- valeur d'origine gardée tant qu'une remise est en attente : sortir, remonter et ressortir en moins de
+			-- 0,1 s relisait la valeur forcée et la distance minimale restait bloquée (audit 2026-11-19)
+			state.minZoomBefore = state.minZoomBefore or player.CameraMinZoomDistance
 			player.CameraMinZoomDistance = math.min(Camera.ExitZoom, player.CameraMaxZoomDistance)
 			task.delay(0.1, function()
-				player.CameraMinZoomDistance = was
+				if state.minZoomBefore then
+					player.CameraMinZoomDistance = state.minZoomBefore
+					state.minZoomBefore = nil
+				end
 			end)
 		end
 		changed:Fire(Camera.GetSettings(), nil)
