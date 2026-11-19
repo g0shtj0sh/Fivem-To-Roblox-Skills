@@ -32,8 +32,25 @@ Damage.SmokeBelow = 450 -- fumée CLAIRE : le moteur peut caler (on le redémarr
 Damage.HeavySmokeBelow = 220 -- fumée NOIRE : le moteur peut lâcher à tout moment, définitivement (réparation)
 Damage.FireBelow = 60 -- FEU : véhicule mort, occupants brûlés
 Damage.LightRadius = 0.55 -- m (+ 0,05 par m/s au-delà du seuil)
-Damage.WindowRadius = 0.7 -- m (+ 0,06 par m/s) ; une vitre ne casse qu'au-delà de WindowMin
-Damage.WindowMin = 13
+-- VITRES (2026-11-19, utilisateur : « cassées au premier coup, toutes en même temps alors que j'ai percuté
+-- qu'à l'avant »). Une vitre casse quand le point de choc est assez près de son BORD le plus proche (distance 3D à
+-- sa boîte, m), plus près que la portée = Reach + ReachPerMs × (force − seuil). Avant : distance À PLAT au CENTRE de
+-- chaque vitre, 0,7 m + 0,06 par m/s dès 13 m/s ; un choc « par-dessous » (voiture qui retombe, fond qui tape) était
+-- placé sous le centre de la caisse et, la hauteur étant ignorée, toutes les vitres étaient « à portée » (mesuré sur la
+-- 325e : 6 vitres sur 6 à 14 m/s par le toit / le dessous, 0 par un choc avant pur).
+-- Verre trempé (vitres latérales, lunette arrière) : casse quand il est touché de près.
+Damage.WindowMin = 15 -- m/s (≈ 54 km/h perdus d'un coup)
+Damage.WindowReach = 0.35 -- m
+Damage.WindowReachPerMs = 0.03
+-- Pare-brise feuilleté (os « windscreen ») : bien plus résistant. 325e : choc avant pur dans un mur ≥ ≈ 25 m/s
+-- (≈ 90 km/h), angle avant ≥ ≈ 19 m/s.
+Damage.WindscreenMin = 18
+Damage.WindscreenReach = 0.9
+Damage.WindscreenReachPerMs = 0.05
+-- Choc de toit (tonneau, Damage.RollMin à chaque passage) : le toit s'écrase, les vitres proches du toit cassent.
+-- Un choc par-dessous (réception, fond qui tape) ne casse aucune vitre.
+Damage.RoofWindowReach = 0.85
+Damage.RoofWindowReachPerMs = 0.03
 Damage.DetachAt = 22 -- m/s (≈ 80 km/h dans un mur) : un ouvrant du côté du choc est arraché ; il TOMBE
 -- (copie physique) et disparaît après VehicleCustomization.DebrisLifetime s, comme les éclats de vitre
 Damage.DetachRadius = 1.0 -- m
@@ -177,18 +194,36 @@ function Damage.Apply(model, dir, strength)
 	end
 	-- vitres au point d'impact
 	local smashed = false
-	if strength >= Damage.WindowMin then
-		local wr = Damage.WindowRadius + 0.06 * over
+	local fromBelow = vertical and dir.Y < 0
+	local fromAbove = vertical and dir.Y > 0
+	if not fromBelow and strength >= math.min(Damage.WindowMin, Damage.WindscreenMin) then
 		local root, spm = model.PrimaryPart, cfg.StudsPerMeter or 3.571
+		local Pw = root.CFrame:PointToWorldSpace(P * spm)
+		-- par vitre (os) : la plus petite distance du point de choc au bord de ses pièces de verre
+		local dist = {}
 		for _, p in ipairs(model:GetDescendants()) do
 			local bone = p:IsA("BasePart") and p:GetAttribute("Kind") == "glass" and p:GetAttribute("Window")
 			if bone and model:GetAttribute("WindowBroken_" .. bone) ~= true then
-				local c = root.CFrame:PointToObjectSpace(p.Position) / spm
-				-- distance horizontale au point d'impact (une vitre est plus haute que le point de choc)
-				if (Vector3.new(c.X, P.Y, c.Z) - P).Magnitude < wr then
-					model:SetAttribute("WindowBroken_" .. bone, true)
-					smashed = true
-				end
+				local l = p.CFrame:PointToObjectSpace(Pw)
+				local h = p.Size / 2
+				local onBox = Vector3.new(math.clamp(l.X, -h.X, h.X), math.clamp(l.Y, -h.Y, h.Y), math.clamp(l.Z, -h.Z, h.Z))
+				local d = (l - onBox).Magnitude / spm
+				dist[bone] = math.min(dist[bone] or math.huge, d)
+			end
+		end
+		for bone, d in pairs(dist) do
+			local laminated = bone == "windscreen" -- pare-brise avant ; la lunette arrière (windscreen_r) est trempée
+			local min, reach, per
+			if fromAbove then
+				min, reach, per = Damage.RollMin, Damage.RoofWindowReach, Damage.RoofWindowReachPerMs
+			elseif laminated then
+				min, reach, per = Damage.WindscreenMin, Damage.WindscreenReach, Damage.WindscreenReachPerMs
+			else
+				min, reach, per = Damage.WindowMin, Damage.WindowReach, Damage.WindowReachPerMs
+			end
+			if strength >= min and d < reach + per * (strength - min) then
+				model:SetAttribute("WindowBroken_" .. bone, true)
+				smashed = true
 			end
 		end
 		-- l'attribut seul ne cache rien : c'est Custom.Refresh qui rend la vitre invisible. Sans lui, la vitre cassée

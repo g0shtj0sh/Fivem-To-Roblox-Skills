@@ -205,6 +205,12 @@ function Runtime.Attach(model)
 			self:_shatter(string.sub(attr, 14))
 		end
 	end)
+	Runtime.PreloadGlass(model)
+	if (model:GetAttribute("GlassBreakSound") or Runtime.GlassBreakSound) ~= "" then
+		pcall(function()
+			self:_glassSound() -- créé maintenant pour qu'il soit chargé au premier bris
+		end)
+	end
 	renderers[model] = self
 	model.Destroying:Connect(function()
 		Runtime.Detach(model)
@@ -223,6 +229,9 @@ function Runtime.Detach(model)
 		end
 		for _, snd in ipairs(r.BankSounds or {}) do
 			snd:Destroy()
+		end
+		if r.GlassSound then
+			r.GlassSound:Destroy()
 		end
 		renderers[model] = nil
 	end
@@ -732,41 +741,134 @@ function Runtime:_cabinLight(kind, on)
 	end
 end
 
--- Éclats d'une vitre qui casse : un émetteur par pièce de verre, une rafale, détruit après 1,2 s.
+-- Vitre qui casse : verre trempé qui part en grains (beaucoup de petits morceaux qui tombent et brillent), quelques
+-- éclats plus gros qui accrochent la lumière à l'instant du bris, et le bruit du verre. Un émetteur par pièce de
+-- verre, une rafale, détruit après 2 s ; aucune pièce physique (demande de l'utilisateur, 2026-11-16).
+-- 2026-11-19 (utilisateur : « j'ai pas eu l'effet des vitres qui se cassent ») : avant, 8 à 30 éclats de 5 cm, 0,45 à
+-- 0,9 s, sans son — à peine lisibles depuis la caméra de poursuite, surtout que la vitre restait affichée devant (bug
+-- de Refresh corrigé dans VehicleDamage).
 Runtime.GlassShardTexture = "rbxassetid://126211105579117" -- éclat de verre (brolver-rp scripts/vehicle-glass/draw_shard.py) ; attribut GlassShardTexture du véhicule pour un autre
+Runtime.GlassBreakSound = "rbxassetid://110301918002287" -- « Window Glass Shattering » 1,2 s (banque d'assets, publié par brolver-rp) ; attribut GlassBreakSound du véhicule pour un autre, "" = muet
+Runtime.GlassBreakVolume = 0.9
+-- Son et texture chargés dès qu'une voiture apparaît : sans cela le premier bris était muet (mesuré 2026-11-19 :
+-- Sound pas encore chargé 0,2 s après sa création, chargement en 0,4 s).
+-- PreloadAsync lit une chaîne comme une IMAGE : un son se précharge par un objet Sound (sinon « Asset type does not
+-- match requested type », mesuré 2026-11-19).
+local glassPreloaded = {}
+function Runtime.PreloadGlass(model)
+	local todo = {}
+	local snd = model:GetAttribute("GlassBreakSound") or Runtime.GlassBreakSound
+	if type(snd) == "string" and snd ~= "" and not glassPreloaded[snd] then
+		glassPreloaded[snd] = true
+		local s = Instance.new("Sound")
+		s.SoundId = snd
+		table.insert(todo, s)
+	end
+	local tex = model:GetAttribute("GlassShardTexture") or Runtime.GlassShardTexture
+	if type(tex) == "string" and tex ~= "" and not glassPreloaded[tex] then
+		glassPreloaded[tex] = true
+		table.insert(todo, tex)
+	end
+	if #todo > 0 then
+		task.spawn(function()
+			pcall(function()
+				game:GetService("ContentProvider"):PreloadAsync(todo)
+			end)
+		end)
+	end
+end
 function Runtime:_shatter(bone)
 	local cam = Workspace.CurrentCamera
 	local Debris = game:GetService("Debris")
+	local spm = self.Spm
+	local soundAt
 	for _, p in ipairs(self.Model:GetDescendants()) do
 		if p:IsA("BasePart") and p:GetAttribute("Window") == bone and p:GetAttribute("Kind") == "glass" then
 			if cam and (cam.CFrame.Position - p.Position).Magnitude > 150 then
 				continue
 			end
+			soundAt = soundAt or p
 			local dims = { p.Size.X, p.Size.Y, p.Size.Z }
 			table.sort(dims)
+			local area = dims[2] * dims[3] / (spm * spm) -- m²
+			local tex = self.Model:GetAttribute("GlassShardTexture") or Runtime.GlassShardTexture
+			-- grains de verre trempé : 1,5 à 3 cm, retombent avec la gravité, scintillent un peu
 			local e = Instance.new("ParticleEmitter")
 			e.Name = "F2R_GlassShards"
-			e.Texture = self.Model:GetAttribute("GlassShardTexture") or Runtime.GlassShardTexture
+			e.Texture = tex
 			e.Enabled = false
 			e.Shape = Enum.ParticleEmitterShape.Box
 			e.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
-			e.Lifetime = NumberRange.new(0.45, 0.9)
-			e.Speed = NumberRange.new(4, 11)
+			e.Lifetime = NumberRange.new(0.7, 1.5)
+			e.Speed = NumberRange.new(1.2 * spm, 3.5 * spm)
 			e.SpreadAngle = Vector2.new(180, 180)
-			e.Acceleration = Vector3.new(0, -70, 0)
-			e.Drag = 2.5
+			e.Acceleration = Vector3.new(0, -9.8 * spm, 0)
+			e.Drag = 1.6
 			e.Rotation = NumberRange.new(0, 360)
-			e.RotSpeed = NumberRange.new(-420, 420)
-			e.Size = NumberSequence.new(0.025 * self.Spm, 0.015 * self.Spm) -- éclats de 3 à 5 cm
-			e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(0.7, 0.25),
+			e.RotSpeed = NumberRange.new(-540, 540)
+			e.Size = NumberSequence.new(0.015 * spm, 0.01 * spm) -- taille Roblox = demi-côté : grains de 2 à 3 cm
+			e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.75, 0.1),
 				NumberSequenceKeypoint.new(1, 1) })
-			e.Color = ColorSequence.new(Color3.fromRGB(205, 222, 228))
-			e.LightEmission = 0.15
+			e.Color = ColorSequence.new(Color3.fromRGB(225, 238, 242))
+			e.LightEmission = 0.35
 			e.Parent = p
-			e:Emit(math.clamp(math.floor(dims[2] * dims[3] * 5), 8, 30))
-			Debris:AddItem(e, 1.2)
+			e:Emit(math.clamp(math.floor(area * 160), 30, 120))
+			Debris:AddItem(e, 2)
+			-- éclats qui accrochent la lumière à l'instant du bris : peu nombreux, plus gros, très brefs
+			local g = Instance.new("ParticleEmitter")
+			g.Name = "F2R_GlassGlints"
+			g.Texture = tex
+			g.Enabled = false
+			g.Shape = Enum.ParticleEmitterShape.Box
+			g.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+			g.Lifetime = NumberRange.new(0.18, 0.35)
+			g.Speed = NumberRange.new(2 * spm, 5 * spm)
+			g.SpreadAngle = Vector2.new(180, 180)
+			g.Drag = 4
+			g.Rotation = NumberRange.new(0, 360)
+			g.RotSpeed = NumberRange.new(-720, 720)
+			g.Size = NumberSequence.new(0.035 * spm, 0.015 * spm)
+			g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+			g.Color = ColorSequence.new(Color3.new(1, 1, 1))
+			g.LightEmission = 0.8
+			g.Parent = p
+			g:Emit(math.clamp(math.floor(area * 25), 6, 18))
+			Debris:AddItem(g, 1)
 		end
 	end
+	-- un seul bruit par vitre, et pas deux en moins de 0,08 s sur la même voiture (plusieurs vitres d'un même choc)
+	local id = self.Model:GetAttribute("GlassBreakSound") or Runtime.GlassBreakSound
+	if soundAt and id ~= "" and os.clock() - (self.lastGlassSound or 0) > 0.08 then
+		self.lastGlassSound = os.clock()
+		-- son prêt de la voiture (chargé à l'apparition) : un Sound créé au bris démarrait ~0,3 s en retard sur les
+		-- éclats, même préchargé (mesuré 2026-11-19 : IsLoaded à 0,35 s, lecture ensuite)
+		local s = self:_glassSound()
+		local fresh = s.SoundId ~= id
+		if fresh then
+			s.SoundId = id
+		end
+		s.PlaybackSpeed = 0.92 + 0.16 * ((#bone * 7) % 10) / 10 -- un peu différent d'une vitre à l'autre
+		s.TimePosition = 0
+		s:Play()
+	end
+end
+
+-- Son de bris de la voiture, créé et chargé dès l'apparition (Runtime.PreloadGlass), rejoué à chaque bris.
+function Runtime:_glassSound()
+	local s = self.GlassSound
+	if s and s.Parent then
+		return s
+	end
+	s = Instance.new("Sound")
+	s.Name = "F2R_GlassBreak"
+	s.SoundId = self.Model:GetAttribute("GlassBreakSound") or Runtime.GlassBreakSound
+	s.Volume = Runtime.GlassBreakVolume
+	s.RollOffMode = Enum.RollOffMode.InverseTapered
+	s.RollOffMinDistance = 4 * self.Spm
+	s.RollOffMaxDistance = 60 * self.Spm
+	s.Parent = self.Model.PrimaryPart or self.Model:FindFirstChildWhichIsA("BasePart", true)
+	self.GlassSound = s
+	return s
 end
 
 -- Réglages des feux du mod (carcols.meta Lights, VehicleConfig.LightSettings) : chaque voiture garde sa couleur, son
