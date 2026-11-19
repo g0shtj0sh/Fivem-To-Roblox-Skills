@@ -178,6 +178,7 @@ function Bench.accel(maxSeconds)
 	local lastGear = s0.gear
 	local lastV, lastT = 0, os.clock()
 	local plateau = 0
+	local shiftedInWindow = false
 	hold({ Throttle = 1, Brake = 0, Steer = 0, Handbrake = false }, maxSeconds or 30, function(t)
 		local s = state(a)
 		local kmh = s.speed * 3.6
@@ -190,14 +191,18 @@ function Bench.accel(maxSeconds)
 		if s.gear ~= lastGear then
 			table.insert(r.shifts, string.format("%d->%d à %.0f km/h, régime %.2f, %.2f s", lastGear or 0, s.gear or 0, kmh, s.rpm or 0, t))
 			lastGear = s.gear
+			shiftedInWindow = true
 		end
 		r.vmax = math.max(r.vmax or 0, kmh)
 		r.minUp = math.min(r.minUp or 1, s.up)
-		-- plateau : moins de 0,3 km/h gagné en 2 s
+		-- plateau : moins de 0,3 km/h gagné en 2 s, DEUX fenêtres de suite et sans passage de rapport dedans.
+		-- Avant (1 fenêtre, passages compris) : arrêt à tort juste après un passage, rm3e36 « plafonnée » à 214 km/h
+		-- en 5e alors qu'elle atteint 247,8 km/h (2026-11-19). Prévoir une piste assez longue (Track.Tiles).
 		if os.clock() - lastT >= 2 then
-			plateau = (kmh - lastV < 0.3) and (plateau + 1) or 0
+			plateau = (kmh - lastV < 0.3 and not shiftedInWindow) and (plateau + 1) or 0
+			shiftedInWindow = false
 			lastV, lastT = kmh, os.clock()
-			if plateau >= 1 and kmh > 30 then
+			if plateau >= 2 and kmh > 30 then
 				r.plateauAt = t
 				return true
 			end

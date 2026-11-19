@@ -1530,13 +1530,33 @@ function groups.lights()
 		end
 		table.insert(scenarios, { "Siren", { Siren = true }, sirenRoles, true })
 	end
+	-- Joueur local au volant : le moteur de conduite réécrit Brake / Reverse à chaque image, un attribut posé ici est
+	-- effacé aussitôt (faux échec « restés éteints », rm3e36 2026-11-19). On passe alors par ses entrées, comme la
+	-- touche S : frein maintenu à l'arrêt = feux stop, puis marche arrière = feux de recul.
+	local drive
+	do
+		local okD, D = pcall(require, ReplicatedStorage.FiveMVehicles.VehicleDrive)
+		local a = okD and D.Get and D.Get()
+		drive = (a and a.car == model) and D or nil
+	end
 	local covered = {}
 	for _, sc in ipairs(scenarios) do
 		local label, attrs, roles, blinks = sc[1], sc[2], sc[3], sc[4]
 		resetAttributes()
 		task.wait(0.2)
-		for k, v in pairs(attrs) do
-			model:SetAttribute(k, v)
+		local viaDrive = drive and (attrs.Brake ~= nil or attrs.Reverse ~= nil)
+		if viaDrive then
+			drive.SetOverride({ Throttle = 0, Brake = 1, Steer = 0, Handbrake = false })
+			if attrs.Reverse then
+				local tr = os.clock()
+				repeat
+					task.wait(0.05)
+				until model:GetAttribute("Reverse") == true or os.clock() - tr > 3
+			end
+		else
+			for k, v in pairs(attrs) do
+				model:SetAttribute(k, v)
+			end
 		end
 		local seen = {}
 		local frames = 0
@@ -1565,6 +1585,10 @@ function groups.lights()
 			end
 		until (all and os.clock() - t0 > 0.05) or os.clock() - t0 > (blinks and 1.6 or 1.0)
 		conn:Disconnect()
+		if viaDrive then
+			drive.SetOverride(nil)
+			task.wait(0.1)
+		end
 		local missing, absent, lightOnly = {}, {}, {}
 		for _, role in ipairs(roles) do
 			covered[role] = true

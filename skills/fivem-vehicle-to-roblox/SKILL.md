@@ -72,6 +72,14 @@ d'un véhicule : la référence est créée (ligne « Textures : … référence
 conversion **approuvée par l'utilisateur**. Origine : le 2026-11-16 une règle trop large a retiré 48 textures
 (verre des phares, grilles ajourées, teintes sombres) sans aucun signal, et la voiture a été réinstallée ainsi.
 
+Archive : `.zip`, `.tar`, `.rar` / `.7z` (7-Zip, sinon `unrar`/`rar` du PATH). Un mod qui livre `stream/` ET
+`stream_enhanced/` (GTA V Enhanced, mêmes noms) : seul `stream/` est converti (format FiveM ; Enhanced illisible).
+**Textures absentes** : le rapport liste, pour chacune, les pièces et l'emplacement touchés (`Diffuse` = pièce unie,
+`Spec`/`Bump` = reflets seulement) ; un nom presque identique du pack est repris seul (`…_diffuse` demandé,
+`…_diffuse1` livré : faute de l'auteur, ligne « nom presque identique »). Avant de croire à une texture manquante
+sur une pièce claire, lire `matDiffuseColor` du shader : `(2, n, n)` = teinte par la couche de peinture n (2 =
+Secondary : un alcantara blanc prend la couleur secondaire, comme dans GTA).
+
 Lire `<sortie>/<nom>/report.md` : « Hitbox : collision officielle du véhicule » (sinon boîte
 englobante : le .yft n'avait pas de `Physics/Bounds`, le signaler), « texture(s) reprises du jeu de base », « vrai son du jeu »,
 ligne « Transfert depuis le serveur d'assets » (fichiers, Mo, secondes). Une texture
@@ -123,6 +131,16 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
   = tranches de verre transparent peu rugueux qui renvoient le ciel en incidence rasante → bord sombre opaque.
   Trouver la pièce fautive : la masquer (`Transparency = 1`) dans Studio sur la vue où le défaut se voit, une pièce
   à la fois ; un rendu qui ne montre pas le défaut ne prouve rien (le reflet dépend de l'angle et du ciel).
+- **Textures de badges** : reconnues par `badg|logo|emblem…` (« badging » compris). Une planche de badges peut
+  exister une 2e fois sous un autre nom ou retournée (rm3e36 : `texture_bmw_m3_e36_alpha`) : la traiter dans la spec.
+- **Lettrages de plus de 2 cm** (BORBET des cache-moyeux, ///M3 du coffre) : la planche n'en montre qu'une partie,
+  ou les dessine de profil (traits fins). Les voir en gros plan (FOV 14-20 à 4-5 studs), masquer les pièces une à
+  une pour trouver la porteuse, lister ses îlots dans le GLB, et mettre une boîte qui englobe tout le mot. Une pièce
+  qui n'est que du lettrage disparaît : code 3, `--accept-texture-changes` (perte voulue, dite à l'utilisateur).
+- **Pièces de custom** (`mod_*`) : elles recopient souvent les lettrages de la pièce d'origine (couvercles
+  d'aileron = coffre avec son ///M3) : faire les gros plans de marque aussi sur chaque option.
+- **Nom du modèle** : dans `models` de la marque, une traduction vide (`"E36": ""`) retire le mot (code de châssis
+  dont le décalage donnerait un vrai code) ; deux mots se traduisent ensemble (`"Rocket Bunny": "Widebody"`).
 - **Contrôle** : gros plans dans Studio (calandre, coffre, volant, roues, écran, **pommeau, appuie-tête,
   seuils**) avant de rendre la main.
 
@@ -163,6 +181,27 @@ trou, sinon `Part.Color` ou du blanc apparaît en mode Overlay). Rapport : « Pl
 Un véhicule déjà installé et retouché : ne pas le réinstaller, remplacer la ColorMap/TextureID de l'ancienne
 planche par les deux nouvelles (decal : `AlphaMode.Transparency`), puis `sync_catalog`. Contrôle : gros plans
 du volant, de la console et des portes.
+
+**Planche d'icônes ou cadran dessiné ?** Seulement une planche si le RVB **sous** les pixels transparents est un
+blanc sans signification (clarté médiane ≥ 200 : m422 `int_emis` 255). Sinon (rm3e36 `gauges_diffuse` : 16, fond
+noir, chiffres blancs, zone rouge), c'est un vrai cadran dont l'alpha n'est que l'éclairage de nuit : texture
+**opaque**, couleurs d'origine, agrandie ×4 sous 1024 px (rapport : « Cadran dessiné … »).
+
+## 1d bis. Combiné d'instruments vivant (clusters/<nom>.json)
+
+`script_rt_dials_*` est une **cible de rendu** : dans GTA, le jeu redessine cette texture ; l'image livrée est un
+cadran générique clair, aux aiguilles figées, souvent posé DEVANT les cadrans du mod. Un véhicule à cadrans reçoit
+un fichier `clusters/<nom>.json` (lu à la conversion → `VehicleConfig.ClusterScreen`, `VehicleScreen.lua`) :
+- `HideParts` + `HideAlways: true` : la cible de rendu masquée chez tous les clients (pas seulement le conducteur).
+- `Needles` : une aiguille 3D par cadran, `Value` = speed | rpm | fuel | temp, dans le repère **de l'îlot UV de son
+  cadran** (`Origin`, `Du`, `Dv` par ajustement affine des sommets de l'îlot : un ajustement global échoue quand la
+  disposition des cadrans dans la texture n'est pas celle du tableau de bord), `Pivot` en pixels (points dessinés
+  par l'auteur au centre des cadrans, sinon cercle par trois chiffres), `A0`/`A1` en degrés horaires depuis le haut
+  de la texture, relevés sur les chiffres extrêmes. Néon phares allumés ; essence = attribut `Fuel` (sinon 0,75),
+  température qui chauffe en ~40 s.
+- Retirer les **aiguilles fixes** du mod (îlots de 2 à 4 triangles dont l'UV pointe tout entier sur un aplat de
+  couleur) par `remove_islands`, sans emporter le cache-moyeu voisin (resserrer la boîte).
+- Écran numérique (m422) : `Origin`/`Crop`/`Elements` (mêmes fichiers). Exemple d'aiguilles : `clusters/rm3e36.json`.
 
 ## 1e. Optiques : seules les parties claires s'allument (automatique)
 
@@ -324,6 +363,18 @@ temporaire dans le dossier de travail).
 5. `start_stop_play` (is_start = false). Toujours arrêter le Play avant de rendre la main ; un Play sans
    appel Studio pendant 3 min est arrêté par VibeStarter.
 
+Pièges des essais (rm3e36, 2026-11-19) :
+- Installer chaque véhicule **à côté** des autres (≥ 14 studs en x), jamais dans leur axe : il les pousse dès le gaz,
+  `drive_play` lit 0 km/h, puis les dégâts font caler le moteur (vitesse en dents de scie).
+- Placer la voiture côté **serveur avant** `VehicleAccess.Enter` : conduite, le client propriétaire annule un
+  `PivotTo` serveur ; un `PivotTo` client peut faire réapparaître le joueur. `Track.place` coupe le moteur (touche Z).
+- `DriveBench.accel` dépasse le budget d'un `execute_luau` : le lancer dans `task.spawn`, résultat dans `_G`, relire,
+  et toujours `SetOverride(nil)`. `SetOverride` prend une seule table `{ Throttle, Brake, Steer, Handbrake }`.
+  Vitesse de pointe : `Track.Tiles = 10` (4,8 km) ; le plateau exige deux fenêtres de 2 s sans gain ni passage.
+- Feux `Brake`/`Reverse` au volant : Verify passe par le moteur de conduite (frein maintenu), pas par l'attribut.
+- Menu du jeu sans interface : fonctions Flamework = RemoteEvents `FireServer(requestId, …)`, réponse
+  `OnClientEvent(requestId, ok, résultat)`.
+
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
 Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) : relancer le groupe.
@@ -442,6 +493,14 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   pour que `require` relise en Édition), `VehicleLights.Rig(model)`, reposer au sol (Verify « posé au sol »), `sync_catalog`.
 - **Taille de l'avatar** : à l'échelle réelle (3,571 studs/m) un avatar R6 assis touche souvent le pavillon.
   Verify (`seats_play`) mesure la garde au toit et donne l'échelle conseillée (`--studs-per-meter`).
+
+- **Menus de custom lisibles** : `Custom.GetOptions` donne les emplacements en français (`Custom.ModSlotLabels` :
+  Aileron, Pare-chocs avant, Échappement…) et « Aileron 1 », « Aileron 2 »… quand le mod ne fournit qu'une clé GTA
+  (`MNU_EXH1`) ou un nom de fichier (`e36_wing_1`) ; un vrai nom donné par le mod est gardé. Un aileron attaché à
+  `bodyshell` avec `turnOffBones boot` remplace le couvercle de coffre fixé à la caisse : le coffre ne s'ouvre plus
+  visuellement, comme dans GTA.
+- **Pneus** : texture toujours opaque (le shader pneu de GTA l'est ; une alpha de diffuse mélangée à `Part.Color`
+  donnait des pneus presque blancs).
 
 ## Sans Studio connecté (livraison manuelle)
 
