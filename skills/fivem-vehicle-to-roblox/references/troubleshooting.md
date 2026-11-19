@@ -44,7 +44,7 @@ et la durée de chaque flux. Voir `references/game-assets.md`.
 | `loadstring() is not available` | appel côté client en Play | utiliser le module `Verify` (`require(module)(opts)`) ; `loadstring` seulement en Edit / serveur |
 | Correctif du runtime sans effet en Edit | `require` garde la première version de la session | requérir une copie (`module:Clone()`) ; en Play, `require` est neuf |
 | Porte / lumière « ne bouge pas » dans un test | Studio sans focus : `RenderStepped` figé | Verify compte les images et signale « rendu figé » ; relancer le groupe |
-| Véhicule qui flotte après import | hauteur d'insertion conservée | le Setup pose le véhicule au sol (`_G.F2R_NO_GROUND = true` pour l'éviter) |
+| Véhicule qui flotte après import | hauteur d'insertion conservée | le Setup pose le véhicule au sol (argument `{ target = modèle, noGround = true }` pour l'éviter) |
 | Restaurer une sauvegarde laisse les néons allumés | `Custom.Apply` ne réinitialisait pas les clés absentes | corrigé : néons, xénons, mods, extras, vitres, perfs reviennent à l'origine |
 | Centaines de « Failed to load sound … no permission » | sons d'autres véhicules de la place | sans rapport : lire le rapport de Verify |
 | `CollisionFidelity` d'une MeshPart reste `Default` après l'avoir écrite par script | propriété non modifiable par script (ignorée sans erreur, mesuré) | `AssetService:CreateMeshPartAsync(part.MeshContent, {CollisionFidelity = …})` puis `part:ApplyMesh(tmp)` : taille et position gardées |

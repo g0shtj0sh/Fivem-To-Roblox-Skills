@@ -4,17 +4,23 @@
 	Chaque Sound créé par le Setup porte l'attribut SourceFile (ex. "engine_on_1.wav").
 
 	Entrées (execute_luau) :
-		_G.F2R_TARGET    : le Model du véhicule (défaut : premier modèle tagué FiveMVehicle)
-		_G.F2R_SOUND_IDS : table { ["engine_on_1.wav"] = "rbxassetid://123", ... }
+		ARGS.target (ou _G.F2R_TARGET) : le Model du véhicule (défaut : premier modèle tagué FiveMVehicle)
+		ARGS.ids (ou _G.F2R_SOUND_IDS) : table { ["engine_on_1.wav"] = "rbxassetid://123", ... }
 		                   ou le texte JSON de sounds/sound_ids.json
 	Renvoie { set = n, missing = { fichiers sans id } }.
 ]]
 local HttpService = game:GetService("HttpService")
 local CollectionService = game:GetService("CollectionService")
 
-local model = _G.F2R_TARGET
-local ids = _G.F2R_SOUND_IDS
-_G.F2R_TARGET, _G.F2R_SOUND_IDS = nil, nil
+-- loadstring(src)({ target = modèle, ids = ... }) : arguments propres à l'appel (agents en parallèle).
+local ARGS = select("#", ...) > 0 and type((...)) == "table" and (...) or nil
+local model, ids
+if ARGS then
+	model, ids = ARGS.target, ARGS.ids
+else
+	model, ids = _G.F2R_TARGET, _G.F2R_SOUND_IDS
+	_G.F2R_TARGET, _G.F2R_SOUND_IDS = nil, nil
+end
 if type(ids) == "string" then
 	ids = HttpService:JSONDecode(ids)
 end

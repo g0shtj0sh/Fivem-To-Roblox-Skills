@@ -257,6 +257,12 @@ en direct par le moteur de conduite) : `Engine` 1-4 (DriveForce × (1 + 0,2 × s
 `Turbo` (+10 % de couple une fois chargé, comme GTA), `Unlimited` (débridage), `Armor` (sans effet de
 conduite). Les pourcentages viennent des `statMods` du carcols du véhicule, à défaut de valeurs GTA.
 
+**Plusieurs agents en parallèle** (une fenêtre par véhicule, même VM ou non, même Studio) : prévu.
+Chaque conversion a son dossier de travail (`<sortie>/_work_<pid>`, supprimé à la fin), les caches
+partagés (`~/.cache/fivem2roblox`, pack de sons) s'écrivent de façon atomique sous verrou, le serveur
+d'assets sert plusieurs agents (préparations en file, transferts en parallèle). Dans Studio : cible du
+Setup en argument, une place par véhicule, `--clean` ciblé, et le Play à tour de rôle (`PlayLock`, § 7).
+
 ## 2. Uploader le modèle et les sons (assets privés)
 
 En parallèle :
@@ -285,14 +291,14 @@ au lieu de +3,17. Voir la hitbox : rendre `Collision` visible (Transparency 0,5)
 ## 3. Préparer les scripts pour Studio (sans recopier 100 Ko de code)
 
 La conversion écrit `<sortie>/<nom>/studio/` : `FiveMRuntime.lua` (runtime, une fois par place),
-`<nom>_Setup.studio.lua` (Setup compact), `Verify.lua`, `ApplySoundIds.lua`, `chunks/` + `manifest.json`.
+`<nom>_Setup.studio.lua` (Setup compact), `Verify.lua`, `ApplySoundIds.lua`, `PlayLock.lua`, `chunks/` + `manifest.json`.
 
 - **Projet Rojo synchronisé avec la place ouverte (VibeStarter)** : déposer les fichiers dans le dossier monté —
   ```bash
   python scripts/studio_stage.py <sortie>/<nom> --project <dossier du projet>
   ```
   → `ReplicatedStorage.rbxts_include.F2R_Transfer` (StringValue `FiveMRuntime`, `<nom>_Setup`,
-  `ApplySoundIds`, `<nom>_sound_ids` ; ModuleScript `Verify`), visible dans Studio en ~2 s.
+  `ApplySoundIds`, `<nom>_sound_ids` ; ModuleScripts `Verify`, `PlayLock`…), visible dans Studio en ~2 s.
 - **Sinon** : envoyer `studio/chunks/*.lua` dans l'ordre de `manifest.json`, un `execute_luau` par
   fichier, tel quel ; le dernier morceau de chaque étape exécute le script et renvoie son résultat.
 
@@ -310,18 +316,20 @@ c. Dernier recours, sans upload possible : demander **une seule** action à l'ut
 
 ```lua
 local T = game.ReplicatedStorage.rbxts_include:WaitForChild("F2R_Transfer", 10)
-local function run(name)
+local function run(name, args)
 	local fn, err = loadstring(T:WaitForChild(name, 10).Value, "=" .. name)
 	assert(fn, err)
-	return fn()
+	return fn(args)
 end
 local runtime = run("FiveMRuntime")                 -- { ok, runtimeVersion, previous }
-_G.F2R_TARGET = workspace.F2R_ImportTest.<nom>      -- le Model inséré
-local setup = run("<nom>_Setup")                    -- { parts, joints, missingParts, missingSounds, groundedBy, warnings }
+local setup = run("<nom>_Setup", { target = workspace.F2R_ImportTest.<nom> })
+-- { parts, joints, missingParts, missingSounds, groundedBy, slot, warnings }
 return { runtime = runtime, setup = setup }
 ```
-`_G.F2R_NO_GROUND = true` avant le Setup garde la hauteur d'import. SoundId oubliés : `_G.F2R_TARGET = modèle ;
-_G.F2R_SOUND_IDS = T.<nom>_sound_ids.Value ; run("ApplySoundIds")`.
+La cible se passe **en argument**, jamais par `_G` (d'autres agents peuvent installer en même temps).
+`noGround = true` garde la hauteur d'import ; `keepPosition = true` garde la position (sinon le Setup
+prend la première place libre de `F2R_ImportTest`, 40 studs d'écart, attribut `F2R_Slot`).
+SoundId oubliés : `run("ApplySoundIds", { target = modèle, ids = T.<nom>_sound_ids.Value })`.
 
 ## 6. Vérifier (roblox/Verify.lua)
 
@@ -343,8 +351,15 @@ Serialize → Apply qui restaure l'état.
 Corps adapté (client, joueur assis) : `checks = {"fit_play"}` — 0 point du corps hors habitacle, posé sur le siège, échelles lues. Refaire `seats_play` le véhicule posé sur une pente légère (plateforme inclinée
 temporaire dans le dossier de travail).
 
+**Tour de rôle pour le Play** (plusieurs agents dans le même Studio : une seule session Play).
+Avant **tout** `start_stop_play` (is_start = true), en Edit :
+`return require(game.ReplicatedStorage.rbxts_include.F2R_Transfer.PlayLock).acquire("<nom>-<id aléatoire>")`.
+`ok = false` → un autre agent teste : attendre `waitHint` s, redemander (sans limite, un verrou non
+renouvelé depuis 10 min est repris). Essais longs : `.renew(owner)` toutes les ~3 min. Après
+`start_stop_play` (is_start = false) : `.release(owner)` — même en cas d'échec des essais.
+
 **Play, client** (le runtime de rendu ne tourne que côté client ; `loadstring` y est interdit) :
-1. `start_stop_play` (is_start = true).
+1. `PlayLock.acquire` (ci-dessus) puis `start_stop_play` (is_start = true).
 2. `execute_luau` Client :
    `require(game.ReplicatedStorage.rbxts_include.F2R_Transfer.Verify)({ model = workspace.F2R_ImportTest:WaitForChild("<nom>"), checks = {"joints","lights","sounds","audio"} })`
    → rendu attaché **tout seul** par `FiveMVehiclesClient` (sinon : véhicule inerte en jeu),
@@ -360,7 +375,7 @@ temporaire dans le dossier de travail).
    droit). Mesures complètes (0-100, freinage, virages, bordure, côte, marche arrière) : piste
    `TestTrack.lua` créée en Play loin de la carte, banc `DriveBench.lua`, voir
    `references/roblox-integration.md` (« Essais de conduite ») ; essais longs en `task.spawn`.
-5. `start_stop_play` (is_start = false). Toujours arrêter le Play avant de rendre la main ; un Play sans
+5. `start_stop_play` (is_start = false), puis `PlayLock.release(owner)`. Toujours arrêter le Play avant de rendre la main ; un Play sans
    appel Studio pendant 3 min est arrêté par VibeStarter.
 
 Pièges des essais (rm3e36, 2026-11-19) :
@@ -402,7 +417,8 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
 
 ## 8. Ranger et rendre compte
 
-- `python scripts/studio_stage.py --clean --project <dossier>` (retire `F2R_Transfer`).
+- `python scripts/studio_stage.py --clean <sortie>/<nom> --project <dossier>` : retire les fichiers de CE
+  véhicule ; `F2R_Transfer` n'est supprimé que quand plus aucun véhicule n'y est déposé (autres agents).
 - Laisser le véhicule dans `Workspace.F2R_ImportTest`, Play arrêté, caméra rendue.
 - **Rapport final court, en français** : ce qui marche (Verify : réussis / échecs / sans objet, test de
   conduite), avertissements (textures ou sons non repris du jeu, rôles sans pièce, licence et marques),

@@ -140,7 +140,7 @@ def write_studio_bundle(out: Path, name: str, config: dict, parts_cfg: dict, sou
             f.write_text(code, encoding="utf-8")
             files.append(f"chunks/{f.name}")
         manifest["steps"].append({"key": key, "bytes": len(src.encode("utf-8")), "calls": files})
-    for extra in ("Verify.lua", "ApplySoundIds.lua", "DriveBench.lua", "TestTrack.lua"):
+    for extra in ("Verify.lua", "ApplySoundIds.lua", "DriveBench.lua", "TestTrack.lua", "PlayLock.lua"):
         shutil.copyfile(SKILL_ROOT / "roblox" / extra, sdir / extra)
     (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
@@ -236,7 +236,7 @@ def collect_hints(src: Path, root: Path) -> list[str]:
     """Noms qui portent souvent la marque et le modèle : archive, dossiers de la ressource."""
     hints = [src.stem if src.is_file() else src.name]
     for d in sorted(root.rglob("*")):
-        if d.is_dir() and len(d.relative_to(root).parts) <= 3 and d.name.lower() not in SKIP_HINT_DIRS:
+        if d.is_dir() and len(d.relative_to(root).parts) <= 3 and d.name.lower() not in SKIP_HINT_DIRS and not d.name.lower().startswith("_work"):
             hints.append(d.name)
     seen, out = set(), []
     for h in hints:
@@ -1061,11 +1061,13 @@ def main(argv=None) -> int:
 
     report = Report()
     out = Path(args.out).resolve()
-    work = out / "_work"
+    # Dossier de travail propre à CETTE conversion : plusieurs agents peuvent convertir en même temps
+    # dans la même sortie sans s'effacer leurs fichiers. Supprimé à la fin (F2R_KEEP_WORK=1 pour le garder).
+    work = out / f"_work_{os.getpid()}"
+    if work.exists():
+        shutil.rmtree(work)
     src = Path(args.input).resolve()
     if src.is_file():
-        if work.exists():
-            shutil.rmtree(work)
         extract_archive(src, work / "src", report)
         root = work / "src"
     else:
@@ -1147,6 +1149,8 @@ def main(argv=None) -> int:
     finally:
         if game is not None:
             game.close()
+        if not os.environ.get("F2R_KEEP_WORK"):
+            shutil.rmtree(work, ignore_errors=True)
     print(json.dumps({"vehicles": results, "warnings": report.warnings, "manual_steps": report.manual_steps},
                      indent=2, ensure_ascii=False))
     if not results:

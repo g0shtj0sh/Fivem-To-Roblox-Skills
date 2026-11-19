@@ -34,7 +34,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .util import Report
+from .util import Report, atomic_write_text, unique_tmp
 
 MARKER_TOOL = "gta_prepare_textures"      # outil qui identifie notre serveur
 # Version du schema du cache audio : a incrementer quand les noms de fichiers
@@ -396,8 +396,7 @@ class GameAssets:
         if self.client is not None:
             self.client.close()
         try:
-            self._neg_file.parent.mkdir(parents=True, exist_ok=True)
-            self._neg_file.write_text(json.dumps(sorted(self._neg_tex)), encoding="utf-8")
+            atomic_write_text(self._neg_file, json.dumps(sorted(self._neg_tex)))
         except Exception:
             pass
 
@@ -421,7 +420,7 @@ class GameAssets:
         """Récupère un fichier du lot morceau par morceau et vérifie son SHA-256."""
         st = self.stats[kind]
         t0 = time.monotonic()
-        tmp = dest.with_suffix(dest.suffix + ".part")
+        tmp = unique_tmp(dest)
         h = hashlib.sha256()
         got = 0
         try:
@@ -540,7 +539,7 @@ class GameAssets:
             if self._download(man, entry, dest, "audio") is not None:
                 out[name] = dest
         if out:
-            done.write_text(time.strftime("%Y-%m-%d %H:%M:%S"), encoding="utf-8")
+            atomic_write_text(done, time.strftime("%Y-%m-%d %H:%M:%S"))
         return out
 
 

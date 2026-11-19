@@ -4,7 +4,7 @@
 
 **Automatique** (agent + MCP Roblox Studio) : voir `SKILL.md` § 2 à 6 — upload du GLB et des sons
 en assets privés, `insert_asset`, puis `studio/FiveMRuntime.lua` et `studio/<nom>_Setup.studio.lua`
-par `execute_luau` (`_G.F2R_TARGET` = modèle), contrôle par `roblox/Verify.lua`. Le Setup pose le
+par `execute_luau` (`loadstring(src)({ target = modèle })`), contrôle par `roblox/Verify.lua`. Le Setup pose le
 véhicule au sol, retire les conteneurs `*_Node` de l'import et renvoie un rapport
 (`parts`, `joints`, `missingParts`, `missingSounds`, `groundedBy`, `warnings`).
 

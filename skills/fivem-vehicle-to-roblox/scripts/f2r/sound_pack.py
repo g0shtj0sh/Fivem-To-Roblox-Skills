@@ -22,7 +22,7 @@ import subprocess
 import zlib
 from pathlib import Path
 
-from .util import Report, extract_archive
+from .util import Report, extract_archive, file_lock, unique_tmp
 
 ENV_VAR = "F2R_ENGINE_PACK"
 DEFAULT_URL = ("https://github.com/g0shtj0sh/Fivem-To-Roblox-Skills/releases/download/"
@@ -74,7 +74,7 @@ def _download(url: str, cache_dir: Path, report: Report) -> Path | None:
     if dest.exists() and dest.stat().st_size > 0:
         return dest
     cache_dir.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    tmp = unique_tmp(dest)
     try:
         report.info(f"Téléchargement du pack de sons moteur : {url}")
         with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:
@@ -93,6 +93,12 @@ def default_cache() -> Path:
 
 
 def open_pack(path: str | os.PathLike, cache_dir: Path, report: Report) -> Path | None:
+    # un seul agent télécharge / décompresse à la fois ; les autres attendent puis lisent le cache
+    with file_lock(Path(cache_dir) / ".lock"):
+        return _open_pack(path, Path(cache_dir), report)
+
+
+def _open_pack(path: str | os.PathLike, cache_dir: Path, report: Report) -> Path | None:
     if str(path).startswith(("http://", "https://")):
         got = _download(str(path), cache_dir, report)
         if got is None:

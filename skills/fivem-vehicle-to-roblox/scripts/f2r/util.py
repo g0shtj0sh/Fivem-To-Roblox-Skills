@@ -8,8 +8,11 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import threading
+import time
 import zipfile
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from pathlib import Path
 
 # --------------------------------------------------------------------------- log
@@ -261,3 +264,50 @@ def argb_hex_to_rgb(value) -> list[float] | None:
 def write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# ------------------------------------------------------------------ accès concurrents
+# Plusieurs agents peuvent convertir en même temps et partager les caches (~/.cache/fivem2roblox,
+# pack de sons). Ces deux aides évitent qu'ils écrivent le même fichier en même temps.
+
+def unique_tmp(dest: Path) -> Path:
+    """Fichier temporaire propre à ce processus / fil, à renommer ensuite sur ``dest``."""
+    return dest.with_name(f"{dest.name}.{os.getpid()}.{threading.get_ident()}.part")
+
+
+def atomic_write_text(dest: Path, text: str) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = unique_tmp(dest)
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, dest)
+
+
+@contextmanager
+def file_lock(path: Path, timeout: float = 900.0, stale: float = 1800.0):
+    """Verrou entre processus (fichier créé en exclusif). Un verrou plus vieux que ``stale`` secondes
+    est considéré abandonné (processus tué) et repris."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    t0 = time.monotonic()
+    while True:
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - path.stat().st_mtime > stale:
+                    path.unlink(missing_ok=True)
+                    continue
+            except FileNotFoundError:
+                continue
+            if time.monotonic() - t0 > timeout:
+                raise TimeoutError(f"verrou {path} toujours pris après {timeout:.0f} s")
+            time.sleep(0.5)
+    try:
+        yield
+    finally:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass

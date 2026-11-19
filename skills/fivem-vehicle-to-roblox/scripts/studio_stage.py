@@ -4,17 +4,21 @@ synchronisé en direct avec Studio (ex. VibeStarter : include/ -> ReplicatedStor
 pour qu'un agent les exécute par execute_luau sans recopier leur source dans ses messages.
 
     python scripts/studio_stage.py <sortie>/<nom> --project <dossier du projet Rojo>
-    python scripts/studio_stage.py --clean --project <dossier du projet Rojo>
+    python scripts/studio_stage.py --clean <sortie>/<nom> --project <dossier>   (fichiers de ce véhicule)
+    python scripts/studio_stage.py --clean --project <dossier>                  (tout, si plus aucun véhicule)
 
 Fichiers déposés dans <dossier synchronisé>/F2R_Transfer/ :
     FiveMRuntime.txt      -> StringValue  (loadstring(...)() : installe le runtime)
-    <nom>_Setup.txt       -> StringValue  (_G.F2R_TARGET = modèle ; loadstring(...)())
+    <nom>_Setup.txt       -> StringValue  (loadstring(...)({ target = modèle }))
     ApplySoundIds.txt     -> StringValue  (renseigne les SoundId d'un véhicule déjà installé)
     <nom>_sound_ids.txt   -> StringValue  (texte de sounds/sound_ids.json, s'il existe)
     Verify.lua            -> ModuleScript (require(...)(opts) -> JSON ; aussi côté client en Play,
                                            où loadstring est interdit)
     DriveBench.lua        -> ModuleScript (mesures de conduite, client du conducteur en Play)
     TestTrack.lua         -> ModuleScript (piste d'essai temporaire, serveur en Play)
+    PlayLock.lua          -> ModuleScript (tour de rôle pour le Play entre agents)
+Plusieurs agents peuvent déposer en même temps : les fichiers communs sont identiques et écrits
+de façon atomique ; --clean <sortie>/<nom> ne retire que les fichiers de ce véhicule.
 Affiche un JSON : chemin Studio du dossier, fichiers, octets.
 Le dossier choisi doit être monté avec "$ignoreUnknownInstances": true (Rojo n'y efface rien d'autre)
 et ignoré par git (rien n'est commité).
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -74,6 +79,13 @@ def _git_ignored(project: Path, path: Path) -> bool:
         return False
 
 
+def _vehicle_name(vdir: Path) -> str:
+    man = vdir / "studio" / "manifest.json"
+    if man.is_file():
+        return json.loads(man.read_text(encoding="utf-8"))["vehicle"]
+    return vdir.name
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("vehicle_dir", nargs="?", help="<sortie>/<nom> produit par convert_vehicle.py")
@@ -85,9 +97,21 @@ def main() -> int:
     sync_dir, studio_path = find_sync_dir(project)
     dest = sync_dir / FOLDER
     if args.clean:
-        if dest.exists():
+        # Les autres agents peuvent encore se servir du dossier : on ne retire que les fichiers du
+        # véhicule désigné, et le dossier entier seulement quand plus aucun véhicule n'y est déposé.
+        removed = []
+        if args.vehicle_dir and dest.exists():
+            vname = _vehicle_name(Path(args.vehicle_dir).resolve())
+            for f in (f"{vname}_Setup.txt", f"{vname}_sound_ids.txt"):
+                if (dest / f).exists():
+                    (dest / f).unlink()
+                    removed.append(f)
+        left = sorted(p.name for p in dest.glob("*_Setup.txt")) if dest.exists() else []
+        if dest.exists() and not left:
             shutil.rmtree(dest)
-        print(json.dumps({"removed": str(dest), "studio_path": f"{studio_path}.{FOLDER}"}))
+            removed.append(FOLDER)
+        print(json.dumps({"removed": removed, "vehicles_left": [n[:-10] for n in left],
+                          "studio_path": f"{studio_path}.{FOLDER}"}))
         return 0
     if not args.vehicle_dir:
         ap.error("vehicle_dir requis (sauf avec --clean)")
@@ -95,7 +119,7 @@ def main() -> int:
     sdir = vdir / "studio"
     if not (sdir / "manifest.json").is_file():
         raise SystemExit(f"{sdir}/manifest.json introuvable : relancer convert_vehicle.py (version récente).")
-    name = json.loads((sdir / "manifest.json").read_text(encoding="utf-8"))["vehicle"]
+    name = _vehicle_name(vdir)
     dest.mkdir(parents=True, exist_ok=True)
     plan = {
         "FiveMRuntime.txt": sdir / "FiveMRuntime.lua",
@@ -104,13 +128,18 @@ def main() -> int:
         "Verify.lua": sdir / "Verify.lua",
         "DriveBench.lua": sdir / "DriveBench.lua",
         "TestTrack.lua": sdir / "TestTrack.lua",
+        "PlayLock.lua": sdir / "PlayLock.lua",
     }
     ids = vdir / "sounds" / "sound_ids.json"
     if ids.is_file():
         plan[f"{name}_sound_ids.txt"] = ids
     files = {}
     for target, src in plan.items():
-        shutil.copyfile(src, dest / target)
+        if not src.is_file():
+            continue
+        tmp = dest / f".{target}.{os.getpid()}.tmp"     # écriture atomique : un autre agent peut
+        shutil.copyfile(src, tmp)                        # déposer le même fichier au même moment
+        os.replace(tmp, dest / target)
         files[target] = src.stat().st_size
     print(json.dumps({"studio_path": f"{studio_path}.{FOLDER}", "dir": str(dest), "vehicle": name,
                       "files": files}, indent=2))

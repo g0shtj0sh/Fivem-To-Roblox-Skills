@@ -51,10 +51,19 @@ end
 ChangeHistoryService:SetWaypoint("FiveM vehicle setup: début")
 
 -- ------------------------------------------------------------------ 1. modèle importé
--- Automatisation (execute_luau) : _G.F2R_TARGET désigne le modèle importé, sans sélection.
-local model = typeof(_G.F2R_TARGET) == "Instance" and _G.F2R_TARGET:IsA("Model") and _G.F2R_TARGET or nil
-local NO_GROUND = _G.F2R_NO_GROUND == true -- true : garder la hauteur d'import (pas de pose au sol)
-_G.F2R_TARGET, _G.F2R_NO_GROUND = nil, nil
+-- Automatisation (execute_luau) : loadstring(src)({ target = modèle, noGround = bool, keepPosition = bool }).
+-- Les arguments sont propres à cet appel : plusieurs agents peuvent installer en même temps dans le
+-- même Studio. _G.F2R_TARGET / _G.F2R_NO_GROUND restent acceptés (ancien usage, un seul agent).
+local ARGS = select("#", ...) > 0 and type((...)) == "table" and (...) or {}
+local function asModel(x)
+	return typeof(x) == "Instance" and x:IsA("Model") and x or nil
+end
+local model = asModel(ARGS.target) or (ARGS.target == nil and asModel(_G.F2R_TARGET)) or nil
+local NO_GROUND = ARGS.noGround == true or (ARGS.target == nil and _G.F2R_NO_GROUND == true)
+local KEEP_POSITION = ARGS.keepPosition == true or NO_GROUND
+if ARGS.target == nil then
+	_G.F2R_TARGET, _G.F2R_NO_GROUND = nil, nil
+end
 for _, s in ipairs(model and {} or Selection:Get()) do
 	if s:IsA("Model") then
 		model = s
@@ -1015,6 +1024,40 @@ else
 	warnf("Impossible de charger VehicleCollision dans Studio : %s", tostring(CollisionMod))
 end
 
+-- ------------------------------------------------------------------ 13b. place libre dans F2R_ImportTest
+-- Plusieurs véhicules installés en parallèle arrivent tous au même point : chacun prend la
+-- première place libre d'une rangée (40 studs d'écart) partant de la position du premier.
+local slot = nil
+do
+	local importFolder = model.Parent
+	if not KEEP_POSITION and importFolder and importFolder.Name == "F2R_ImportTest" then
+		local used = {}
+		for _, m in ipairs(importFolder:GetChildren()) do
+			local k = m ~= model and m:GetAttribute("F2R_Slot")
+			if type(k) == "number" then
+				used[k] = true
+			end
+		end
+		slot = model:GetAttribute("F2R_Slot")
+		if type(slot) ~= "number" then
+			slot = 0
+			while used[slot] do
+				slot += 1
+			end
+		end
+		local origin = importFolder:GetAttribute("F2R_Origin")
+		if typeof(origin) ~= "Vector3" then
+			origin = model:GetPivot().Position
+			importFolder:SetAttribute("F2R_Origin", origin)
+		end
+		model:SetAttribute("F2R_Slot", slot)
+		local piv = model:GetPivot()
+		local want = origin + Vector3.new(slot * 40, 0, 0)
+		model:PivotTo(piv + Vector3.new(want.X - piv.Position.X, 0, want.Z - piv.Position.Z))
+		log(string.format("Place %d dans F2R_ImportTest.", slot))
+	end
+end
+
 -- ------------------------------------------------------------------ 14. pose au sol
 -- Le modèle arrive à la hauteur d'import (Importer 3D, insert_asset) : on pose le bas des roues
 -- sur ce qu'il y a dessous (rayon vers le bas, véhicule exclu), à 200 studs au plus.
@@ -1064,6 +1107,7 @@ return {
 	missingParts = missing,
 	missingSounds = missingSounds,
 	groundedBy = groundedBy,
+	slot = slot,
 	collisionParts = #collisionParts,
 	warnings = warnings,
 }
