@@ -1432,6 +1432,11 @@ function Custom.RemoveDoor(model, bone, keepDebris)
 				end
 			end
 			debris.PrimaryPart = first
+			-- groupe des débris AVANT d'entrer dans le monde : né dans la coque du véhicule, il ne doit pas la toucher
+			local okAccess, Access = pcall(require, script.Parent:WaitForChild("VehicleAccess", 5))
+			if okAccess and Access and Access.TagDebris then
+				Access.TagDebris(debris)
+			end
 			debris.Parent = workspace
 			-- elle part avec l'élan du véhicule, un peu écartée de la caisse (sinon elle reste « posée » dessus)
 			local root = model.PrimaryPart

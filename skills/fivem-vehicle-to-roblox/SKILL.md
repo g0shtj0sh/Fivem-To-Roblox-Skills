@@ -449,6 +449,16 @@ Pièges des essais (rm3e36, 2026-11-19) :
 - Menu du jeu sans interface : fonctions Flamework = RemoteEvents `FireServer(requestId, …)`, réponse
   `OnClientEvent(requestId, ok, résultat)`.
 
+**Chocs** (2026-11-19, 355e contre un poteau Ø 0,25 m) : les pièces de collision ont un rebond de **0,05** (poids
+100), posé par le Setup et par `VehicleAccess.TagCollision` à l'enregistrement de chaque véhicule (runtime : les
+véhicules déjà installés en profitent). Avec le 0,5 par défaut du plastique, la voiture repartait en arrière à 11,5 km/h
+après un choc à 51 km/h, et à 92 km/h elle rebondissait à 33 km/h puis était catapultée (+0,75 m, roulis 48°).
+Les débris d'un ouvrant arraché sont dans le groupe `FiveMVehicleDebris` (ne touche ni véhicule ni occupant) : nés
+dans la coque, ils la repoussaient (+0,68 m en un pas, 0,3 s après le choc). Contrôle Verify « collision sans rebond ».
+Banc rejouable (jeu brolver-rp) : `scripts/vehicles/crash_pole_bench.lua`. Limite : la coque reste rigide (aucune
+déformation). Pied au plancher à 92 km/h : 2 essais sur 2 plaqués au poteau avec ce runtime, mais un essai antérieur
+(débris isolés par un correctif provisoire) avait glissé autour du poteau et l'avait franchi : cas non exclu.
+
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
 Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) : relancer le groupe.

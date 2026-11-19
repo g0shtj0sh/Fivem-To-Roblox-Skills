@@ -409,6 +409,18 @@ function groups.collision()
 		nWheels += 1
 	end
 	check(#wheelsCol == nWheels, "roues de collision", fmt("%d/%d cylindres", #wheelsCol, nWheels))
+	-- choc sans rebond (VehicleAccess.CrashElasticity) : 0,5 par défaut = recul puis catapulte sur un poteau (325e)
+	local bouncy = {}
+	for _, list in ipairs({ pieces, wheelsCol }) do
+		for _, p in ipairs(list) do
+			if p.CurrentPhysicalProperties.Elasticity > 0.1 then
+				table.insert(bouncy, p.Name)
+			end
+		end
+	end
+	check(#bouncy == 0, "collision sans rebond",
+		#bouncy == 0 and "élasticité ≤ 0,1 partout" or fmt("%d pièce(s) à rebond > 0,1 : %s", #bouncy,
+			table.concat(bouncy, ", ", 1, math.min(#bouncy, 4))))
 	local bad, fid, unwelded = 0, {}, {}
 	for _, p in ipairs(pieces) do
 		if not (p.CanCollide and p.CanQuery and p.CanTouch and p.Transparency >= 1) then

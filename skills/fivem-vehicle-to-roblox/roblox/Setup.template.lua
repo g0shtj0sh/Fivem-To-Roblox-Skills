@@ -535,6 +535,12 @@ for bone, w in pairs(coll.Wheels or {}) do
 		table.insert(collisionParts, c)
 	end
 end
+-- choc sans rebond (même réglage que VehicleAccess.TagCollision, appliqué au démarrage du serveur) : le plastique
+-- par défaut (0,5) faisait rebondir la voiture sur un poteau puis la catapulter (325e, 2026-11-19)
+for _, p in ipairs(collisionParts) do
+	local cur = p.CurrentPhysicalProperties
+	p.CustomPhysicalProperties = PhysicalProperties.new(cur.Density, cur.Friction, 0.05, cur.FrictionWeight, 100)
+end
 if #collisionParts > 0 then
 	-- la boîte reste comme volume englobant (repères, zones), sans collision ni rayons
 	hitbox.CanCollide, hitbox.CanQuery, hitbox.CanTouch = false, false, false

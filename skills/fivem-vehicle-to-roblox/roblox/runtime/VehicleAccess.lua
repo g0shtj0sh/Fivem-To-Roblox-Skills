@@ -34,6 +34,16 @@ local Access = {}
 
 Access.VehicleGroup = "FiveMVehicle"
 Access.OccupantGroup = "FiveMVehicleOccupant"
+-- débris (ouvrant arraché, VehicleCustomization.RemoveDoor) : touchent le sol et le décor, jamais un véhicule ni ses
+-- occupants. Créés à la place de la pièce, donc DANS la coque du véhicule : solides contre lui, Roblox les séparait
+-- en déplaçant la voiture (325e 2026-11-19, choc de face à 92 km/h : +0,68 m en un pas, 0,3 s après le choc)
+Access.DebrisGroup = "FiveMVehicleDebris"
+-- Rebond des pièces de collision du véhicule. Roblox donne 0,5 au plastique par défaut : une voiture qui tape un
+-- poteau à 51 km/h repartait en arrière à 11,5 km/h, et à 92 km/h le choc la renvoyait à 33 km/h puis la catapultait
+-- (+0,75 m, roulis 48°) en rebondissant sur le sol (mesuré en Play, 325e, 2026-11-19). Une carrosserie absorbe le
+-- choc en se déformant : quasi pas de rebond. Poids 100 : notre valeur l'emporte sur celle de la surface touchée.
+Access.CrashElasticity = 0.05
+Access.CrashElasticityWeight = 100
 Access.EnterReach = 6 -- studs au-delà de MaxActivationDistance de l'invite (latence)
 Access.DoorOpenTime = 0.35 -- s avant de s'asseoir / après l'ouverture
 Access.DoorCloseDelay = 1.1 -- s avant de refermer la portière ouverte pour monter / descendre
@@ -111,12 +121,14 @@ local function ensureGroups()
 		return
 	end
 	groupsReady = true
-	for _, g in ipairs({ Access.VehicleGroup, Access.OccupantGroup }) do
+	for _, g in ipairs({ Access.VehicleGroup, Access.OccupantGroup, Access.DebrisGroup }) do
 		if not PhysicsService:IsCollisionGroupRegistered(g) then
 			PhysicsService:RegisterCollisionGroup(g)
 		end
 	end
 	PhysicsService:CollisionGroupSetCollidable(Access.VehicleGroup, Access.OccupantGroup, false)
+	PhysicsService:CollisionGroupSetCollidable(Access.DebrisGroup, Access.VehicleGroup, false)
+	PhysicsService:CollisionGroupSetCollidable(Access.DebrisGroup, Access.OccupantGroup, false)
 end
 
 local function config(model)
@@ -696,6 +708,20 @@ function Access.TagCollision(model)
 	for _, p in ipairs(list) do
 		if p:IsA("BasePart") then
 			p.CollisionGroup = Access.VehicleGroup
+			-- choc sans rebond (Access.CrashElasticity) ; densité et frottement inchangés
+			local cur = p.CurrentPhysicalProperties
+			p.CustomPhysicalProperties = PhysicalProperties.new(cur.Density, cur.Friction, Access.CrashElasticity,
+				cur.FrictionWeight, Access.CrashElasticityWeight)
+		end
+	end
+end
+
+-- Débris d'un véhicule : groupe qui ne touche ni les véhicules ni leurs occupants (voir Access.DebrisGroup).
+function Access.TagDebris(debris)
+	ensureGroups()
+	for _, p in ipairs(debris:IsA("BasePart") and { debris } or debris:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CollisionGroup = Access.DebrisGroup
 		end
 	end
 end
