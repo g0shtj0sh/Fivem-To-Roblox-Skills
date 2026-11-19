@@ -324,6 +324,19 @@ collision d'origine. Une pièce entièrement dans un volume de roue n'est pas cr
 pièce(s) ». rm3e36 : 75 % → 83 % de fidélité, passages de roues dégagés. `--collision-fill-avoid-wheels` écarte les
 pièces des roues au lieu de les creuser ; `--no-collision-fill` désactive le comblement.
 
+## Tenue de route : ni tonneau ni rebond (automatique, runtime)
+
+Un `handling.meta` réglé pour GTA peut donner plus d'adhérence que la voiture ne peut en encaisser sans basculer
+(325e : `TractionCurveMax` 2,75 g, centres de roulis 0, seuil de basculement 1,71 g → couchée en braquant à fond à
+40 km/h), et une suspension forte sur une course courte devient une suspension de course (325e : 4,8 Hz → décolle sur
+une bordure de 15 cm). `VehicleDynamics` corrige les deux pour **tout** véhicule, sans toucher au mod :
+`Tuning.RollSafety` (le pneu glisse avant que la roue intérieure ne décolle, centre de roulis effectif remonté au
+besoin, `out.wheels[i].rc`) et `Tuning.RideFreqMax` (raideur plafonnée à 2,5 Hz par roue ; valeur d'origine dans
+`P.kSpringRaw`). Un véhicule déjà dans la marge (m422) ne change pas de façon perceptible. **À contrôler sur chaque
+nouveau véhicule** (banc `DriveBench`, piste `TestTrack`) : `Bench.corner(40, 1)` et `Bench.corner(60, 1)` →
+`minWheels = 4`, `rolledOver = false` ; `Bench.curb(60, 120)` sur la voie `curb` → `airborne = 0`, tangage < 5 °.
+Une voiture peut toujours se retourner sur un trottoir pris en travers, un choc ou un tremplin : c'est voulu.
+
 ## 3. Préparer les scripts pour Studio (sans recopier 100 Ko de code)
 
 La conversion écrit `<sortie>/<nom>/studio/` : `FiveMRuntime.lua` (runtime, une fois par place),

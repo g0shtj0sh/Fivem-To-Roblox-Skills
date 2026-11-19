@@ -82,6 +82,15 @@ Dyn.Tuning = {
 	CStick = 60, -- amortissement du ressort : sans lui il oscillerait. 60 reste propre jusqu'à KStick 6400,
 	-- là où 28 décroche — d'où ce choix plutôt que le ≈ 2√K théorique.
 	KSpring = 1.0, -- k = SuspensionForce × biais × g / course × KSpring (hypothèse)
+	RideFreqMax = 2.5, -- Hz : PLAFOND de fréquence propre de suspension par roue, √(k / masse de la roue) / 2π
+	-- (2026-11-19, BMW 325e). La loi ci-dessus divise par la course : un mod à suspension raide ET courte
+	-- (325e : SuspensionForce 3,75, course 0,16 m) donnait 4,8 Hz, une raideur de voiture de course à appui,
+	-- quand une voiture de route est à 1-1,5 Hz et une sportive à 2-2,5 Hz. MESURÉ EN STUDIO, marche de 0,149 m
+	-- à 60 km/h (Bench.curb) : 4,8 Hz → décolle (0 roue au sol, 29 images en l'air, tangage 10,5 °, roulis 19 °) ;
+	-- ressorts ×0,27 (2,5 Hz) → 4 roues puis 2 au plus bas, 0 image en l'air, tangage 3,2 °, roulis 0,07 °
+	-- (m422 : +3,0 / −2,4 °, GTA +2,2 / −2,6). La m422 (2,2 Hz) est sous le plafond : inchangée.
+	-- Les amortisseurs suivent (ζ est relatif à k). Les améliorations de suspension raidissent au-dessus.
+	-- 0 = pas de plafond.
 	BumpK = 0, -- m/s² par m au-delà de la butée de compression. VÉRIFIÉ EN STUDIO (2026-11-12) : la marche de
 	-- 0,149 m prise à 60 km/h monte la roue en une image et dépasse les 0,10 m de course restante au repos ;
 	-- à 400 la butée renvoyait la caisse : +8,4 / −17,7 ° de tangage, 3 images en l'air, 8,7 km/h perdus. À 0 :
@@ -105,6 +114,20 @@ Dyn.Tuning = {
 	-- des roues motrices — s'emballe, la boîte monte en 3ᵉ et le véhicule perd sa motricité. GTA, lui, roule par
 	-- moments sur 2 ou 3 roues au virage 40 sans rien perdre. Pour aller vers 1 °/g : traiter d'abord ce
 	-- patinage (répartition du couple, régime pris sur la vitesse du véhicule), puis redescendre ce réglage.
+	RollSafety = 1.05, -- GARDE ANTI-TONNEAU (2026-11-19, BMW 325e) : sur sol plat, les pneus seuls ne doivent jamais
+	-- pouvoir soulever les roues intérieures. Une roue décolle quand l'accélération latérale dépasse
+	-- demi-voie / bras de levier (bras = hauteur du centre de gravité − centre de roulis effectif). Si l'adhérence
+	-- latérale maximale de l'instant (TractionCurveMax × traction de l'essieu × freins améliorés + déportance, × sol)
+	-- atteint ce seuil, le centre de roulis effectif de cette roue est remonté juste ce qu'il faut pour que le
+	-- seuil vaille adhérence × RollSafety : le pneu glisse avant que la voiture ne se couche, comme une vraie
+	-- voiture de route (adhérence ≈ 1 g pour un seuil ≈ 1,4 g). Les voitures qui ont déjà cette marge ne
+	-- changent pas. CAUSE DÉMONTRÉE EN STUDIO : 325e (TractionCurveMax 2,75, centres de roulis 0 / 0,01, centre de
+	-- gravité 0,44 m, demi-voie 0,75 m → seuil 1,71 g) couchée à 73 ° au virage 40 km/h braquage plein ;
+	-- à 36 km/h, 1,9 g, deux roues en l'air jusqu'à 37 °, puis retombée qui rebondit (0 roue au sol).
+	-- APRÈS : 325e sur 4 roues au virage 40 et 60 braquage plein (2,2 et 2,9 g), au créneau 80 et au slalom 60.
+	-- m422 (1,9 g + déportance ; seuil ≈ 2,07 g) : centre de roulis avant remonté de 1 à 2 cm ; A/B même séance,
+	-- virage 40 : roulis établi 1,26 → 1,24 °, 1,638 → 1,645 g, rayon 8,14 → 8,11 m (imperceptible).
+	-- 0 = garde coupée. Un trottoir, un choc ou un tremplin peuvent toujours retourner la voiture.
 	KArb = 1.0, -- anti-roulis : kA = AntiRollBarForce × biais × g / course × KArb (loi inconnue)
 	IwRel = 0.03, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
 	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g).
@@ -667,6 +690,15 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 	-- distance du centre de gravité à l'essieu ARRIÈRE (m) : sert à la vitesse latérale de
 	-- l'arrière, vLat + b·lacet, qui pilote la réduction du braquage en glisse (voir Dyn.Tuning)
 	P.axleRear = math.clamp(zR - comLocal.Z, 0.3, base)
+	P.com = comLocal
+	-- plafond de fréquence propre (Tuning.RideFreqMax) : k ≤ (2π f)² × masse spécifique de la roue
+	local fMax = T.RideFreqMax or 0
+	if fMax > 0 then
+		local w2 = (2 * math.pi * fMax) ^ 2
+		P.kSpringRaw = { P.kF, P.kR }
+		P.kF = math.min(P.kF, w2 * fracF / math.max(nF, 1))
+		P.kR = math.min(P.kR, w2 * (1 - fracF) / math.max(nR, 1))
+	end
 	for _, w in ipairs(wheels) do
 		w.load = P.g * (w.front and fracF / math.max(nF, 1) or (1 - fracF) / math.max(nR, 1)) -- N spécifique au repos
 		w.massFrac = w.load / P.g
@@ -675,6 +707,7 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 		w.brakeBias = w.front and P.brakeF or P.brakeR
 		w.trac = w.front and P.tracF or P.tracR
 		w.rc = (w.front and P.rcF or P.rcR) * (T.RollCentreScale or 1)
+		w.halfTrack = math.abs(w.rest.X - comLocal.X) -- bras de basculement latéral (garde anti-tonneau)
 		w.Iw = T.IwRel * w.radius * w.radius / 4
 		w.x0 = -P.lower -- compression au repos (depuis la détente maximale)
 	end
@@ -1337,13 +1370,31 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		local x = S.x[i]
 		local wheelCenter = w.rest + Vector3.new(0, P.upper + P.raise - (P.travel - x), 0)
 		local contactY = wheelCenter.Y - w.radius
+		-- garde anti-tonneau (Tuning.RollSafety) : centre de roulis effectif remonté si l'adhérence de l'instant
+		-- suffirait à soulever la roue intérieure ; même formule que fmax plus haut (sol, freins améliorés,
+		-- déportance ajoutée sur chaque roue)
+		local rc = w.rc
+		local safety = T.RollSafety or 0
+		if safety > 0 and P.com and w.halfTrack and w.halfTrack > 0 then
+			local c = contacts[i]
+			local soil = 1 - (1 - ((c and c.grip) or 1)) * P.lossMult
+			local brakeK = 1
+			if (P.brakeGrip or 0) > 0 and brakeIn > 0 and not (inp.Handbrake and not w.front) then
+				brakeK = 1 + P.brakeGrip * math.min(brakeIn, 1)
+			end
+			local capG = (P.muMax * w.trac + 4 * wdv(P, speed)) * soil * brakeK
+			if capG > 0 then
+				rc = math.max(rc, (P.com.Y - contactY) - w.halfTrack / (capG * safety))
+			end
+		end
 		out.wheels[i] = {
 			Fz = N[i],
 			Fx = sumFx[i] / nSub,
 			Fy = sumFy[i] / nSub,
 			steer = w.steer and S.steerAngle or 0,
 			point = Vector3.new(wheelCenter.X, contactY, wheelCenter.Z), -- contact (charge normale)
-			lateralPoint = Vector3.new(wheelCenter.X, contactY + w.rc, wheelCenter.Z), -- centre de roulis
+			lateralPoint = Vector3.new(wheelCenter.X, contactY + rc, wheelCenter.Z), -- centre de roulis (gardé)
+			rc = rc, -- centre de roulis effectif (m au-dessus du contact), après la garde anti-tonneau
 			slip = S.slip[i], -- glissement combiné (> 1 : au-delà du pic d'adhérence)
 			slipV = S.slipV[i], -- vitesse de glissement au contact (m/s)
 			slipLong = S.slipLong[i], -- part le long de la roue (m/s, + = la roue tourne plus vite que le sol)
