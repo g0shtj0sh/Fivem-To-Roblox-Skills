@@ -517,7 +517,7 @@ if Damage then
 					local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
 					local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
 					local speed = root.AssemblyLinearVelocity.Magnitude / spm
-					Damage.Apply(model, Vector3.yAxis, math.max(Damage.RollMin or 14, speed))
+					Damage.Apply(model, Vector3.yAxis, math.max(Damage.RollMin or 14, speed * (Damage.RollSpeedShare or 1)))
 				end
 			else
 				lastUp[model] = nil

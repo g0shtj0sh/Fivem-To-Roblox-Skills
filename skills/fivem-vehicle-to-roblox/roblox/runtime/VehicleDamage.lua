@@ -63,6 +63,11 @@ Damage.SpinUpright = 0.6 -- vecteur haut (Y) sous lequel la voiture est « hors 
 Damage.RollMin = 16 -- m/s : choc de toit appliqué à CHAQUE passage sur le toit (un tonneau), au moins cette force,
 -- sinon la vitesse de la voiture à cet instant. Mesuré (Play Studio, m422 projetée en tonneaux) : les chocs pris image
 -- par image restaient faibles (5 à 13 m/s : l'impact s'étale sur plusieurs images) → 4 tonneaux ≈ −30 moteur seulement.
+-- Part de la vitesse de la voiture comptée comme force d'un choc de toit (2026-11-19, utilisateur : « à peine un tonneau,
+-- un peu vite, et la voiture prend feu direct »). À 1 (avant), un tonneau à 90 km/h valait 25 m/s, soit ≈ 216 points
+-- moteur par contact du toit (325e : EngineDamageMult 1,5, proximité 0,6) : 3-4 contacts et le moteur passait sous
+-- FireBelow. À 0,6 : 16 m/s (RollMin) jusqu'à ≈ 96 km/h, ≈ 80 points par contact.
+Damage.RollSpeedShare = 0.6
 Damage.RollEngineMin = 0.6 -- proximité minimale du moteur pour un choc de toit / dessous (une voiture qui fait
 -- plusieurs tonneaux finit par fumer, même si le toit est loin du moteur)
 
