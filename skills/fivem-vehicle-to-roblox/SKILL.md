@@ -559,6 +559,26 @@ que si le toit touche quelque chose dans les 0,6 s (balayage du centre vers le t
 chute en rotation, 3 passages sur le toit en l'air → 0 dégât avant le sol ; voiture conduite lancée en tonneaux,
 5 passages en vol → 0 dégât en vol ; tonneau au sol → dégâts au contact du toit, comme avant.
 
+**Roues : crevaison, roue cassée, roue arrachée, herse (2026-11-19, demande de l'utilisateur)** :
+`WheelHealth_<os>` (1000) et `WheelState_<os>` : 1 crevé (< 650), 2 cassé (< 300 : la roue reste braquée de 8° vers
+l'extérieur, `Dyn.WheelSteer` ; la direction ne la tourne plus), 3 arraché (0 : copie physique de la roue en débris
+60 s, groupe `FiveMVehicleDebris`, pièces masquées par `Refresh` ; le MOYEU reste en contact, bloqué, frottement 1,0,
+sans moteur ni direction). Un état ne redescend qu'à `Custom.Repair` (`Damage.Reset`). Choc : la roue perd
+énergie × `WheelK` 2,5 × (1 − d / `WheelReach` 1,8 m), d = distance HORIZONTALE du point de choc au centre de roue (le
+choc est réduit à un point : à 1,2 m, un choc de face ou de côté n'atteignait jamais les roues). Herse : pièce ou modèle
+tagué `SpikeStrip` (CanCollide false, CanQuery true) ; le spherecast de suspension du conducteur la touche, le client
+envoie « Spike », le serveur crève si une herse est à moins de 3 m + 0,4 s de trajet de la roue (2,5 m fixes : la
+moitié des passages à 70 km/h refusés, retard de réplication). `Tune_BulletproofTyres` : jamais crevé (une roue peut
+encore casser ou partir). Mesures BavrenN4 (Play, un joueur, plat ; plein gaz 4 s puis freinage) : saine 104 km/h,
+freinage 22 m ; AVG crevée 77 km/h, lacet 9° volant lâché ; AVG cassée 84 km/h, lacet 32° ; AVD arrachée 83 km/h,
+lacet 35° ; ARG arrachée 35 km/h. Mur à 40° : 60 km/h → roue à 684, 75 km/h → crevée, 108 km/h → arrachée.
+Herse : 4 pneus crevés à 50, 70 et 90 km/h ; côté gauche seulement → AVG crevée, la voiture tire à gauche.
+Pièges mesurés : abaisser d'un coin de 7 cm décharge la DIAGONALE par les barres anti-roulis (0,68 et 0,32 au lieu de
+2,45) : la roue opposée patine dans le vide et la voiture ne repart plus → abaissement de 4 cm, pneu à plat ou moyeu
+seulement ; une roue arrachée « sans contact » laissait la voiture sur trois appuis, roue arrière opposée en l'air au
+rupteur, voiture qui RECULAIT en accélérant → contact du moyeu gardé. Non vérifié : téléphone, plusieurs joueurs
+(débris vus par un autre client), autres véhicules que la BavrenN4.
+
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
 Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) : relancer le groupe.
