@@ -114,6 +114,10 @@ def test_pipeline():
                 parts.append(m.group(2))
             assert "".join(parts) == src, step
             assert "loadstring" in (sdir / calls[-1]).read_text(encoding="utf-8")
+        # le Setup prend sa cible en argument : compilé par son dernier morceau, appelé par « then »
+        setup_step = next(s for s in man["steps"] if s["key"] == "testcar_Setup")
+        assert "_G.F2R_FN" in (sdir / setup_step["calls"][-1]).read_text(encoding="utf-8")
+        assert "target = " in setup_step["then"]
         # étape 3 : physique complète du véhicule
         hd = cfg["Handling"]
         assert hd["TractionCurveLateralDeg"] == 22.5 and abs(hd["TractionCurveLateralRad"] - 0.392699) < 1e-5

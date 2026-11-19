@@ -340,6 +340,11 @@ class TextureStore:
             self.missing.add(spec_name.lower())
             self.cache[key] = None
             return None
+        # retouche (brands/vehicles/<nom>.json) écrite pour la carte de brillance : appliquée comme aux autres
+        # textures ; ignorée avant, le logo restait dans les reflets (audit 2026-11-19)
+        edit = self.edits.get(spec_name.lower()) or self.edits.get(spec_name.lower().replace("+hi", ""))
+        if edit is not None:
+            img = edit(img, "spec")
         img = resize_for_roblox(img, self.max_size)
         rough = spec_to_roughness(img, int_mult, falloff, mask)
         if any("chrome" in (n or "").lower() for n in (spec_name, diffuse)):

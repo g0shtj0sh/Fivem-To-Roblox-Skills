@@ -135,7 +135,7 @@ def build_runtime_install() -> str:
         .replace("__RUNTIME_SOURCES__", body)
 
 
-def split_for_execute_luau(source: str, key: str, max_bytes: int = 20000) -> list[str]:
+def split_for_execute_luau(source: str, key: str, max_bytes: int = 20000, defer: bool = False) -> list[str]:
     """Découpe un gros script en appels execute_luau : chaque morceau s'ajoute à
     _G.F2R_BUF[key] ; le dernier l'assemble et l'exécute avec loadstring, et renvoie
     son résultat. Coupé sur des fins de ligne (jamais au milieu d'un caractère UTF-8)."""
@@ -159,8 +159,17 @@ def split_for_execute_luau(source: str, key: str, max_bytes: int = 20000) -> lis
         if i < n:
             out.append(head + f"return \"{key} {i}/{n}\"\n")
         else:
-            out.append(head + f"local src = table.concat(_G.F2R_BUF[{lua_string(key)}])\n"
-                       f"_G.F2R_BUF[{lua_string(key)}] = nil\n"
-                       f"local fn, err = loadstring(src, {lua_string('=' + key)})\n"
-                       "assert(fn, err)\nreturn fn()\n")
+            tail = (f"local src = table.concat(_G.F2R_BUF[{lua_string(key)}])\n"
+                    f"_G.F2R_BUF[{lua_string(key)}] = nil\n"
+                    f"local fn, err = loadstring(src, {lua_string('=' + key)})\n"
+                    "assert(fn, err)\n")
+            if defer:
+                # script qui prend des arguments (Setup : { target = … }) : compilé et rangé sous sa clé, l'agent
+                # l'appelle ensuite avec ses arguments (avant : exécuté sans argument, le Setup prenait la sélection
+                # ou le premier modèle trouvé ; audit 2026-11-19)
+                tail += (f"_G.F2R_FN = _G.F2R_FN or {{}}\n_G.F2R_FN[{lua_string(key)}] = fn\n"
+                         f"return \"{key} prêt : _G.F2R_FN[\\\"{key}\\\"](arguments)\"\n")
+            else:
+                tail += "return fn()\n"
+            out.append(head + tail)
     return out

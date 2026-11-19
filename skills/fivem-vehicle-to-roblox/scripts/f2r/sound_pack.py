@@ -115,7 +115,8 @@ def _open_pack(path: str | os.PathLike, cache_dir: Path, report: Report) -> Path
                 shutil.rmtree(dest)
             if p.suffix.lower() in (".rar", ".7z") and not (shutil.which("7z") or shutil.which("7za")):
                 seven = _seven_zip()
-                unrar = shutil.which("unrar") or shutil.which("rar") if p.suffix.lower() == ".rar" else None
+                # parenthèses : sans elles, « A or (B if .rar else None) » prenait unrar pour un .7z (audit 2026-11-19)
+                unrar = (shutil.which("unrar") or shutil.which("rar")) if p.suffix.lower() == ".rar" else None
                 if seven is None and unrar is None:
                     report.warn("Pack de sons en .rar/.7z mais ni 7-Zip ni unrar/rar trouvés : décompressez-le et "
                                 "passez le dossier à --engine-pack.")

@@ -252,7 +252,21 @@ def apply_texture_spec(img: Image.Image, ops: list[dict], logo: Image.Image | No
     def colour(op, default):
         if role == "normal":
             return flat
-        return np.array(op["color"], np.float32) if op.get("color") else default
+        if not op.get("color"):
+            return default
+        c = [float(v) for v in op["color"]]
+        # RGBA de 0 à 1 (325e.json, rm3e36.json). [r, g, b] (alpha 1 ajouté) ou 0-255 (comme restyle_islands) : avant,
+        # erreur numpy qui arrêtait la conversion, ou blanc (audit 2026-11-19)
+        if len(c) == 3:
+            c.append(1.0)
+        if len(c) != 4:
+            raise SystemExit(f"Retouche de texture {op.get('op')} : « color » attend [r, g, b, a] de 0 à 1, reçu {op['color']}.")
+        rgb, alpha = c[:3], c[3]
+        if max(rgb) > 1.0:  # 0-255
+            rgb = [v / 255.0 for v in rgb]
+        if alpha > 1.0:
+            alpha /= 255.0
+        return np.array(rgb + [alpha], np.float32)
 
     for op in ops:
         kind = op["op"]

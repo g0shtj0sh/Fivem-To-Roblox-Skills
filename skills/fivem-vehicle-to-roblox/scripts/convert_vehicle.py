@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -135,13 +136,18 @@ def write_studio_bundle(out: Path, name: str, config: dict, parts_cfg: dict, sou
     (sdir / f"{name}_Setup.studio.lua").write_text(compact, encoding="utf-8")
     manifest = {"runtime_version": runtime_version(), "vehicle": name, "steps": []}
     for key, src in (("FiveMRuntime", runtime), (f"{name}_Setup", compact)):
-        calls = split_for_execute_luau(src, key)
+        is_setup = key != "FiveMRuntime"
+        calls = split_for_execute_luau(src, key, defer=is_setup)
         files = []
         for i, code in enumerate(calls, 1):
             f = sdir / "chunks" / f"{key}_{i:02d}.lua"
             f.write_text(code, encoding="utf-8")
             files.append(f"chunks/{f.name}")
-        manifest["steps"].append({"key": key, "bytes": len(src.encode("utf-8")), "calls": files})
+        step = {"key": key, "bytes": len(src.encode("utf-8")), "calls": files}
+        if is_setup:
+            # le Setup prend sa cible en argument : un execute_luau de plus, après le dernier morceau
+            step["then"] = f'return _G.F2R_FN["{key}"]({{ target = workspace.F2R_ImportTest["{name}"] }})'
+        manifest["steps"].append(step)
     for extra in ("Verify.lua", "ApplySoundIds.lua", "DriveBench.lua", "TestTrack.lua", "PlayLock.lua"):
         shutil.copyfile(SKILL_ROOT / "roblox" / extra, sdir / extra)
     (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -701,9 +707,12 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         if engine is not None:
             got = sound_pack.prepare(engine, root, out / "_work_sounds", name, report)
             if got:
-                wavs = got
+                # le pack ne donne que moteur, échappement et klaxon : les sirènes du mod restent (avant, toutes
+                # remplacées par des sirènes synthétisées ; audit 2026-11-19)
+                wavs = {**{k: v for k, v in wavs.items() if "siren" in k.lower()}, **got}
         elif root is not None:
-            report.warn(f"Pack de sons : « {args.engine_sound} » introuvable, son d'origine conservé.")
+            report.warn("Pack de sons : " + (f"« {args.engine_sound} » introuvable" if args.engine_sound
+                                             else "aucun son pour cette classe") + ", son d'origine conservé.")
     if not wavs and game is not None:
         an = vinfo.get("audioNameHash") or name
         got = game.fetch_audio(an, retry=args.retry_gamefiles)
@@ -758,8 +767,11 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     write_json(out / "vehicle_config.json", {"vehicle": vinfo, "variation": variation, "handling_raw":
                                              metas["handling"].get((vinfo.get("handlingId") or name).lower()),
                                              "kits": kits, "roblox_config": config})
+    # seulement les fichiers que le véhicule utilise : avant, tout sounds/ (.wav ET .ogg du même son, restes d'une
+    # conversion précédente) -> sons mis en ligne en double (audit 2026-11-19)
+    used = {loop["File"] for loop in audio.get("EngineLoops", [])} | set(audio.get("Files", {}).values())
     write_json(out / "sounds" / "upload_manifest.json",
-               {"files": sorted(p.name for p in (out / "sounds").iterdir() if p.suffix in (".wav", ".ogg"))})
+               {"files": sorted(p.name for p in (out / "sounds").iterdir() if p.name in used)})
 
     tris = sum(p.tri_count for p in vb.parts)
     stats = {"name": name, "parts": len(vb.parts), "triangles": tris, "mods": mod_count,
@@ -1260,15 +1272,27 @@ def main(argv=None) -> int:
             game = gamelib.GameAssets.offline(report)
 
     results = []
+    # pack à plusieurs véhicules : le report.md de chacun = messages du pack (avant la boucle) + les siens ; avant, il
+    # reprenait aussi ceux des véhicules précédents, et une erreur autre que SystemExit arrêtait tous les suivants
+    # sans report.md (audit 2026-11-19)
+    pack_marks = (len(report.infos), len(report.warnings), len(report.manual_steps))
     try:
         for n in names:
+            marks = (len(report.infos), len(report.warnings), len(report.manual_steps))
             report.info(f"=== Conversion de {n} ===")
             vout = out / n
             try:
                 results.append(convert_one(n, inv, metas, vout, args, report, game))
             except SystemExit as exc:
                 report.warn(f"{n} : {exc}")
-            write_report(vout, n, results[-1] if results and results[-1]["name"] == n else None, report)
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+                report.warn(f"{n} : conversion interrompue ({type(exc).__name__} : {exc}).")
+            own = Report.__new__(Report)
+            own.infos = report.infos[:pack_marks[0]] + report.infos[marks[0]:]
+            own.warnings = report.warnings[:pack_marks[1]] + report.warnings[marks[1]:]
+            own.manual_steps = report.manual_steps[:pack_marks[2]] + report.manual_steps[marks[2]:]
+            write_report(vout, n, results[-1] if results and results[-1]["name"] == n else None, own)
     finally:
         if game is not None:
             game.close()
@@ -1332,12 +1356,13 @@ def write_report(out: Path, name: str, stats: dict | None, report: Report) -> No
     lines += ["## Installation dans Roblox Studio", "",
               f"1. **Importer 3D** → `{name}.glb` (options par défaut).",
               "2. Uploader les sons de `sounds/` (Creator Hub ou `python scripts/roblox_upload.py`), "
-              "puis relancer la conversion avec `--sound-ids sounds/sound_ids.json` "
+              f"puis relancer la conversion avec `--sound-ids <sortie>/{name}/sounds/sound_ids.json` "
               "(ou renseigner les SoundId à la main : attribut `SourceFile` sur chaque Sound).",
               "3. Sélectionner le modèle importé → **Modèle › Exécuter un script** → "
               f"`{name}_Setup.lua` (ou coller le fichier dans la barre de commande).",
-              "4. Brancher ton moteur physique : lire `FiveMVehicles.VehicleInput.Controls` et "
-              "appeler `FiveMVehicles.VehicleRuntime.SetTelemetry(car, {...})` (voir README).", ""]
+              "4. La conduite est intégrée (VehicleDrive). Pour brancher un autre châssis : attribut "
+              "`UseBuiltinDrive = false`, lire `FiveMVehicles.VehicleInput.Controls` et appeler "
+              "`FiveMVehicles.VehicleRuntime.SetTelemetry(car, {...})`.", ""]
     if report.manual_steps:
         lines += ["## Étapes manuelles", ""] + [f"- {m}" for m in report.manual_steps] + [""]
     if report.warnings:

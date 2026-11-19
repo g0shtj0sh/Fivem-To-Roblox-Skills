@@ -144,7 +144,14 @@ def extract_archive(archive: Path, dest: Path, report: Report, depth: int = 0) -
 def parse_xml_lenient(path: Path) -> ET.Element | None:
     """Les .meta de mods sont souvent mal formés (BOM, & non échappés, balises dupliquées)."""
     raw = path.read_bytes()
-    for enc in ("utf-8-sig", "utf-16", "latin-1"):
+    # UTF-16 seulement s'il est signalé (BOM) ou probable (octets nuls) : essayé avant latin-1, il « réussissait » sur
+    # tout fichier latin-1 / cp1252 de longueur paire et rendait du charabia -> .meta ignoré sans message (audit
+    # 2026-11-19 : handling, kits ou feux perdus selon le fichier)
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff") or b"\x00" in raw[:512]:
+        encodings = ("utf-16", "utf-8-sig", "latin-1")
+    else:
+        encodings = ("utf-8-sig", "cp1252", "latin-1")
+    for enc in encodings:
         try:
             text = raw.decode(enc)
             break
@@ -216,6 +223,10 @@ def element_to_obj(el: ET.Element):
         text = (el.text or "").strip()
         if attrs.get("content") in ("char_array", "int_array", "float_array", "short_array"):
             return [_num(t) for t in text.split()]
+        if el.tag.startswith("str") and text:
+            # champs texte de GTA (strModelFlags, strHandlingFlags… : des HEXADÉCIMAUX écrits sans 0x) : gardés tels
+            # quels. Lus comme nombres, « 1E00000 » devenait 1.0 et « 0x10 » 16, relu 0x16 (audit 2026-11-19)
+            return text
         return _num(text) if text else (attrs or "")
     if all(c.tag == "Item" for c in children):
         return [element_to_obj(c) for c in children]

@@ -1,6 +1,6 @@
 ---
 name: fivem-vehicle-to-roblox
-description: Convertit un véhicule FiveM / GTA V (zip ou dossier de ressource avec .yft/.ytd/.meta/.awc, dlc.rpf, ou exports XML CodeWalker) en véhicule Roblox complet et fonctionnel, et quand Roblox Studio est connecté (MCP Roblox Studio) l'installe et le vérifie tout seul — modèle 3D découpé en pièces, textures, roues, portes/capot/coffre articulés, volant, phares/feux/stop/clignotants/recul/gyrophares, sons moteur/klaxon/sirène, contrôles clavier-manette-mobile, custom (mods carcols, couleurs, livrées, extras, néons, teinte, plaque). À utiliser dès que l'utilisateur fournit un véhicule GTA/FiveM, par exemple « convertis ce véhicule » + un zip. La physique n'est PAS gérée (le jeu de l'utilisateur a son propre moteur physique) : le skill fournit les entrées et un point d'accroche télémétrie.
+description: Convertit un véhicule FiveM / GTA V (zip ou dossier de ressource avec .yft/.ytd/.meta/.awc, dlc.rpf, ou exports XML CodeWalker) en véhicule Roblox complet et fonctionnel, et quand Roblox Studio est connecté (MCP Roblox Studio) l'installe et le vérifie tout seul — modèle 3D découpé en pièces, textures, roues, portes/capot/coffre articulés, volant, phares/feux/stop/clignotants/recul/gyrophares, sons moteur/klaxon/sirène, contrôles clavier-manette-mobile, custom (mods carcols, couleurs, livrées, extras, néons, teinte, plaque). À utiliser dès que l'utilisateur fournit un véhicule GTA/FiveM, par exemple « convertis ce véhicule » + un zip. Conduite intégrée (physique calée sur le handling et la vraie voiture, dégâts) ; débrayable (`UseBuiltinDrive = false`) pour brancher un autre châssis.
 ---
 
 # FiveM / GTA V → Roblox (véhicules)
@@ -44,7 +44,7 @@ cd skills/fivem-vehicle-to-roblox
 python scripts/convert_vehicle.py "<zip>" -o "<sortie>" [--plate "TEXTE"  (défaut : plaque unique générée en jeu)] [--texture-overrides <dossier>]
 ```
 Options : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (> 300 000 triangles),
-`--no-collision` (hitbox = simple boîte), `--wheel-collision` (cylindres de roues solides),
+`--no-collision` (hitbox = simple boîte), `--no-wheel-collision` (cylindres de roues non solides ; par défaut ils portent le véhicule),
 `--studs-per-meter`, `--texture-overrides <dossier>` (PNG/DDS de même nom qui remplacent les
 textures du pack : retouches), `--brand`, `--model-name`, `--rebadge-spec` (§ 1b), `--sound-ids <json>`, `--retry-gamefiles`, `--no-game-server`.
 **Sons moteur maison (pack Brolver)** : `--engine-pack <dossier|.rar>` (ou variable
@@ -108,7 +108,8 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
 - **Logos peints dans les textures** (cache-moyeu, flanc de pneu, écran, volant, plaque de phare) : non
   détectables automatiquement. Ouvrir les PNG de `textures/` (une planche contact suffit), relever les
   zones en pixels de la texture d'origine, écrire `brands/vehicles/<nom>.json` (exemple : `m422.json` ;
-  opérations `fill_rect`, `fill_disc`, `fill_ring`, `fill_all`, `logo`), reconvertir : le fichier est lu
+  opérations `fill_rect`, `fill_disc`, `fill_ring`, `fill_all`, `logo` ; `color` = `[r, g, b, a]` de 0 à 1, comme
+  dans `m422.json`), reconvertir : le fichier est lu
   automatiquement et la conversion suivante le refait seule. Pousser ce fichier avec le skill.
 - **Lettrages modélisés** (lettres en relief dans la géométrie d'une pièce ordinaire, sans texture de badge :
   « ///M » du pommeau de vitesse et du repose-pied, « M4 » des appuie-tête de la m422) : ni le rebadge des
@@ -286,7 +287,8 @@ Setup en argument, une place par véhicule, `--clean` ciblé, et le Play à tour
 
 En parallèle :
 - **GLB** `<nom>.glb` → `upload_file` puis `asset_publish` → `rbxassetid` de type Model.
-- **Sons** : chaque `sounds/*.wav|ogg` → `upload_file` + `asset_publish` → écrire
+- **Sons** : chaque fichier de `sounds/upload_manifest.json` (ceux que le véhicule utilise ; pas tout
+  `sounds/`, qui garde aussi les `.wav` sources des `.ogg`) → `upload_file` + `asset_publish` → écrire
   `sounds/sound_ids.json` = `{ "engine_on_1.wav": "rbxassetid://…", … }`.
   Hors VibeStarter : `python scripts/roblox_upload.py <sortie>/<nom>/sounds --user-id <id>` (clé en variable d'environnement).
 - Relancer la conversion avec `--sound-ids <sortie>/<nom>/sounds/sound_ids.json` (cache : ~15 s) pour
@@ -339,7 +341,7 @@ le Setup en fait des pièces **invisibles, solides et interrogeables** dans `Col
 **soudées à leur os** (une portière ouverte garde sa collision), règle leur précision
 (`Hull` si le morceau est convexe, sinon `PreciseConvexDecomposition`, par `CreateMeshPartAsync` +
 `ApplyMesh` : écrire `CollisionFidelity` par script est ignoré sans erreur), ajoute les roues en
-cylindres (rayons et contacts ; solides avec `--wheel-collision`) et neutralise la boîte `Hitbox`
+cylindres (rayons et contacts ; solides par défaut, non solides avec `--no-wheel-collision`) et neutralise la boîte `Hitbox`
 (gardée comme volume englobant, attribut `BoundsOnly`). Mesuré sur m422 : 86 % des rayons à moins de
 15 cm de la carrosserie visible contre 34 % avec la boîte ; un joueur se pose sur le capot à +1,55 stud
 au lieu de +3,17. Voir la hitbox : rendre `Collision` visible (Transparency 0,5) le temps d'une capture.
@@ -373,7 +375,7 @@ Une voiture peut toujours se retourner sur un trottoir pris en travers, un choc 
 ## Optiques, vitres teintées, son moteur (automatique, runtime)
 
 - **Clignotants** : la conversion mesure la part de chaque optique couverte par son masque d'émission
-  (`EmissiveCoverage`, `f2r/light_emissive.mask_coverage` ; contrôle : `tools/light-coverage/coverage.py <sortie>/<nom>`).
+  (`EmissiveCoverage`, `f2r/light_emissive.mask_coverage` ; contrôle : `python3 ../../tools/light-coverage/coverage.py <sortie>/<nom>` (outil à la racine du dépôt)).
   Sous 0,2 (m422 : 0,01-0,03), le clignotant s'allume en Neon entier ; au-dessus (325e : 1,00), par son masque. En Neon,
   les couches d'un même maillage se battaient (triangles jaunes sur le feu arrière). Véhicule installé avant : poser
   l'attribut à la main avec les valeurs de l'outil.
@@ -397,7 +399,9 @@ La conversion écrit `<sortie>/<nom>/studio/` : `FiveMRuntime.lua` (runtime, une
   → `ReplicatedStorage.rbxts_include.F2R_Transfer` (StringValue `FiveMRuntime`, `<nom>_Setup`,
   `ApplySoundIds`, `<nom>_sound_ids` ; ModuleScripts `Verify`, `PlayLock`…), visible dans Studio en ~2 s.
 - **Sinon** : envoyer `studio/chunks/*.lua` dans l'ordre de `manifest.json`, un `execute_luau` par
-  fichier, tel quel ; le dernier morceau de chaque étape exécute le script et renvoie son résultat.
+  fichier, tel quel. Le dernier morceau du runtime l'exécute ; celui du Setup le compile seulement : l'appeler
+  ensuite avec sa cible, par le `then` de l'étape dans `manifest.json`
+  (`return _G.F2R_FN["<nom>_Setup"]({ target = … })`, autres arguments du § 5 possibles).
 
 ## 4. Faire arriver le modèle dans Studio
 
