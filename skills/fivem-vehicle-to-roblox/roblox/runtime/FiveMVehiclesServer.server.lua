@@ -473,17 +473,46 @@ if Damage then
 	local armedAt = setmetatable({}, { __mode = "k" })
 	local lastUp = setmetatable({}, { __mode = "k" })
 	local lastRoll = setmetatable({}, { __mode = "k" })
+	local rollDue = setmetatable({}, { __mode = "k" })
+	local ROLL_WINDOW = 0.6 -- s après le passage sur le toit pour que le toit touche quelque chose
+	-- Le toit touche-t-il quelque chose ? Balayage d'une sphère du centre vers le toit (vecteur haut de la voiture,
+	-- tourné vers le sol pendant le tonneau), jusqu'au haut de la caisse + 0,35 m, contre ce qui entre en collision
+	-- avec les véhicules (sol, murs, autres voitures ; pas les occupants ni les débris).
+	local roofParams = RaycastParams.new()
+	roofParams.FilterType = Enum.RaycastFilterType.Exclude
+	roofParams.CollisionGroup = "FiveMVehicle"
+	local function roofTouches(model, root)
+		local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
+		cfg = ok and cfg or {}
+		local spm = cfg.StudsPerMeter or 3.571
+		local b = cfg.Bounds or { Min = { -0.9, -0.3, -2.2 }, Max = { 0.9, 1.2, 2.2 } }
+		local reach = (b.Max[2] + 0.35) * spm
+		local radius = math.min(math.abs(b.Min[1]), b.Max[1], 0.6) * spm
+		roofParams.FilterDescendantsInstances = { model }
+		local hit = workspace:Spherecast(root.Position, radius, root.CFrame.UpVector * reach, roofParams)
+		return hit ~= nil
+	end
 	RunService.Heartbeat:Connect(function()
 		for _, model in ipairs(CollectionService:GetTagged(TAG)) do
 			local root = model.PrimaryPart
 			local seat = model:FindFirstChild("DriverSeat", true)
-			-- tonneau : chaque passage sur le toit (vecteur haut qui passe sous l'horizontale) = un choc de toit, quel que
-			-- soit celui qui tient la physique (le serveur voit la position répliquée)
+			-- tonneau : un passage sur le toit (vecteur haut qui passe sous l'horizontale) ouvre une fenêtre de
+			-- RollWindow s ; le choc de toit ne compte que si le toit TOUCHE quelque chose pendant ce temps, quel que soit
+			-- celui qui tient la physique (le serveur voit la position répliquée). Avant le 2026-11-19, le seul passage
+			-- comptait : des tonneaux EN L'AIR (tremplin) prenaient un choc de 16 m/s par tour, jusqu'au feu (signalé
+			-- par l'utilisateur : « les dégâts se font dus au choc, pas au tonneau »).
 			if root and not root.Anchored then
 				local upY = root.CFrame.UpVector.Y
 				local prevUp = lastUp[model]
 				lastUp[model] = upY
 				if prevUp and prevUp >= -0.2 and upY < -0.2 and os.clock() - (lastRoll[model] or 0) > 0.4 then
+					rollDue[model] = os.clock() + ROLL_WINDOW
+				end
+				local due = rollDue[model]
+				if due and (os.clock() > due or upY > 0.2) then
+					rollDue[model] = nil
+				elseif due and roofTouches(model, root) then
+					rollDue[model] = nil
 					lastRoll[model] = os.clock()
 					local ok, cfg = pcall(require, model:FindFirstChild("VehicleConfig"))
 					local spm = (ok and cfg and cfg.StudsPerMeter) or 3.571
@@ -492,6 +521,7 @@ if Damage then
 				end
 			else
 				lastUp[model] = nil
+				rollDue[model] = nil
 			end
 			if root and not root.Anchored and not (seat and seat.Occupant) then
 				local v = root.AssemblyLinearVelocity

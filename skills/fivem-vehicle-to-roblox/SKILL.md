@@ -522,6 +522,12 @@ jugé « trop »). Le drift tenu (contre-braquage) n'est pas mesurable au banc :
 handling des serveurs de drift) : un multiplicateur ne suffisait pas (355e à 2,75 × 0,62 = 1,7 : rond à 45 km/h, dérive
 8,6° seulement). La prépa drift pose `TractionMax = 1.15` : gaz à fond, braquage 0,6, dérive moyenne 41° (origine 1°).
 
+**Tonneaux en l'air (2026-11-19, signalé par l'utilisateur)** : le « choc de toit » (`Damage.RollMin`) était compté à
+chaque passage de la voiture sur le toit, même EN L'AIR (tremplin : plusieurs tonneaux en vol → feu). Il ne compte plus
+que si le toit touche quelque chose dans les 0,6 s (balayage du centre vers le toit, groupe `FiveMVehicle`). Mesuré :
+chute en rotation, 3 passages sur le toit en l'air → 0 dégât avant le sol ; voiture conduite lancée en tonneaux,
+5 passages en vol → 0 dégât en vol ; tonneau au sol → dégâts au contact du toit, comme avant.
+
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
 Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) : relancer le groupe.
