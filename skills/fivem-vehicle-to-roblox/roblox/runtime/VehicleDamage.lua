@@ -176,6 +176,7 @@ function Damage.Apply(model, dir, strength)
 		end
 	end
 	-- vitres au point d'impact
+	local smashed = false
 	if strength >= Damage.WindowMin then
 		local wr = Damage.WindowRadius + 0.06 * over
 		local root, spm = model.PrimaryPart, cfg.StudsPerMeter or 3.571
@@ -186,7 +187,21 @@ function Damage.Apply(model, dir, strength)
 				-- distance horizontale au point d'impact (une vitre est plus haute que le point de choc)
 				if (Vector3.new(c.X, P.Y, c.Z) - P).Magnitude < wr then
 					model:SetAttribute("WindowBroken_" .. bone, true)
+					smashed = true
 				end
+			end
+		end
+		-- l'attribut seul ne cache rien : c'est Custom.Refresh qui rend la vitre invisible. Sans lui, la vitre cassée
+		-- (éclats joués) restait affichée jusqu'au prochain rafraîchissement — un changement de teinte la faisait
+		-- enfin disparaître (signalé par l'utilisateur, 2026-11-19 ; reproduit : choc de 16 m/s, vitres à 0,45).
+		-- Un choc ≥ DetachAt le masquait, l'arrachage d'une portière rafraîchissant tout.
+		if smashed then
+			local custom = script.Parent:FindFirstChild("VehicleCustomization")
+			local ok, Custom = pcall(function()
+				return custom and require(custom)
+			end)
+			if ok and Custom and Custom.Refresh then
+				pcall(Custom.Refresh, model)
 			end
 		end
 	end
