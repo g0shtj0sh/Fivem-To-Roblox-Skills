@@ -402,6 +402,24 @@ def apply_verified_class(name: str, vinfo: dict, args, report: Report) -> None:
                     f"(SKILL.md § 1c) : elle choisit le son moteur et le rangement dans le menu.")
 
 
+def _replaces_stock(vb, mod: dict, bone: str, min_iou: float = 0.5) -> bool:
+    """La pièce de custom ``mod`` recouvre-t-elle la pièce d'origine portée par ``bone`` (boîtes englobantes,
+    intersection / union >= ``min_iou``) ? Un capot ou un pare-chocs de remplacement : oui ; un aileron posé sur le
+    coffre (os « boot ») : non, le coffre reste affiché."""
+    if bone in ("chassis", vb.skel.root_name):
+        return False
+    stock = [p for p in vb.parts if p.mod is None and bone in (p.bone, p.owner)]
+    mine = [p for p in vb.parts if p.mod is mod]
+    if not stock or not mine:
+        return False
+    import numpy as _np
+    a0 = _np.min([p.bbox()[0] for p in stock], axis=0); a1 = _np.max([p.bbox()[1] for p in stock], axis=0)
+    b0 = _np.min([p.bbox()[0] for p in mine], axis=0); b1 = _np.max([p.bbox()[1] for p in mine], axis=0)
+    inter = _np.prod(_np.clip(_np.minimum(a1, b1) - _np.maximum(a0, b0), 0, None))
+    union = _np.prod(a1 - a0) + _np.prod(b1 - b0) - inter
+    return bool(union > 0 and inter / union >= min_iou)
+
+
 def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, args, report: Report,
                 game: "gamelib.GameAssets | None" = None) -> dict:
     vinfo = metas["vehicles"].get(name, {"modelName": name})
@@ -458,9 +476,18 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                     added += vb.add_mod(cwxml.parse_fragment(mp, args.lod), mod, (m["bone"] or "chassis").lower())
                 except Exception as exc:  # noqa: BLE001
                     report.warn(f"Mod {mn} illisible : {exc}")
+            off = [b.lower() for b in m["turnOffBones"]]
+            attach = (m["bone"] or "chassis").lower()
+            if added > 0 and attach not in off and _replaces_stock(vb, mod, attach):
+                # GTA masque la pièce d'origine de l'os qu'une pièce de custom remplace (capot sur « bonnet »,
+                # pare-chocs sur « bumper_f ») même si turnOffBones ne le liste pas : sans ça, la 325e affichait
+                # capot d'origine + capot de custom (triangle sombre du capot d'origine à travers, 2026-11-19).
+                off.append(attach)
+                report.info(f"Mod {slot} #{index} ({m['modelName']}) : remplace la pièce d'origine de l'os {attach}, "
+                            f"masquée quand il est posé.")
             opts = mods_cfg.setdefault(slot, {"Label": slot, "Type": vmt, "Options": []})["Options"]
             opts.append({"Label": m["label"] or m["modelName"] or f"{slot} {index}", "Model": m["modelName"],
-                         "TurnOffBones": [b.lower() for b in m["turnOffBones"]], "HasGeometry": added > 0})
+                         "TurnOffBones": off, "HasGeometry": added > 0})
             mod_count += 1
         for s in kit["statMods"]:
             slot = meta.MOD_SLOT_NAMES.get(s["type"], s["type"])

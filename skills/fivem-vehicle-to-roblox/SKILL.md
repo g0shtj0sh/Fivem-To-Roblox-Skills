@@ -291,6 +291,16 @@ la pièce de la géométrie d'origine du même os, ou, sans géométrie d'origin
 (+30 cm). Rapport : « Mod … recalée sur cet os ». Les mods dont le squelette reprend les os du véhicule (rm3e36,
 m422) ne sont pas touchés (rm3e36 : GLB identique à l'octet). Contrôle : `Verify` « pièces de custom sur leur os ».
 
+**Pièce d'origine masquée par la pièce qui la remplace** : GTA masque la géométrie d'origine de l'os d'attache
+quand une pièce de custom la remplace, même si `turnOffBones` ne liste pas cet os (capots `325e_bon*` : `[]`).
+La conversion ajoute l'os d'attache aux `TurnOffBones` de l'option quand les boîtes de l'option et de la pièce
+d'origine de cet os se recouvrent à 50 % ou plus (`_replaces_stock`) : capots, coffres, volants de la 325e ; un
+aileron posé sur l'os du coffre ne masque pas le coffre. Rapport : « remplace la pièce d'origine de l'os … ».
+Sans ça, capot d'origine et capot de custom s'affichaient ensemble (triangle sombre du premier à travers le second).
+Les options sans modèle du modkit (« introuvable dans le pack ») sont des options de retrait voulues par l'auteur :
+`turnOffBones` seul (pas de pare-chocs arrière, pas d'essuie-glaces, échappement caché) ; vérifier qu'elles masquent
+ce qu'elles disent et rien d'autre.
+
 ## Hitbox fidèle (automatique)
 
 Le `.yft` contient la **collision officielle du véhicule** (Physics/LOD1, `Bound` composite) :
