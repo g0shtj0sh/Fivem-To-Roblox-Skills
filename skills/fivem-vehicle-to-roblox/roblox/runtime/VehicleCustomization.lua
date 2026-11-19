@@ -1608,7 +1608,8 @@ end
 Custom.TyreKeys = { "DriftTyres", "WinterTyres", "RaceTyres" }
 -- { clé, min, max, valeur d'origine (= réglage absent) } ; mêmes bornes que VehicleDynamics.SetUpgrades
 Custom.PrepRanges = {
-	{ key = "GripMult", min = 0.3, max = 2, origin = 1 }, -- adhérence (× d'origine)
+	{ key = "TractionMax", min = 0.5, max = 3, origin = nil }, -- adhérence fixe (GTA fTractionCurveMax), remplace l'origine
+	{ key = "GripMult", min = 0.3, max = 2, origin = 1 }, -- adhérence (× d'origine, ou × la fixe)
 	{ key = "SlideGrip", min = 0.5, max = 1.1, origin = nil }, -- adhérence en glisse / adhérence max (GTA Min/Max)
 	{ key = "LateralMult", min = 0.5, max = 2, origin = 1 }, -- angle où l'adhérence latérale culmine (× d'origine)
 	{ key = "RearGripMult", min = 0.4, max = 1.6, origin = 1 }, -- adhérence de l'arrière (× d'origine)
@@ -1673,7 +1674,7 @@ Custom.PrepPresets = {
 		id = "drift",
 		name = "Prépa drift",
 		values = {
-			GripMult = 0.62, SlideGrip = 0.97, LateralMult = 1.35, RearGripMult = 0.8, SteerLockDeg = 65,
+			TractionMax = 1.15, SlideGrip = 0.97, LateralMult = 1.35, RearGripMult = 0.8, SteerLockDeg = 65,
 			PowerMult = 1.7, ShiftMult = 1.6, SuspMult = 1.3, LowSpeedLoss = 1.4, DriveBiasFront = 0,
 		},
 	},

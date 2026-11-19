@@ -591,9 +591,13 @@ function Dyn.SetUpgrades(sim, levels)
 		return v and math.clamp(v, lo, hi) or nil
 	end
 	local gm = num("GripMult", 0.3, 2) or 1
-	P.muMax = B.muMax * tyreGrip * gm
+	-- adhérence FIXE (valeur GTA fTractionCurveMax, la même pour toutes les voitures, comme les packs de handling des
+	-- serveurs de drift) : remplace celle du véhicule. Constat 2026-11-19 : un multiplicateur ne suffit pas, la 355e
+	-- part de 2,75 (×0,62 = 1,7, plus qu'une voiture de série) et la prépa drift ne glissait que de 8,6° en rond.
+	local fixed = num("TractionMax", 0.5, 3)
+	P.muMax = (fixed and fixed * (T.KMu or 1) or B.muMax) * tyreGrip * gm
 	local slide = num("SlideGrip", 0.5, 1.1) -- adhérence en glisse / adhérence max (GTA : TractionCurveMin / Max)
-	P.muMin = slide and P.muMax * slide or B.muMin * tyreGrip * gm
+	P.muMin = slide and P.muMax * slide or (fixed and P.muMax * (B.muMin / math.max(B.muMax, 1e-3)) or B.muMin * tyreGrip * gm)
 	P.alphaPeak = B.alphaPeak * (tyre == "race" and (T.RaceTyrePeak or 0.8) or 1) * (num("LateralMult", 0.5, 2) or 1)
 	P.tracF, P.tracR = B.tracF, B.tracR * (num("RearGripMult", 0.4, 1.6) or 1)
 	local lock = num("SteerLockDeg", 15, 80)

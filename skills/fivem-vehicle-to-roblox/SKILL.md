@@ -518,6 +518,9 @@ l'adhérence du sol (`Dyn.SoilGrip`). Mesuré (355e, Play, banc DriveBench) : vi
 d'origine 11,3° → course 7,7° (et garde 37 km/h au lieu de 25), prépa course 7,2°, prépa drift 30,8° ; freinage sur
 neige 50-0 : 1,25 → 1,52 g en pneus hiver ; sur glace 40-0 : 0,56 → 0,70 g (gain glace réduit à 0,08 après 0,96 g
 jugé « trop »). Le drift tenu (contre-braquage) n'est pas mesurable au banc : à juger au volant.
+**Adhérence fixe `TractionMax`** (valeur GTA fTractionCurveMax, la même pour toutes les voitures, comme les packs de
+handling des serveurs de drift) : un multiplicateur ne suffisait pas (355e à 2,75 × 0,62 = 1,7 : rond à 45 km/h, dérive
+8,6° seulement). La prépa drift pose `TractionMax = 1.15` : gaz à fond, braquage 0,6, dérive moyenne 41° (origine 1°).
 
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
