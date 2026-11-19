@@ -568,6 +568,18 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         carriers.append(cname)
     glb_path = out / f"{name}.glb"
     glb.save(glb_path)
+    if store.missing:
+        # quelles pièces perdent quoi : une diffuse absente = pièce unie (souvent blanchâtre), une spec ou une
+        # normale absente = reflets / relief par défaut seulement
+        users: dict[str, list[str]] = {}
+        for p in vb.parts:
+            for slot, tex in getattr(p.shader, "textures", {}).items():
+                if tex and tex.lower() in store.missing:
+                    users.setdefault(tex.lower(), []).append(f"{p.name} ({slot.replace('Sampler', '')})")
+        for tex in sorted(store.missing):
+            if users.get(tex):
+                report.info(f"Texture absente « {tex} » : " + ", ".join(users[tex][:8])
+                            + (" …" if len(users[tex]) > 8 else ""))
     if store.missing and game is not None:
         report.warn(f"{len(store.missing)} texture(s) introuvables même dans GTA V : "
                     + ", ".join(sorted(store.missing)[:25]) + (" …" if len(store.missing) > 25 else "")

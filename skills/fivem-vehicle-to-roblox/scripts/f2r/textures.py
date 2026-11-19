@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -194,7 +195,26 @@ class TextureStore:
         for cand in (n, n + "+hi", n.replace("+hi", "")):
             if cand in self.sources:
                 return self.sources[cand]
-        return None
+        alias = self.near_name(n)
+        return self.sources[alias] if alias else None
+
+    def near_name(self, n: str) -> str | None:
+        """Texture du pack au nom presque identique quand le shader en demande une absente : même nom suivi
+        d'un numéro (« bmw_m3_e36_lights_diffuse » demandé, « bmw_m3_e36_lights_diffuse1 » livré — faute de
+        l'auteur du mod, rm3e36 2026-11-19 : boîtiers de phares sans texture), ou l'inverse. Seulement si
+        UNE seule texture correspond (sinon on ne devine pas) ; noté une fois dans le rapport."""
+        if not hasattr(self, "aliases"):
+            self.aliases: dict[str, str | None] = {}
+        if n in self.aliases:
+            return self.aliases[n]
+        base = re.sub(r"[_]?\d+$", "", n)
+        cands = sorted({k for k in self.sources if "+hi" not in k and k != n and (
+            re.fullmatch(re.escape(n) + r"_?\d+", k) or (base != n and k == base))})
+        alias = cands[0] if len(cands) == 1 else None
+        self.aliases[n] = alias
+        if alias:
+            self.report.info(f"Texture « {n} » absente : « {alias} » du pack utilisée (nom presque identique).")
+        return alias
 
     def get(self, name: str | None, role: str = "color") -> Path | None:
         if not name:
