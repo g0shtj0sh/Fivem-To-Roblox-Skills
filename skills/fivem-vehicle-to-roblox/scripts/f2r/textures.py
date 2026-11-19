@@ -52,12 +52,66 @@ def _pow2_floor(n: int) -> int:
     return p
 
 
+def _mask_channel(px: np.ndarray, mask: int) -> np.ndarray | None:
+    """Canal 0..255 d'un pixel DDS non compressé à partir de son masque de bits (None si masque vide)."""
+    if not mask:
+        return None
+    shift = (mask & -mask).bit_length() - 1
+    top = mask >> shift
+    return ((px & mask) >> shift).astype(np.float64) * (255.0 / top)
+
+
+def read_uncompressed_dds(path: Path) -> Image.Image:
+    """DDS non compressé à masques de bits que Pillow refuse (« Unknown pixel format flags 2 ») : A8 (alpha seule),
+    L8 / A8L8 (luminance), RVB(A) 16/24/32 bits. Premier niveau de mipmap seulement.
+
+    325e (2026-11-19) : `black.dds` du mod est un A8 4 x 4 (alpha 255, RVB implicite noir). Illisible, il laissait
+    ses pièces de carrosserie (joints, montants, bas de caisse, couche « Default ») sans texture, peintes de la
+    couleur Primary d'usine par le Setup et figées : marron, insensibles à la custom. Comme dans Direct3D, un A8 se
+    lit (0, 0, 0, a)."""
+    b = path.read_bytes()
+    if len(b) < 128 or b[:4] != b"DDS ":
+        raise ValueError("pas un DDS")
+    height, width = int.from_bytes(b[12:16], "little"), int.from_bytes(b[16:20], "little")
+    pf_flags, fourcc = int.from_bytes(b[80:84], "little"), b[84:88]
+    bits = int.from_bytes(b[88:92], "little")
+    rm, gm, bm, am = (int.from_bytes(b[92 + 4 * i:96 + 4 * i], "little") for i in range(4))
+    DDPF_ALPHAPIXELS, DDPF_ALPHA, DDPF_FOURCC, DDPF_RGB, DDPF_LUMINANCE = 0x1, 0x2, 0x4, 0x40, 0x20000
+    if pf_flags & DDPF_FOURCC and fourcc != b"\0\0\0\0":
+        raise ValueError(f"DDS compressé {fourcc!r} non géré ici")
+    if bits not in (8, 16, 24, 32) or not width or not height:
+        raise ValueError(f"DDS {bits} bits non géré")
+    nbytes = bits // 8
+    raw = np.frombuffer(b, np.uint8, width * height * nbytes, 128).reshape(-1, nbytes).astype(np.uint32)
+    px = np.zeros(len(raw), np.uint32)
+    for i in range(nbytes):
+        px |= raw[:, i] << (8 * i)
+    zero = np.zeros(len(px))
+    a = _mask_channel(px, am) if pf_flags & (DDPF_ALPHA | DDPF_ALPHAPIXELS) else None
+    if pf_flags & DDPF_LUMINANCE:
+        r = g = bl = _mask_channel(px, rm)
+    elif pf_flags & DDPF_RGB:
+        r, g, bl = (_mask_channel(px, m) for m in (rm, gm, bm))
+    elif pf_flags & DDPF_ALPHA:
+        r = g = bl = zero
+    else:
+        raise ValueError(f"DDS flags {pf_flags:#x} non géré")
+    chans = [c if c is not None else zero for c in (r, g, bl)] + [a if a is not None else np.full(len(px), 255.0)]
+    rgba = np.clip(np.stack(chans, -1).round(), 0, 255).astype(np.uint8).reshape(height, width, 4)
+    return Image.fromarray(rgba, "RGBA")
+
+
 def load_image(path: Path, report: Report) -> Image.Image | None:
     try:
         img = Image.open(path)
         img.load()
         return img
     except Exception as exc:  # noqa: BLE001
+        if path.suffix.lower() == ".dds":
+            try:
+                return read_uncompressed_dds(path)
+            except Exception:  # noqa: BLE001
+                pass
         # Repli : texconv (Windows) ou ImageMagick si présents
         for tool in ("magick", "convert"):
             exe = shutil.which(tool)

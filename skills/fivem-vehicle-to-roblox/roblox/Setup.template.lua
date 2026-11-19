@@ -370,9 +370,14 @@ for name, info in pairs(PARTS) do
 		local kind = info.Kind
 		local base = 0
 		if kind == "paint" or info.Paint then
-			local color = defaultColors[info.Paint or "Primary"] or Color3.new(0.85, 0.85, 0.85)
-			if info.Paint then
-				p:SetAttribute("PaintLayer", info.Paint)
+			-- couche « Default » (matDiffuseColor 2,5,5) : blanc fixe x sa texture, comme dans GTA, et aucune couche de
+			-- custom. Avant le 2026-11-19, une pièce peinte sans couche annoncée prenait la couleur Primary d'usine SANS
+			-- PaintLayer : figée à cette couleur (325e : joints et bas de caisse marron, insensibles à la custom)
+			-- (une couleur fixe CustomColor ne suit aucune couche)
+			local layer = info.Paint or (info.CustomColor == nil and "Primary" or nil)
+			local color = defaultColors[layer or "Primary"] or Color3.new(0.85, 0.85, 0.85)
+			if layer and layer ~= "Default" then
+				p:SetAttribute("PaintLayer", layer)
 			end
 			if info.CustomColor then
 				color = c3(info.CustomColor)

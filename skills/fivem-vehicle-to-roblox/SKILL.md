@@ -78,7 +78,9 @@ Archive : `.zip`, `.tar`, `.rar` / `.7z` (7-Zip, sinon `unrar`/`rar` du PATH). U
 `Spec`/`Bump` = reflets seulement) ; un nom presque identique du pack est repris seul (`…_diffuse` demandé,
 `…_diffuse1` livré : faute de l'auteur, ligne « nom presque identique »). Avant de croire à une texture manquante
 sur une pièce claire, lire `matDiffuseColor` du shader : `(2, n, n)` = teinte par la couche de peinture n (2 =
-Secondary : un alcantara blanc prend la couleur secondaire, comme dans GTA).
+Secondary : un alcantara blanc prend la couleur secondaire, comme dans GTA). Une pièce qui garde la couleur d'usine et que la
+custom ne repeint pas = pièce peinte sans `PaintLayer` : couche 5 « Défaut » (fixe, couleur = sa texture) dont la
+texture n'a pas été lue (voir `references/gta-format.md`, « Couches de peinture » ; 325e 2026-11-19, `black.dds` A8).
 
 Lire `<sortie>/<nom>/report.md` : « Hitbox : collision officielle du véhicule » (sinon boîte
 englobante : le .yft n'avait pas de `Physics/Bounds`, le signaler), « texture(s) reprises du jeu de base », « vrai son du jeu »,

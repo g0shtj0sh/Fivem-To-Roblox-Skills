@@ -844,6 +844,10 @@ def part_info(p: Part, vb: VehicleBuilder, store: TextureStore, has_tex: bool) -
             "Center": r4(p.center()), "Tris": p.tri_count}
     if p.paint and p.paint != "Default":
         info["Paint"] = p.paint
+    elif p.kind == "paint" and p.paint == "Default":
+        # dit au Setup que la pièce est sur la couche fixe « Default » (blanc x texture) et non sur Primary : sans
+        # cette ligne le Setup la peignait en Primary sans PaintLayer (325e 2026-11-19 : pièces marron figées)
+        info["Paint"] = "Default"
     if p.custom_color:
         info["CustomColor"] = r4(p.custom_color)
     if p.light:

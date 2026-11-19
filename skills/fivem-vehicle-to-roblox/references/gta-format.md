@@ -75,6 +75,15 @@ Sinon `matDiffuseColor` est une couleur fixe (`CustomColor`). Les couleurs par d
 `carvariations.meta` (`indices` = primaire, secondaire, nacré, jantes, intérieur, tableau de bord)
 via la palette `scripts/f2r/gta_colors.py`.
 
+La couche 5 « Défaut » est **fixe** (blanc × la diffuse) : aucune custom ne la change. Sur une pièce `paint` elle
+sort en `Paint = "Default"` dans le Setup, qui la colore en blanc **sans** `PaintLayer`. La couleur vient alors
+de sa texture : la 325e (2026-11-19) habille joints, bandeaux, montants et pare-chocs arrière de `vehicle_paint2`
+couche 5 + `black.dds` (DDS **A8** non compressé 4 × 4, alpha 255, RVB implicite noir = noir). Pillow ne lit pas
+l'A8 (« Unknown pixel format flags 2 ») : `textures.read_uncompressed_dds` prend le relais (A8, L8, RVB à
+masques). Avant ce correctif, la texture illisible + un Setup qui peignait toute pièce `paint` sans couche en
+Primary d'usine laissaient 13 pièces visibles (27 avec les options de custom) **figées** à la couleur d'usine
+(marron) : la custom ne les voyait pas. Contrôle Verify « peinture sans couche figée ».
+
 ## Livrées
 
 `vehicle_paint3` porte la livrée dans `DiffuseSampler2` (texture `<nom>_sign_1`, `_sign_2`…), sur le

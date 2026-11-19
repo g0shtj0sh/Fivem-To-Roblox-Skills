@@ -1098,6 +1098,21 @@ function groups.custom()
 	local paint = partsWhere(function(p)
 		return p:GetAttribute("PaintLayer") == "Primary"
 	end)
+	-- pièces peintes hors couche qui portent la couleur Primary d'usine : elles ne suivront aucune custom (325e
+	-- 2026-11-19 : 13 pièces de couche « Default » à texture A8 illisible, restées marron)
+	local factory = model:GetAttribute("Color_Primary")
+	local frozen = partsWhere(function(p)
+		return p:GetAttribute("Kind") == "paint" and p:GetAttribute("PaintLayer") == nil and p.Transparency < 1
+			and factory ~= nil and p.Color == factory and factory ~= Color3.new(1, 1, 1)
+	end)
+	local frozenNames = {}
+	for i = 1, math.min(#frozen, 4) do
+		frozenNames[i] = frozen[i].Name
+	end
+	check(#frozen == 0, "peinture sans couche figée",
+		#frozen == 0 and "aucune pièce peinte figée sur la couleur d'usine"
+			or fmt("%d pièce(s) Kind=paint sans PaintLayer à la couleur Primary d'usine : %s", #frozen,
+				table.concat(frozenNames, ", ")))
 	local ok = pcall(Custom.SetColor, model, "Primary", red)
 	local colored = 0
 	for _, p in ipairs(paint) do
