@@ -111,10 +111,15 @@ function Custom.Refresh(model)
 			end
 		end
 	end
-	-- portières / capot / coffre arrachés (Custom.RemoveDoor) : leurs pièces disparaissent
+	-- portières / capot / coffre arrachés (Custom.RemoveDoor) : leurs pièces disparaissent, PIÈCES DE CUSTOM COMPRISES.
+	-- Avant le 2026-11-19, une pièce de custom (ModSlot) ne regardait que la custom choisie : un capot de custom arraché
+	-- tombait (copie) mais restait affiché sur la voiture (signalé par l'utilisateur). Ensemble séparé de `hidden`
+	-- (os masqués par les customs) : un mod qui masque l'os d'origine « bonnet » ne doit pas se masquer lui-même.
+	local removed = {}
 	for bone in pairs(cfg.Hinges or {}) do
 		if model:GetAttribute("DoorRemoved_" .. bone) == true then
 			hidden[bone] = true
+			removed[bone] = true
 		end
 	end
 	local invisible = model:GetAttribute("Invisible") == true
@@ -147,6 +152,9 @@ function Custom.Refresh(model)
 		local slot = part:GetAttribute("ModSlot")
 		if slot then
 			visible = (model:GetAttribute("Mod_" .. slot) or 0) == part:GetAttribute("ModIndex")
+			if visible and boneChainHas(part, removed) then
+				visible = false
+			end
 		elseif boneChainHas(part, hidden) then
 			visible = false
 		end
