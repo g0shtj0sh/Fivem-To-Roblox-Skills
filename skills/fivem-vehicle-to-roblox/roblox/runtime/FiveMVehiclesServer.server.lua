@@ -74,6 +74,7 @@ local RATES = {
 	window = { 4, 6 },
 	impact = { 6, 8 },
 	ped = { 6, 10 }, -- piétons percutés (VehicleDrive, « HitPed »)
+	spike = { 8, 12 }, -- roues sur une herse (VehicleDrive, « Spike »)
 	fit = { 2, 3 },
 }
 local buckets = {}
@@ -247,6 +248,45 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 			return
 		end
 		Damage.Apply(model, Vector3.new(dx, dy, dz), strength)
+	elseif action == "Spike" then
+		-- roue sur une herse (tag SpikeStrip), signalée par le client du conducteur : le serveur vérifie qu'une herse
+		-- est bien sous cette roue (positions vues par le serveur) puis crève le pneu (VehicleDamage.Puncture)
+		local bone = key
+		if not Damage or not Damage.Puncture or not isDriver(player, model) or not allowed(player, "spike") then
+			return
+		end
+		local cfg = require(model.VehicleConfig)
+		local w = type(bone) == "string" and #bone <= 32 and cfg.Wheels and cfg.Wheels[bone]
+		local root = model.PrimaryPart
+		if not w or not root then
+			return
+		end
+		local spm = cfg.StudsPerMeter or 3.571
+		local at = root.CFrame:PointToWorldSpace(Vector3.new(w.Position[1], w.Position[2], w.Position[3]) * spm)
+		-- tolérance : 3 m + 0,4 s de trajet. Le serveur voit la voiture en retard sur son conducteur (réplication) :
+		-- avec 2,5 m fixes, la moitié des passages à 70 km/h étaient refusés (2026-11-19). Sans enjeu de triche :
+		-- le client ne peut crever que les pneus de la voiture qu'il conduit, près d'une herse.
+		local reach = 3 + 0.4 * root.AssemblyLinearVelocity.Magnitude / spm
+		local near = false
+		for _, part in ipairs(workspace:GetPartBoundsInRadius(at, reach * spm)) do
+			local inst = part
+			for _ = 1, 4 do
+				if not inst then
+					break
+				end
+				if CollectionService:HasTag(inst, "SpikeStrip") then
+					near = true
+					break
+				end
+				inst = inst.Parent
+			end
+			if near then
+				break
+			end
+		end
+		if near then
+			Damage.Puncture(model, bone)
+		end
 	elseif action == "HitPed" then
 		-- piéton percuté, repéré par le client du conducteur (VehicleDrive.findPedestrians). Le serveur vérifie le
 		-- conducteur, la distance (positions vues par le serveur) et plafonne la vitesse à celle qu'il voit ;

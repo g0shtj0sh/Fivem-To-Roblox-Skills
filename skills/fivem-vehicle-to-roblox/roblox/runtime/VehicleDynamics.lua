@@ -435,6 +435,19 @@ Dyn.Tuning = {
 	-- glace (grip ≤ 0,3) : 0,2 → 0,264. Mesuré avec 0,2 (0,2 → 0,36) : freinage 40-0 sur glace 0,56 → 0,96 g, « trop »
 	-- pour la consigne (« un peu mieux, mais pas trop ») ; réduit à 0,08 le 2026-11-19
 	WinterIceGain = 0.08,
+	-- Dégâts de roue (Dyn.SetWheelStates, attributs WheelState_<os> posés par VehicleDamage ; 2026-11-19, demande de
+	-- l'utilisateur) : 1 crevé (sur la jante), 2 cassé (roue faussée : direction perdue de ce côté), 3 arraché (le
+	-- MOYEU frotte au sol : contact gardé, sans moteur ni direction). Adhérence de la roue, frein de roulement (g) et
+	-- pincement figé (rad). Roue arrachée = contact gardé, pas « plus de contact » : sur trois appuis, la roue
+	-- arrière opposée se soulevait, tournait au rupteur et la voiture reculait en accélérant (mesuré le 2026-11-19).
+	-- Moyeu (3) : BLOQUÉ par un frein de 2 g et qui laboure (moyeu + bras de suspension, frottement 1,0). Avec 0,2
+	-- d'adhérence et 0,35 g, le frottement était plafonné par l'adhérence : la voiture sans roue avant atteignait
+	-- 103 km/h en 4 s comme une saine (104) ; à 0,6 (métal sur bitume seul), encore 96. Bloqué, il freine ET
+	-- glisse latéralement : la voiture tire du côté arraché (mesures BavrenN4, 2026-11-19).
+	WheelStateGrip = { 0.45, 0.3, 1.0 },
+	WheelStateDrag = { 0.1, 0.22, 2.0 },
+	WheelBentToe = 0.14, -- rad (≈ 8°) : la roue cassée reste braquée de travers, vers l'extérieur
+	FlatDrop = 0.04, -- m : la caisse descend d'autant au coin d'un pneu à plat (pas d'une roue cassée)
 	-- Améliorations du garage dont l'effet doit se SENTIR à chaque niveau (demande de l'utilisateur, 2026-11-16 :
 	-- mesuré avant, freins ×2 = 20,5 → 20,4 m au 100-0, suspension +11 % = roulis 1,39 → 1,26° : rien de perceptible).
 	-- Freins : le 100-0 est limité par l'adhérence, pas par la force ; chaque niveau ajoute de l'adhérence PENDANT
@@ -687,6 +700,26 @@ end
 --                          agissent pareil)
 --   SpeedLimitKmh          limiteur réglé par le joueur (le plus bas des deux limiteurs gagne)
 --   DriftTyres             adhérence × Tuning.DriftTyreGrip (pneus de drift de GTA : moins d'adhérence)
+-- États des roues { [os] = 0..3 } (VehicleDamage). Rappelé à chaque changement d'attribut WheelState_<os>.
+function Dyn.SetWheelStates(sim, states)
+	for _, w in ipairs(sim.P.wheels or {}) do
+		w.state = math.clamp(math.floor(tonumber(states and states[w.bone]) or 0), 0, 3)
+	end
+end
+
+-- Angle de braquage d'une roue (rad) : celui de la direction, ou, roue cassée, un pincement figé vers l'extérieur
+-- (même angle pour les forces et pour la vitesse de glisse lue par VehicleDrive).
+function Dyn.WheelSteer(sim, i)
+	local w = sim.P.wheels[i]
+	if (w.state or 0) >= 3 then
+		return 0 -- moyeu sans roue : il frotte droit, la direction ne le tourne plus
+	elseif (w.state or 0) == 2 then
+		local out = w.rest.X < 0 and 1 or -1 -- vers l'extérieur de la voiture
+		return out * (sim.T.WheelBentToe or 0.14)
+	end
+	return w.steer and sim.S.steerAngle or 0
+end
+
 function Dyn.SetTune(sim, tune)
 	sim.P.tune = tune and table.clone(tune) or {}
 	Dyn.SetUpgrades(sim, sim.P.upgrades)
@@ -1322,7 +1355,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		for i, w in ipairs(P.wheels) do
 			local c = contacts[i] or { grounded = false, vLong = 0, vLat = 0, grip = 1 }
 			local vLong, vLat = c.vLong or 0, c.vLat or 0
-			local aW = aDrive * w.driveShare
+			local aW = (w.state or 0) >= 3 and 0 or aDrive * w.driveShare -- roue arrachée : le moyeu n'entraîne rien
 			if burnout then
 				-- burn : tout le couple va aux roues qui patinent (une transmission intégrale garde l'avant
 				-- freiné et sans couple) ; sans ça la poussée partagée ne vainc pas l'adhérence (essai m422 4×4)
@@ -1331,6 +1364,9 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			-- « g par roue » × biais d'essieu (2b) : BrakeForce = 1 demande ≈ 4 g en tout ; la roue bloque dès que
 			-- BrakeForce > adhérence / 4 (règle connue du jeu), l'ABS relâche alors
 			local brakeA = P.brake * math.max(brakeIn, hold) * w.brakeBias * P.g
+			if (w.state or 0) >= 1 then
+				brakeA += ((T.WheelStateDrag or {})[math.min(w.state, 3)] or 0.1) * P.g -- jante, roue faussée, moyeu
+			end
 			if burnout and w.burnSpin then
 				brakeA = 0 -- la roue motrice est libérée du frein : elle patine
 			end
@@ -1367,6 +1403,9 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				S.slipLat[i] = vLat
 				local grip = 1 - (1 - soilGrip(P, c.grip)) * P.lossMult
 				local fmax = (N[i] * muOf(P, sFall) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
+				if (w.state or 0) >= 1 then
+					fmax *= (T.WheelStateGrip or {})[math.min(w.state, 3)] or 0.4 -- roue à plat / cassée / arrachée
+				end
 				if (P.brakeGrip or 0) > 0 and brakeIn > 0 and not hand then
 					fmax *= 1 + P.brakeGrip * math.min(brakeIn, 1) -- freins améliorés : plus d'adhérence au freinage
 				end
@@ -1518,7 +1557,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			Fz = N[i],
 			Fx = sumFx[i] / nSub,
 			Fy = sumFy[i] / nSub,
-			steer = w.steer and S.steerAngle or 0,
+			steer = Dyn.WheelSteer(sim, i),
 			point = Vector3.new(wheelCenter.X, contactY, wheelCenter.Z), -- contact (charge normale)
 			lateralPoint = Vector3.new(wheelCenter.X, contactY + rc, wheelCenter.Z), -- centre de roulis (gardé)
 			rc = rc, -- centre de roulis effectif (m au-dessus du contact), après la garde anti-tonneau

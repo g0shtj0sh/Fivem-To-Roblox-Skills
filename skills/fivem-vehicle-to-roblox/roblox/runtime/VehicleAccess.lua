@@ -680,7 +680,9 @@ local function setWheelColliders(model, solid)
 	local default = not (cfg.Collision and cfg.Collision.WheelsCollide == false)
 	for _, d in ipairs(folder and folder:GetDescendants() or {}) do
 		if d:IsA("BasePart") and d:GetAttribute("Kind") == "collision_wheel" then
-			d.CanCollide = solid and default
+			-- roue arrachée (VehicleDamage, WheelState 3) : son cylindre ne porte plus la voiture garée
+			local gone = (model:GetAttribute("WheelState_" .. tostring(d:GetAttribute("Owner"))) or 0) >= 3
+			d.CanCollide = solid and default and not gone
 		end
 	end
 end

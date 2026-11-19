@@ -130,6 +130,13 @@ function Custom.Refresh(model)
 				if d:GetAttribute("BaseTransparency") == nil then
 					d:SetAttribute("BaseTransparency", d.Transparency)
 				end
+	-- roues arrachées (VehicleDamage, WheelState_<os> = 3) : pneu, jante et jantes de custom disparaissent
+	for bone in pairs(cfg.Wheels or {}) do
+		if (model:GetAttribute("WheelState_" .. bone) or 0) >= 3 then
+			hidden[bone] = true
+			removed[bone] = true
+		end
+	end
 				d.Transparency = 1
 			elseif d:GetAttribute("BaseTransparency") ~= nil then
 				d.Transparency = d:GetAttribute("BaseTransparency")
@@ -1726,9 +1733,11 @@ function Custom.SetTune(model, key, value)
 		end
 	elseif key == "SpeedLimitKmh" then
 		value = (value and value > 0) and math.clamp(value, 5, 600) or nil
+	-- pneus increvables (vMenu « Pneus increvables ») : ni herse ni choc ne les crèvent (VehicleDamage)
+	BulletproofTyres = "boolean",
 	elseif t == "boolean" then
 		value = value == true or nil
-		if value then
+		if value and table.find(Custom.TyreKeys, key) then
 			for _, other in ipairs(Custom.TyreKeys) do
 				if other ~= key then
 					model:SetAttribute("Tune_" .. other, nil) -- un seul type de pneus monté

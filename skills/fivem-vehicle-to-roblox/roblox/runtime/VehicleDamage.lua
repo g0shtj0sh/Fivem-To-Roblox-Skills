@@ -54,6 +54,22 @@ Damage.RoofWindowReachPerMs = 0.03
 Damage.DetachAt = 22 -- m/s (≈ 80 km/h dans un mur) : un ouvrant du côté du choc est arraché ; il TOMBE
 -- (copie physique) et disparaît après VehicleCustomization.DebrisLifetime s, comme les éclats de vitre
 Damage.DetachRadius = 1.0 -- m
+-- ROUES (2026-11-19, demande de l'utilisateur : « plusieurs stades : crevaison, direction cassée, roue arrachée qui
+-- part comme les autres pièces »). Santé par roue WheelHealth_<os> (1000), état WheelState_<os> : 1 crevé (sous
+-- WheelBurstBelow), 2 cassé (sous WheelBreakBelow : la roue reste braquée de travers, VehicleDynamics.WheelSteer),
+-- 3 arraché (à 0 : la roue tombe en débris, le moyeu frotte au sol sans moteur ni direction). Un état ne redescend qu'à la réparation. Chaque choc
+-- retire à une roue énergie × WheelK × proximité (1 au centre de la roue, 0 à WheelReach du point d'impact).
+-- Herse (Damage.Puncture) : crève un pneu intact. Pneus increvables (Tune_BulletproofTyres) : jamais crevés, mais une
+-- roue peut toujours se casser ou partir sur un gros choc. Pas de crevaison par la chaleur ni par un burn (décision
+-- de l'utilisateur, 2026-11-14).
+Damage.WheelHealthMax = 1000
+Damage.WheelBurstBelow = 650
+Damage.WheelBreakBelow = 300
+-- Le choc est réduit à UN point (ImpactPoint : milieu du pare-chocs, du flanc ou coin) : une roue avant est à
+-- ≈ 1,15 m à l'horizontale du milieu du pare-chocs, une roue à ≈ 1,3-1,5 m du milieu du flanc (BavrenN4). Avec une
+-- portée de 1,2 m, ni un choc de face ni un choc latéral n'atteignaient les roues (mesuré le 2026-11-19).
+Damage.WheelK = 2.5 -- points par (m/s)² d'énergie de choc
+Damage.WheelReach = 1.8 -- m, distance HORIZONTALE (repère du véhicule) entre le point de choc et le centre de roue
 -- TONNEAUX (2026-11-18, utilisateur : « on fait plein de tonneaux et on ressort avec rien ») : avant, seule la
 -- variation de vitesse HORIZONTALE dans le repère de la voiture comptait ; un choc sur le toit (axe Y de la voiture) ou
 -- une rotation stoppée net ne faisaient rien. Damage.Measure compte maintenant aussi :
@@ -260,12 +276,129 @@ function Damage.Apply(model, dir, strength)
 			end
 		end
 	end
+	-- roues proches du point d'impact
+	for bone, w in pairs(cfg.Wheels or {}) do
+		local d = ((v3(w.Position) - P) * Vector3.new(1, 0, 1)).Magnitude
+		if d < Damage.WheelReach then
+			Damage.HitWheel(model, bone, energy * Damage.WheelK * (1 - d / Damage.WheelReach))
+		end
+	end
 	model:SetAttribute("LastImpact", string.format("%.2f,%.2f,%.1f", dir.X, dir.Z, strength))
+end
+
+local function custom()
+	local m = script.Parent:FindFirstChild("VehicleCustomization")
+	local ok, C = pcall(function()
+		return m and require(m)
+	end)
+	return ok and C or nil
+end
+
+-- Copie physique des pièces d'une roue, qui tombe, roule et disparaît après DebrisLifetime s (comme un ouvrant
+-- arraché, VehicleCustomization.RemoveDoor), dans le groupe des débris (ne touche ni véhicule ni occupant).
+local function dropWheel(model, bone)
+	local C = custom()
+	local root = model.PrimaryPart
+	if not root then
+		return
+	end
+	local pieces = {}
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and part.Transparency < 1 and part:GetAttribute("F2RPart") then
+			local chain = part:GetAttribute("BoneChain") or part:GetAttribute("Bone") or ""
+			if string.find("/" .. chain .. "/", "/" .. bone .. "/", 1, true) then
+				table.insert(pieces, part)
+			end
+		end
+	end
+	if #pieces == 0 then
+		return
+	end
+	local debris = Instance.new("Model")
+	debris.Name = model.Name .. "_" .. bone .. "_debris"
+	local first
+	for _, part in ipairs(pieces) do
+		local copy = part:Clone()
+		for _, d in ipairs(copy:GetDescendants()) do
+			if d:IsA("JointInstance") or d:IsA("WeldConstraint") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
+				d:Destroy()
+			end
+		end
+		copy.Anchored, copy.CanCollide, copy.CanQuery, copy.CanTouch, copy.Massless = false, false, false, false, true
+		copy:SetAttribute("F2RPart", nil)
+		copy.Parent = debris
+		if first then
+			local wc = Instance.new("WeldConstraint")
+			wc.Part0, wc.Part1, wc.Parent = first, copy, copy
+		else
+			first = copy
+			copy.CanCollide = true -- une seule pièce touche le sol (assez pour tomber et rouler)
+			copy.Massless = false
+		end
+	end
+	debris.PrimaryPart = first
+	local okA, Access = pcall(require, script.Parent:WaitForChild("VehicleAccess", 5))
+	if okA and Access and Access.TagDebris then
+		Access.TagDebris(debris)
+	end
+	debris.Parent = workspace
+	local away = (first.Position - root.Position) * Vector3.new(1, 0, 1)
+	away = away.Magnitude > 1e-3 and away.Unit or Vector3.zero
+	first.AssemblyLinearVelocity = root.AssemblyLinearVelocity + away * 10 + Vector3.new(0, 8, 0)
+	first.AssemblyAngularVelocity = root.CFrame.RightVector * (root.AssemblyLinearVelocity.Magnitude / 1.5) -- elle roule
+	pcall(function()
+		first:SetNetworkOwner(nil)
+	end)
+	game:GetService("Debris"):AddItem(debris, (C and C.DebrisLifetime) or 60)
+end
+
+-- SERVEUR. État d'une roue (ne fait que monter jusqu'à la réparation) ; 3 = arrachée (débris, pièces masquées).
+function Damage.SetWheelState(model, bone, state)
+	local cur = model:GetAttribute("WheelState_" .. bone) or 0
+	if state <= cur then
+		return
+	end
+	if state == 1 and model:GetAttribute("Tune_BulletproofTyres") == true then
+		return -- pneus increvables
+	end
+	model:SetAttribute("WheelState_" .. bone, state)
+	if state >= 3 then
+		dropWheel(model, bone)
+		local C = custom()
+		if C and C.Refresh then
+			pcall(C.Refresh, model) -- masque la roue sur la voiture (VehicleCustomization.Refresh)
+		end
+	end
+end
+
+-- SERVEUR. Retire `amount` points à une roue et en déduit son état.
+function Damage.HitWheel(model, bone, amount)
+	if model:GetAttribute("NoDamage") == true or amount <= 0 then
+		return
+	end
+	local hp = (model:GetAttribute("WheelHealth_" .. bone) or Damage.WheelHealthMax) - amount
+	hp = math.max(0, math.floor(hp))
+	model:SetAttribute("WheelHealth_" .. bone, hp)
+	local state = (hp <= 0 and 3) or (hp < Damage.WheelBreakBelow and 2)
+		or (hp < Damage.WheelBurstBelow and model:GetAttribute("Tune_BulletproofTyres") ~= true and 1) or 0
+	Damage.SetWheelState(model, bone, state)
+end
+
+-- SERVEUR. Herse : crève le pneu d'une roue intacte (pas de dégât de santé en plus).
+function Damage.Puncture(model, bone)
+	if model:GetAttribute("NoDamage") == true then
+		return false
+	end
+	if (model:GetAttribute("WheelState_" .. bone) or 0) ~= 0 or model:GetAttribute("Tune_BulletproofTyres") == true then
+		return false
+	end
+	Damage.SetWheelState(model, bone, 1)
+	return true
 end
 
 function Damage.Reset(model)
 	for k in pairs(model:GetAttributes()) do
-		if string.sub(k, 1, 12) == "LightBroken_" then
+		if string.sub(k, 1, 12) == "LightBroken_" or string.sub(k, 1, 11) == "WheelState_" or string.sub(k, 1, 12) == "WheelHealth_" then
 			model:SetAttribute(k, nil)
 		end
 	end

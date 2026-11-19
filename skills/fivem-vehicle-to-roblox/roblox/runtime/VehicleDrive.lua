@@ -337,6 +337,32 @@ local function findPedestrians(a, root, cf, vWorld, now)
 	end
 end
 
+-- ------------------------------------------------------------------ dégâts de roue, herse
+-- Herse : une pièce taguée « SpikeStrip », ou dans un modèle tagué ainsi (jusqu'à 3 parents).
+local function isSpike(inst)
+	for _ = 1, 4 do
+		if not inst then
+			return false
+		end
+		if CollectionService:HasTag(inst, "SpikeStrip") then
+			return true
+		end
+		inst = inst.Parent
+	end
+	return false
+end
+
+-- { [os] = état } lu sur les attributs WheelState_<os> (VehicleDamage)
+local function wheelStates(car)
+	local t = {}
+	for name, v in pairs(car:GetAttributes()) do
+		if string.sub(name, 1, 11) == "WheelState_" then
+			t[string.sub(name, 12)] = v
+		end
+	end
+	return t
+end
+
 local function step(a, dt)
 	local car, root, spm, sim = a.car, a.root, a.spm, a.sim
 	if not car.Parent or not root.Parent then
@@ -374,17 +400,36 @@ local function step(a, dt)
 		local topLocal = (w.rest + Vector3.new(0, P.upper + P.raise, 0)) * spm
 		local origin = cf:PointToWorldSpace(topLocal) + up * a.margin
 		local len = a.margin + travelSt + a.extraReach
+		-- roue arrachée (WheelState 3, VehicleDamage) : le contact reste (le moyeu frotte, VehicleDynamics)
+		local state = w.state or 0
 		local hit = Workspace:Spherecast(origin, r * 0.95, -up * len, a.params)
 		local c = { grounded = false, x = 0, xdot = 0, vLong = 0, vLat = 0, grip = 1 }
+		if hit and state == 0 and isSpike(hit.Instance) then
+			-- herse (tag SpikeStrip) : le serveur vérifie et crève le pneu (« Spike »)
+			local now = os.clock()
+			a.spikeAt = a.spikeAt or {}
+			if now - (a.spikeAt[w.bone] or -math.huge) > 1 then
+				a.spikeAt[w.bone] = now
+				a.pendingSpikes = a.pendingSpikes or {}
+				table.insert(a.pendingSpikes, w.bone)
+			end
+		end
 		if hit then
 			local d = hit.Distance - a.margin -- déplacement du centre de roue depuis le haut du débattement
+			if state == 1 or state >= 3 then
+				-- pneu à plat (ou moyeu d'une roue arrachée) : le coin descend. Pas pour une roue cassée (faussée, pas
+				-- dégonflée), et peu : 7 cm sur un seul coin déchargeaient la diagonale par les barres anti-roulis
+				-- (BavrenN4 : 0,68 et 0,32 au lieu de ≈ 2,45 m/s² de charge) ; la roue opposée patinait dans le vide
+				-- et, différentiel ouvert, la voiture ne repartait plus (mesuré le 2026-11-19)
+				d += (Dyn.Tuning.FlatDrop or 0.04) * spm
+			end
 			if d <= travelSt then
 				local x = (travelSt - math.max(d, -travelSt)) / spm -- m depuis la détente maximale
 				c.grounded = true
 				c.x = x
 				c.xdot = (x - (a.xPrev[i] or x)) / dt
 				a.xPrev[i] = x
-				local steer = w.steer and S.steerAngle or 0
+				local steer = Dyn.WheelSteer(sim, i)
 				local fwd = (cf * CFrame.Angles(0, steer, 0)).LookVector
 				local right = fwd:Cross(up)
 				local vc = root:GetVelocityAtPosition(hit.Position)
@@ -604,8 +649,11 @@ function Drive.Start(car)
 			Dyn.SetUpgrades(sim, upgrades())
 		elseif string.sub(attr, 1, 5) == "Tune_" then
 			Dyn.SetTune(sim, tune())
+		elseif string.sub(attr, 1, 11) == "WheelState_" then
+			Dyn.SetWheelStates(sim, wheelStates(car))
 		end
 	end))
+	Dyn.SetWheelStates(sim, wheelStates(car))
 	-- chocs mesurés dans la boucle physique, envoyés au serveur ici (VehicleDamage)
 	table.insert(a.conns, RunService.Heartbeat:Connect(function()
 		local imp = a.pendingImpact
@@ -617,6 +665,15 @@ function Drive.Start(car)
 			end
 		end
 		-- piétons percutés (findPedestrians), envoyés hors de la boucle physique comme les chocs
+		-- roues sur une herse (contacts), envoyées hors de la boucle physique
+		local spikes = a.pendingSpikes
+		if spikes then
+			a.pendingSpikes = nil
+			local remote = folder:FindFirstChild("VehicleEvent")
+			for _, bone in ipairs(remote and spikes or {}) do
+				remote:FireServer(car, "Spike", bone)
+			end
+		end
 		local peds = a.pendingPeds
 		if peds then
 			a.pendingPeds = nil
