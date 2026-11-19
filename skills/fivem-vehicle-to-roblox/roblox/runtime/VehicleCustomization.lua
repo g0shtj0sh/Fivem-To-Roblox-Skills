@@ -1598,27 +1598,103 @@ end
 
 -- Réglages de conduite façon menu admin (VehicleDynamics.SetTune, appliqués en direct par VehicleDrive) :
 --   PowerMult / TorqueMult  multiplicateur de puissance / de couple (1 = d'origine ; leur produit est plafonné
---                           à Dyn.Tuning.MaxForceMult pour que la physique tienne)
+--                           à Dyn.Tuning.MaxForceMult pour que la physique tienne ; sous 1 pour une préparation)
 --   SpeedLimitKmh           limiteur de vitesse réglé par le joueur (0 ou nil = aucun)
---   DriftTyres              pneus de drift : adhérence réduite
-Custom.TuneKeys = { PowerMult = "number", TorqueMult = "number", SpeedLimitKmh = "number", DriftTyres = "boolean" }
+--   DriftTyres / WinterTyres / RaceTyres
+--                           pneus (un seul type à la fois) : drift = moins d'adhérence ; hiver = bien meilleur sur
+--                           les sols glissants (un peu sur la glace), un peu moins sur sec ; course = bien plus
+--                           d'adhérence et une réponse plus vive, moins bons hors route (VehicleDynamics.Tuning)
+--   préparation (Custom.PrepKeys) : multiplicateurs des valeurs d'origine ou valeurs imposées, voir Custom.PrepRanges
+Custom.TyreKeys = { "DriftTyres", "WinterTyres", "RaceTyres" }
+-- { clé, min, max, valeur d'origine (= réglage absent) } ; mêmes bornes que VehicleDynamics.SetUpgrades
+Custom.PrepRanges = {
+	{ key = "GripMult", min = 0.3, max = 2, origin = 1 }, -- adhérence (× d'origine)
+	{ key = "SlideGrip", min = 0.5, max = 1.1, origin = nil }, -- adhérence en glisse / adhérence max (GTA Min/Max)
+	{ key = "LateralMult", min = 0.5, max = 2, origin = 1 }, -- angle où l'adhérence latérale culmine (× d'origine)
+	{ key = "RearGripMult", min = 0.4, max = 1.6, origin = 1 }, -- adhérence de l'arrière (× d'origine)
+	{ key = "SteerLockDeg", min = 15, max = 80, origin = nil }, -- angle de braquage (°)
+	{ key = "PowerMult", min = 0.3, max = 16, origin = 1 }, -- force motrice (× d'origine)
+	{ key = "TopSpeedMult", min = 0.5, max = 2, origin = 1 }, -- vitesse de pointe (× d'origine)
+	{ key = "ShiftMult", min = 0.3, max = 4, origin = 1 }, -- vitesse de passage des rapports (× d'origine)
+	{ key = "BrakeMult", min = 0.3, max = 3, origin = 1 }, -- freins (× d'origine)
+	{ key = "SuspMult", min = 0.4, max = 2.5, origin = 1 }, -- raideur de suspension et anti-roulis (× d'origine)
+	{ key = "LowSpeedLoss", min = 0, max = 3, origin = nil }, -- perte d'adhérence au démarrage (GTA LowSpeedTractionLossMult)
+	{ key = "DriveBiasFront", min = 0, max = 1, origin = nil }, -- 0 propulsion, 1 traction, entre = intégrale
+}
+Custom.PrepKeys = {}
+for _, r in ipairs(Custom.PrepRanges) do
+	Custom.PrepKeys[r.key] = r
+end
+Custom.TuneKeys = {
+	PowerMult = "number", TorqueMult = "number", SpeedLimitKmh = "number",
+	DriftTyres = "boolean", WinterTyres = "boolean", RaceTyres = "boolean",
+}
+for _, r in ipairs(Custom.PrepRanges) do
+	Custom.TuneKeys[r.key] = "number"
+end
 function Custom.SetTune(model, key, value)
 	local t = Custom.TuneKeys[key]
 	assert(t, "Réglage inconnu : " .. tostring(key))
 	if value ~= nil then
 		assert(type(value) == t, "Réglage " .. key .. " : " .. t .. " attendu")
 	end
-	if key == "PowerMult" or key == "TorqueMult" then
+	local range = Custom.PrepKeys[key]
+	if key == "TorqueMult" then
 		value = value and math.clamp(value, 1, 1024) or nil
 		if value == 1 then
 			value = nil
 		end
+	elseif range then
+		value = value and math.clamp(value, range.min, range.max) or nil
+		if value ~= nil and range.origin ~= nil and math.abs(value - range.origin) < 1e-3 then
+			value = nil -- valeur d'origine : réglage retiré
+		end
 	elseif key == "SpeedLimitKmh" then
 		value = (value and value > 0) and math.clamp(value, 5, 600) or nil
-	elseif key == "DriftTyres" then
+	elseif t == "boolean" then
 		value = value == true or nil
+		if value then
+			for _, other in ipairs(Custom.TyreKeys) do
+				if other ~= key then
+					model:SetAttribute("Tune_" .. other, nil) -- un seul type de pneus monté
+				end
+			end
+		end
 	end
 	model:SetAttribute("Tune_" .. key, value)
+end
+
+-- Préparations fournies (2026-11-19). Drift : à la manière des serveurs de drift de GTA V (handling « drift » :
+-- TractionCurveMax/Min bas et rapprochés, braquage 60-65°, propulsion, perte d'adhérence à basse vitesse relevée,
+-- puissance en plus) : la voiture décroche au moindre coup de gaz et glisse longtemps. Course : grip, freins,
+-- rapports et suspension relevés. Valeurs de départ : à juger au volant et régler.
+Custom.PrepPresets = {
+	{
+		id = "drift",
+		name = "Prépa drift",
+		values = {
+			GripMult = 0.62, SlideGrip = 0.97, LateralMult = 1.35, RearGripMult = 0.8, SteerLockDeg = 65,
+			PowerMult = 1.7, ShiftMult = 1.6, SuspMult = 1.3, LowSpeedLoss = 1.4, DriveBiasFront = 0,
+		},
+	},
+	{
+		id = "course",
+		name = "Prépa course",
+		values = {
+			GripMult = 1.35, SlideGrip = 0.9, LateralMult = 0.85, RearGripMult = 1.05, PowerMult = 1.35,
+			TopSpeedMult = 1.12, ShiftMult = 2.5, BrakeMult = 1.5, SuspMult = 1.5, LowSpeedLoss = 0.5,
+		},
+	},
+}
+
+-- Applique une préparation complète : toutes les clés de préparation absentes de `values` reviennent à l'origine
+-- (values = nil : préparation d'origine). `name` (≤ 40 caractères) est affiché par le jeu (attribut PrepName).
+function Custom.SetPrep(model, values, name)
+	for _, r in ipairs(Custom.PrepRanges) do
+		local v = values and values[r.key]
+		Custom.SetTune(model, r.key, type(v) == "number" and v or nil)
+	end
+	model:SetAttribute("PrepName", (values and type(name) == "string" and #name > 0) and string.sub(name, 1, 40) or nil)
 end
 
 -- Gel : VehicleRoot ancré, même avec un conducteur (VehicleAccess respecte l'attribut Frozen).
@@ -2033,6 +2109,33 @@ OPS.Tune = function(model, key, value)
 		return false, "invalid"
 	end
 	Custom.SetTune(model, key, value)
+	if Custom.PrepKeys[key] then
+		model:SetAttribute("PrepName", nil) -- réglage touché à la main : ce n'est plus la préparation nommée
+	end
+	return true
+end
+
+-- Préparation complète d'un coup : values = { clé = nombre } (clés de Custom.PrepKeys seulement), nil = d'origine
+OPS.Prep = function(model, values, name)
+	if values ~= nil and type(values) ~= "table" then
+		return false, "invalid"
+	end
+	local clean = nil
+	if values then
+		clean = {}
+		local n = 0
+		for k, v in pairs(values) do
+			n += 1
+			if n > 32 or type(k) ~= "string" or not Custom.PrepKeys[k] or type(v) ~= "number" or not finite(v) then
+				return false, "invalid"
+			end
+			clean[k] = v
+		end
+	end
+	if name ~= nil and (type(name) ~= "string" or #name > 40) then
+		return false, "invalid"
+	end
+	Custom.SetPrep(model, clean, name)
 	return true
 end
 

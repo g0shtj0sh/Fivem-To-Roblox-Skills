@@ -410,6 +410,18 @@ Dyn.Tuning = {
 	-- Réglages de menu admin (Dyn.SetTune) : plafond du multiplicateur de force motrice, adhérence des pneus de drift.
 	MaxForceMult = 16,
 	DriftTyreGrip = 0.7,
+	-- Pneus du menu (2026-11-19, demande de l'utilisateur). Course : bien plus d'adhérence et une réponse plus vive
+	-- (la force latérale monte plus vite : pic à RaceTyrePeak × l'angle d'origine), mais des slicks perdent sur un sol
+	-- meuble ou mouillé. Hiver : sur les sols glissants l'adhérence remonte d'une part du manque (WinterSoftGain), sur la
+	-- glace très peu (WinterIceGain : « la glace c'est la glace ») ; un peu moins sur sec (gomme tendre).
+	RaceTyreGrip = 1.3,
+	RaceTyrePeak = 0.8,
+	RaceTyreSoftPenalty = 0.85, -- sol de grip < 0,85 (herbe, terre, sable, neige, glace)
+	WinterTyreDryGrip = 0.95,
+	WinterSoftGain = 0.5, -- part du manque d'adhérence rendue (neige 0,45 → 0,73 ; herbe 0,7 → 0,85)
+	-- glace (grip ≤ 0,3) : 0,2 → 0,264. Mesuré avec 0,2 (0,2 → 0,36) : freinage 40-0 sur glace 0,56 → 0,96 g, « trop »
+	-- pour la consigne (« un peu mieux, mais pas trop ») ; réduit à 0,08 le 2026-11-19
+	WinterIceGain = 0.08,
 	-- Améliorations du garage dont l'effet doit se SENTIR à chaque niveau (demande de l'utilisateur, 2026-11-16 :
 	-- mesuré avant, freins ×2 = 20,5 → 20,4 m au 100-0, suspension +11 % = roulis 1,39 → 1,26° : rien de perceptible).
 	-- Freins : le 100-0 est limité par l'adhérence, pas par la force ; chaque niveau ajoute de l'adhérence PENDANT
@@ -475,6 +487,19 @@ local MATERIAL_GRIP = { -- adhérence relative du sol (inspirée de materials.da
 function Dyn.MaterialGrip(materialName)
 	return MATERIAL_GRIP[materialName] or 0.9
 end
+
+-- adhérence du sol vue par le pneu monté (Tune_WinterTyres / Tune_RaceTyres) ; g = Dyn.MaterialGrip
+local function soilGrip(P, g)
+	g = g or 1
+	local T = P.T
+	if P.tyre == "winter" and g < 1 then
+		return g + (1 - g) * (g <= 0.3 and (T.WinterIceGain or 0.2) or (T.WinterSoftGain or 0.5))
+	elseif P.tyre == "race" and g < 0.85 then
+		return g * (T.RaceTyreSoftPenalty or 0.85)
+	end
+	return g
+end
+Dyn.SoilGrip = soilGrip
 
 local function sign(x)
 	return x > 0 and 1 or (x < 0 and -1 or 0)
@@ -553,8 +578,66 @@ function Dyn.SetUpgrades(sim, levels)
 	if userLimit and userLimit > 0 then
 		P.limiter = math.min(P.limiter or math.huge, userLimit / 3.6)
 	end
-	local grip = tune.DriftTyres == true and (T.DriftTyreGrip or 0.7) or 1
-	P.muMax, P.muMin = B.muMax * grip, B.muMin * grip
+	-- pneus : un seul type à la fois (VehicleCustomization.SetTune) ; course > hiver > drift si plusieurs traînent
+	local tyre = (tune.RaceTyres == true and "race") or (tune.WinterTyres == true and "winter")
+		or (tune.DriftTyres == true and "drift") or nil
+	P.tyre = tyre
+	local tyreGrip = (tyre == "race" and (T.RaceTyreGrip or 1.3)) or (tyre == "winter" and (T.WinterTyreDryGrip or 0.95))
+		or (tyre == "drift" and (T.DriftTyreGrip or 0.7)) or 1
+	-- préparation (Tune_*, plages bornées ici ET par VehicleCustomization.SetTune) : multiplicateurs des valeurs
+	-- d'origine du véhicule, ou valeurs imposées (braquage, répartition, perte à basse vitesse)
+	local function num(key, lo, hi)
+		local v = tonumber(tune[key])
+		return v and math.clamp(v, lo, hi) or nil
+	end
+	local gm = num("GripMult", 0.3, 2) or 1
+	P.muMax = B.muMax * tyreGrip * gm
+	local slide = num("SlideGrip", 0.5, 1.1) -- adhérence en glisse / adhérence max (GTA : TractionCurveMin / Max)
+	P.muMin = slide and P.muMax * slide or B.muMin * tyreGrip * gm
+	P.alphaPeak = B.alphaPeak * (tyre == "race" and (T.RaceTyrePeak or 0.8) or 1) * (num("LateralMult", 0.5, 2) or 1)
+	P.tracF, P.tracR = B.tracF, B.tracR * (num("RearGripMult", 0.4, 1.6) or 1)
+	local lock = num("SteerLockDeg", 15, 80)
+	P.steerLock = lock and math.rad(lock) or B.steerLock
+	P.flatVel = B.flatVel * (num("TopSpeedMult", 0.5, 2) or 1)
+	local shift = num("ShiftMult", 0.3, 4) or 1
+	P.clutchUp, P.clutchDown = P.clutchUp * shift, P.clutchDown * shift
+	P.brake = P.brake * (num("BrakeMult", 0.3, 3) or 1)
+	local susp = num("SuspMult", 0.4, 2.5) or 1
+	P.kF, P.kR, P.arbF, P.arbR = P.kF * susp, P.kR * susp, P.arbF * susp, P.arbR * susp
+	P.lowSpeedLoss = num("LowSpeedLoss", 0, 3) or B.lowSpeedLoss
+	local bias = num("DriveBiasFront", 0, 1) -- 0 = propulsion, 1 = traction, entre = intégrale (GTA : 2b / 2(1-b))
+	if bias then
+		local df = (bias < 0.1 and 0) or (bias > 0.9 and 2) or 2 * bias
+		local dr = (bias < 0.1 and 2) or (bias > 0.9 and 0) or 2 * (1 - bias)
+		P.driveShareF, P.driveShareR = df / 2, dr / 2
+	else
+		P.driveShareF, P.driveShareR = B.driveShareF, B.driveShareR
+	end
+	-- roues : adhérence, part motrice, ressorts (repris des valeurs ci-dessus)
+	local nF, nR = 0, 0
+	for _, w in ipairs(P.wheels or {}) do
+		if w.front then
+			nF += 1
+		else
+			nR += 1
+		end
+	end
+	P.nDriven = 0
+	for _, w in ipairs(P.wheels or {}) do
+		w.trac = w.front and P.tracF or P.tracR
+		w.driveShare = (w.front and P.driveShareF / math.max(nF, 1)) or (P.driveShareR / math.max(nR, 1))
+		w.k = w.front and P.kF or P.kR
+		if w.driveShare > 0 then
+			P.nDriven += 1
+		end
+	end
+	P.nBurnSpin = 0
+	for _, w in ipairs(P.wheels or {}) do
+		w.burnSpin = w.driveShare > 0 and (P.nDriven < #P.wheels or not w.front)
+		if w.burnSpin then
+			P.nBurnSpin += 1
+		end
+	end
 end
 
 -- Réglages façon menu admin (attributs Tune_<clé> posés par VehicleCustomization.SetTune, relus par VehicleDrive) :
@@ -753,6 +836,9 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 		brake = P.brake, kF = P.kF, kR = P.kR, arbF = P.arbF, arbR = P.arbR, raise = P.raise,
 		limiter = (limKmh and limKmh > 0) and limKmh / 3.6 or nil,
 		muMax = P.muMax, muMin = P.muMin,
+		-- réglables par une préparation (Tune_*, Dyn.SetTune)
+		steerLock = P.steerLock, flatVel = P.flatVel, alphaPeak = P.alphaPeak, lowSpeedLoss = P.lowSpeedLoss,
+		tracF = P.tracF, tracR = P.tracR, driveShareF = P.driveShareF, driveShareR = P.driveShareR,
 	}
 	local sim = { P = P, S = S, T = T }
 	Dyn.SetUpgrades(sim, upgrades)
@@ -1238,7 +1324,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 				-- ses deux parts, séparées : patinage / blocage (le long de la roue) et glisse de côté (VehicleTyreFx)
 				S.slipLong[i] = vSlipLong
 				S.slipLat[i] = vLat
-				local grip = 1 - (1 - (c.grip or 1)) * P.lossMult
+				local grip = 1 - (1 - soilGrip(P, c.grip)) * P.lossMult
 				local fmax = (N[i] * muOf(P, sFall) * w.trac * (w.driveShare > 0 and lowGrip or 1) + extraGrip * w.massFrac * 4) * grip
 				if (P.brakeGrip or 0) > 0 and brakeIn > 0 and not hand then
 					fmax *= 1 + P.brakeGrip * math.min(brakeIn, 1) -- freins améliorés : plus d'adhérence au freinage
@@ -1377,7 +1463,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		local safety = T.RollSafety or 0
 		if safety > 0 and P.com and w.halfTrack and w.halfTrack > 0 then
 			local c = contacts[i]
-			local soil = 1 - (1 - ((c and c.grip) or 1)) * P.lossMult
+			local soil = 1 - (1 - soilGrip(P, (c and c.grip) or 1)) * P.lossMult
 			local brakeK = 1
 			if (P.brakeGrip or 0) > 0 and brakeIn > 0 and not (inp.Handbrake and not w.front) then
 				brakeK = 1 + P.brakeGrip * math.min(brakeIn, 1)

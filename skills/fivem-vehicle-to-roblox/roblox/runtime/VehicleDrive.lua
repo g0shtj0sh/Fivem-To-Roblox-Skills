@@ -578,10 +578,13 @@ function Drive.Start(car)
 		end
 		return levels
 	end
+	-- tous les réglages Tune_<clé> du véhicule (VehicleCustomization.TuneKeys : multiplicateurs, pneus, préparation)
 	local function tune()
 		local t = {}
-		for key in pairs({ PowerMult = true, TorqueMult = true, SpeedLimitKmh = true, DriftTyres = true }) do
-			t[key] = car:GetAttribute("Tune_" .. key)
+		for name, value in pairs(car:GetAttributes()) do
+			if string.sub(name, 1, 5) == "Tune_" then
+				t[string.sub(name, 6)] = value
+			end
 		end
 		return t
 	end

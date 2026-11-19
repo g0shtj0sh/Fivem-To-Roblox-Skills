@@ -507,6 +507,18 @@ déformation). Pied au plancher à 92 km/h : 2 essais sur 2 plaqués au poteau a
   69 km/h le long du mur, roulis 13° passager. Un choc à 60° du mur (mal nommé « 30° » d'abord) arrête la voiture :
   attendu.
 
+**Pneus et préparations (2026-11-19)** : `Custom.SetTune` accepte `DriftTyres`, `WinterTyres`, `RaceTyres` (un seul type
+monté : en poser un retire les autres) et les clés de préparation `Custom.PrepRanges` (GripMult, SlideGrip,
+LateralMult, RearGripMult, SteerLockDeg, PowerMult, TopSpeedMult, ShiftMult, BrakeMult, SuspMult, LowSpeedLoss,
+DriveBiasFront : bornées, valeur d'origine = attribut retiré). `Custom.SetPrep(model, values, name)` / op « Prep » posent
+une préparation complète (`PrepName`) ; `Custom.PrepPresets` fournit « Prépa drift » (à la manière des handlings de
+drift GTA V : grip bas et plat, braquage 65°, propulsion, patinage relevé) et « Prépa course ». `VehicleDrive` relit
+tous les `Tune_*` en direct ; `VehicleDynamics.SetUpgrades` les applique après les améliorations ; le pneu modifie
+l'adhérence du sol (`Dyn.SoilGrip`). Mesuré (355e, Play, banc DriveBench) : virage 40 km/h braquage plein, dérive
+d'origine 11,3° → course 7,7° (et garde 37 km/h au lieu de 25), prépa course 7,2°, prépa drift 30,8° ; freinage sur
+neige 50-0 : 1,25 → 1,52 g en pneus hiver ; sur glace 40-0 : 0,56 → 0,70 g (gain glace réduit à 0,08 après 0,96 g
+jugé « trop »). Le drift tenu (contre-braquage) n'est pas mesurable au banc : à juger au volant.
+
 Lire les résultats de Verify, pas le nombre d'erreurs de console : une place qui contient d'autres
 véhicules peut afficher des centaines de « Failed to load sound … » qui ne sont pas les nôtres.
 Un statut `warn` « rendu figé » = Studio sans focus (RenderStepped arrêté) : relancer le groupe.
