@@ -166,8 +166,18 @@ function Custom.Refresh(model)
 			visible = false
 		end
 		local base = part:GetAttribute("BaseTransparency") or 0
+		if part:GetAttribute("Kind") == "glass" and not part:GetAttribute("Window") then
+			-- capot transparent des feux : jamais teinté. Option du véhicule PlainLightCovers : masqué, les optiques
+			-- se voient en 3D unie (la conversion lui a posé la texture des vitres, sérigraphie à points de GTA :
+			-- feux arrière « texturés » sur la 325e, demande de l'utilisateur 2026-11-19).
+			if model:GetAttribute("PlainLightCovers") == true then
+				visible = false
+			end
+		end
 		if part:GetAttribute("Kind") == "glass" then
-			base = model:GetAttribute("WindowTint") or base
+			if part:GetAttribute("Window") then
+				base = model:GetAttribute("WindowTint") or base
+			end
 			-- texture des vitres (GlassTexture) : en AlphaMode Transparency, l'alpha de la texture décide seul et
 			-- Part.Transparency / Part.Color sont ignorés -> toutes les teintes rendaient pareil (mesuré, 2026-11-18).
 			-- Overlay : la texture se pose sur Part.Color et la transparence de la pièce s'applique. Corrige aussi
@@ -506,10 +516,13 @@ function Custom.WindowBones(model)
 	return out
 end
 
+-- vitres (pièces de verre portées par un os de vitre) : les seules que la teinte touche. Les autres pièces de verre sont
+-- les capots transparents des feux (325e : chassis__vehglass couvre les phares et les feux arrière) ; teintés avant le
+-- 2026-11-19, ils assombrissaient les optiques.
 local function glassParts(model)
 	local out = {}
 	for _, part in ipairs(visualParts(model)) do
-		if part:GetAttribute("Kind") == "glass" then
+		if part:GetAttribute("Kind") == "glass" and part:GetAttribute("Window") then
 			table.insert(out, part)
 		end
 	end

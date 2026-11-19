@@ -588,7 +588,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                 info["EmissiveCoverage"] = round(mask_coverage(mat.emissive_png, p.uv, p.idx), 3)
             except (OSError, ValueError, IndexError):
                 pass
-        if p.kind == "glass" and p.tex_diffuse:
+        # capots transparents des feux (verre sans os de vitre) : pas de texture de vitre. Elle y posait la sérigraphie
+        # à points de GTA sur toute l'optique (325e : feux arrière « texturés », demande de l'utilisateur 2026-11-19)
+        if p.kind == "glass" and p.tex_diffuse and p.window:
             # texture des vitres (bordure sérigraphiée noire, dégivrage, teinte : vehicle_generic_glasswindows*) :
             # jetée avant le 2026-11-16 (verre uni). Mise en ligne à part comme les masques d'émission (glass/), id
             # lu avec les sons (--sound-ids), posée par le Setup en SurfaceAppearance à transparence

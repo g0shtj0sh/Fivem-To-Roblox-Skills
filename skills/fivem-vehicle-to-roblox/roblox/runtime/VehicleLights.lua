@@ -140,6 +140,44 @@ function Lights.EmissiveSetup(part)
 	return true
 end
 
+-- Pièces qui décident où poser la lumière d'un rôle. Un mod range parfois sous le même rôle des pièces qui ne sont pas
+-- l'optique (325e, 2026-11-19 : « headlight_l » = phare gauche + bande de toute la largeur sous le pare-chocs + phares
+-- des pare-chocs de custom cachés ; « taillight_l » = feu arrière gauche + voyants du tableau de bord). Leur boîte
+-- commune plaçait les phares au milieu de la calandre, trop bas, et la lumière du feu arrière gauche dans
+-- l'habitacle. On garde, si possible : les pièces visibles hors custom, hors habitacle (boîte des vitres) et, pour
+-- un rôle de côté (_l, _r, _lf…), celles de ce côté. Sans pièce restante : toutes, comme avant.
+function Lights.PlacementParts(role, parts, model, vf, spm)
+	if not parts or #parts <= 1 then
+		return parts
+	end
+	-- habitacle : boîte des vitres (pièces Kind=glass avec un os de vitre), dans le repère du véhicule (studs)
+	local mn, mx
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d:GetAttribute("Kind") == "glass" and d:GetAttribute("Window") then
+			local c = vf:PointToObjectSpace(d.Position)
+			local h = d.Size.Magnitude / 2
+			mn = mn and mn:Min(c - Vector3.one * h * 0.5) or (c - Vector3.one * h * 0.5)
+			mx = mx and mx:Max(c + Vector3.one * h * 0.5) or (c + Vector3.one * h * 0.5)
+		end
+	end
+	local side = string.match(role, "_([lr])[fr]?$")
+	local keep = {}
+	for _, p in ipairs(parts) do
+		local c = vf:PointToObjectSpace(p.Position)
+		local ok = p:GetAttribute("ModSlot") == nil and p:GetAttribute("Visible") ~= false
+		if ok and mn and c.X > mn.X and c.X < mx.X and c.Z > mn.Z and c.Z < mx.Z and c.Y > mn.Y - 0.45 * spm then
+			ok = false -- dans l'habitacle
+		end
+		if ok and side then
+			ok = (side == "l" and c.X < -0.1 * spm) or (side == "r" and c.X > 0.1 * spm)
+		end
+		if ok then
+			table.insert(keep, p)
+		end
+	end
+	return #keep > 0 and keep or parts
+end
+
 function Lights.Rig(model)
 	local root = model.PrimaryPart
 	local cfgModule = model:FindFirstChild("VehicleConfig")
@@ -184,7 +222,7 @@ function Lights.Rig(model)
 	for role in pairs(roles) do
 		local spec = Lights.Spec[family(role)]
 		if spec and role ~= "always_on" then
-			local parts = byRole[role]
+			local parts = Lights.PlacementParts(role, byRole[role], model, vf, spm)
 			local lo, hi
 			if parts then
 				lo, hi = boundsOf(vf, parts)
