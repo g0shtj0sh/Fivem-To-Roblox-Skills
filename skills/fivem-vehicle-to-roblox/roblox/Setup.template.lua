@@ -361,6 +361,9 @@ for name, info in pairs(PARTS) do
 			p:SetAttribute("ModSlot", info.ModSlot)
 			p:SetAttribute("ModIndex", info.ModIndex)
 		end
+		if info.HideWithMods then
+			p:SetAttribute("HideWithMods", info.HideWithMods)
+		end
 		if info.Extra then
 			p:SetAttribute("Extra", info.Extra)
 		end

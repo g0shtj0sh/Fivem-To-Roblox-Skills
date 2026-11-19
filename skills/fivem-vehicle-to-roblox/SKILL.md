@@ -303,6 +303,16 @@ Les options sans modèle du modkit (« introuvable dans le pack ») sont des opt
 `turnOffBones` seul (pas de pare-chocs arrière, pas d'essuie-glaces, échappement caché) ; vérifier qu'elles masquent
 ce qu'elles disent et rien d'autre.
 
+**Custom copiée triangle pour triangle sur la géométrie d'origine** (325e, calandres `325e_gra/grb`, 2026-11-19) :
+une pièce de custom peut reprendre exactement des triangles de la caisse (même position, autre matériau) sur un os
+qui ne se masque pas (`chassis`), sans `turnOffBones`. GTA l'affiche proprement (profondeurs identiques, le dernier
+dessiné gagne) ; Roblox fait scintiller les deux surfaces (z-fighting : « deux calandres superposées »).
+`f2r/mod_overlap.py` sépare ces triangles d'origine dans `<pièce>__under<n>` (attribut `HideWithMods` =
+« Grille:1,Grille:2 »), masquée par `Custom.Refresh` quand l'une de ces options est posée. Rapport : « Custom posée
+sur la géométrie d'origine : N triangle(s) de … ». Contrôle hors Studio : `scripts/vehicle-mod-overlap/mod_overlap.py
+<glb>` (jeu brolver-rp) liste les triangles de custom posés sur l'origine ; seuls doivent rester ceux d'os masqués
+par l'option (capot, pare-chocs, échappement).
+
 ## Hitbox fidèle (automatique)
 
 Le `.yft` contient la **collision officielle du véhicule** (Physics/LOD1, `Bound` composite) :
@@ -334,7 +344,11 @@ Un `handling.meta` réglé pour GTA peut donner plus d'adhérence que la voiture
 une bordure de 15 cm). `VehicleDynamics` corrige les deux pour **tout** véhicule, sans toucher au mod :
 `Tuning.RollSafety` (le pneu glisse avant que la roue intérieure ne décolle, centre de roulis effectif remonté au
 besoin, `out.wheels[i].rc`) et `Tuning.RideFreqMax` (raideur plafonnée à 2,5 Hz par roue ; valeur d'origine dans
-`P.kSpringRaw`). Un véhicule déjà dans la marge (m422) ne change pas de façon perceptible. **À contrôler sur chaque
+`P.kSpringRaw`), et `Tuning.RollFreqMax` (5,5 Hz en roulis : la barre anti-roulis, améliorations et préparation
+`SuspMult` comprises, est réduite si ressort + 2 × barre dépasse ce plafond ; au-delà, son retard d'une image
+entretient une oscillation : 325e suspension niveau 5, barre × 2,95, « la voiture tremble »). Contrôle : coup de
+roulis de 0,6 rad/s au client conducteur, `root.AssemblyAngularVelocity += LookVector * 0.6`, puis lire le roulis
+2 s : il doit retomber sous 0,01 rad/s, au niveau max de suspension aussi. Un véhicule déjà dans la marge (m422) ne change pas de façon perceptible. **À contrôler sur chaque
 nouveau véhicule** (banc `DriveBench`, piste `TestTrack`) : `Bench.corner(40, 1)` et `Bench.corner(60, 1)` →
 `minWheels = 4`, `rolledOver = false` ; `Bench.curb(60, 120)` sur la voie `curb` → `airborne = 0`, tangage < 5 °.
 Une voiture peut toujours se retourner sur un trottoir pris en travers, un choc ou un tremplin : c'est voulu.
@@ -653,6 +667,15 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   (`MNU_EXH1`) ou un nom de fichier (`e36_wing_1`) ; un vrai nom donné par le mod est gardé. Un aileron attaché à
   `bodyshell` avec `turnOffBones boot` remplace le couvercle de coffre fixé à la caisse : le coffre ne s'ouvre plus
   visuellement, comme dans GTA.
+- **Nom d'emplacement d'après son contenu** (2026-11-19) : les mods rangent des pièces dans un emplacement GTA libre
+  (325e : essuie-glaces `325e_wip*` dans `VMT_ROOF` → le menu disait « Toit » ; barres `325e_strut*` dans
+  `VMT_ENGINEBAY1` → « Bloc moteur »). `Custom.ModContentLabel` lit le nom des modèles (après « <véhicule>_ ») ;
+  si tous commencent par un motif de `Custom.ModContentLabels` (wip → Essuie-glaces, strut → Barre
+  anti-rapprochement, mirr → Rétroviseurs…), ce nom remplace celui de l'emplacement. Une option de retrait (sans
+  modèle, `turnOffBones` seul) s'appelle « Sans essuie-glaces » et ne prend pas de numéro ; une option sans modèle
+  ni os masqué : « <emplacement> n (absent du mod) ». **À chaque nouveau véhicule** : lire la liste des emplacements
+  et des modèles (`VehicleConfig.Mods`) ; un nom de modèle qui ne correspond pas à son emplacement et qu'aucun motif
+  ne couvre → ajouter un motif sans ambiguïté.
 - **Pneus** : texture toujours opaque (le shader pneu de GTA l'est ; une alpha de diffuse mélangée à `Part.Color`
   donnait des pneus presque blancs).
 

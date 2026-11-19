@@ -83,6 +83,9 @@ class Part:
     tex_livery: list[str] = field(default_factory=list)
     # (rugosité 0..1, métal) imposés par une retouche du véhicule (rebadge.restyle_islands), sinon tirés du SpecSampler
     mr_override: tuple | None = None
+    # options de custom (« Slot:Index,… ») posées exactement sur ces triangles d'origine : pièce masquée quand l'une
+    # d'elles est posée (mod_overlap.split_shadowed_stock, z-fighting de la calandre de la 325e, 2026-11-19)
+    hide_with: str | None = None
 
     @property
     def tri_count(self) -> int:

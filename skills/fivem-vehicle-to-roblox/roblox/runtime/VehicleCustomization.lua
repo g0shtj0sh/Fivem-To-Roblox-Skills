@@ -157,6 +157,15 @@ function Custom.Refresh(model)
 			end
 		elseif boneChainHas(part, hidden) then
 			visible = false
+		elseif part:GetAttribute("HideWithMods") then
+			-- triangles d'origine sur lesquels une custom est posée à l'identique (calandres de la 325e) : masqués
+			-- quand elle est posée, sinon les deux surfaces se battent (z-fighting). Conversion : f2r/mod_overlap.py
+			for slotName, idx in string.gmatch(part:GetAttribute("HideWithMods"), "([%w_]+):(%d+)") do
+				if (model:GetAttribute("Mod_" .. slotName) or 0) == tonumber(idx) then
+					visible = false
+					break
+				end
+			end
 		end
 		local extra = part:GetAttribute("Extra")
 		if extra and model:GetAttribute("Extra_" .. extra) == false then
@@ -1284,22 +1293,84 @@ Custom.ModSlotLabels = {
 	Tank = "Réservoir", LeftDoor = "Portière gauche", RightDoor = "Portière droite", Livery = "Décoration", Lightbar = "Rampe de lumières",
 }
 
-local function readableModLabel(label, slotLabel, index, opt)
+-- Contenu réel d'un emplacement, lu dans le NOM des modèles de ses options. Les auteurs de mods rangent souvent une
+-- pièce dans un emplacement GTA libre qui n'a rien à voir : la 325e de HRH met ses essuie-glaces (325e_wipa/b/c)
+-- dans VMT_ROOF et ses barres anti-rapprochement (325e_struta…) dans VMT_ENGINEBAY1 ; le menu affichait « Toit » et
+-- « Bloc moteur » (signalé par l'utilisateur, 2026-11-19). Quand TOUS les modèles de l'emplacement commencent (après
+-- le préfixe « <véhicule>_ ») par un même motif de cette liste, son nom remplace celui de l'emplacement GTA.
+-- Motifs Lua ancrés en début de nom ; n'ajouter que des mots sans ambiguïté.
+Custom.ModContentLabels = {
+	{ "^wip", "Essuie-glaces" },
+	{ "^wiper", "Essuie-glaces" },
+	{ "^mirr", "Rétroviseurs" },
+	{ "^strut", "Barre anti-rapprochement" },
+	{ "^brace", "Barre anti-rapprochement" },
+	{ "^cage", "Arceau" },
+	{ "^rollcage", "Arceau" },
+	{ "^antenna", "Antenne" },
+	{ "^aerial", "Antenne" },
+	{ "^visor", "Pare-soleil" },
+	{ "^sunstrip", "Bandeau de pare-brise" },
+	{ "^headlight_?cover", "Caches de phares" },
+	{ "^louver", "Persiennes de lunette" },
+	{ "^roofrack", "Galerie de toit" },
+	{ "^mudflap", "Bavettes" },
+}
+
+local function modelStem(modelName)
+	local n = string.lower(tostring(modelName or ""))
+	return n:match("^[^_]+_(.+)$") or n
+end
+
+function Custom.ModContentLabel(info)
+	local found
+	for _, opt in ipairs(info.Options or {}) do
+		if type(opt) == "table" and opt.Model and opt.Model ~= "" then
+			local stem = modelStem(opt.Model)
+			local label
+			for _, entry in ipairs(Custom.ModContentLabels) do
+				if stem:find(entry[1]) then
+					label = entry[2]
+					break
+				end
+			end
+			if not label or (found and found ~= label) then
+				return nil
+			end
+			found = label
+		end
+	end
+	return found
+end
+
+local function readableModLabel(label, slotLabel, index, opt, number)
+	-- option de RETRAIT voulue par l'auteur : pas de modèle, seulement des os masqués (325e : sans essuie-glaces,
+	-- sans pare-chocs arrière, échappement caché). « Essuie-glaces 3 » ne disait pas ce qu'elle fait.
+	if type(opt) == "table" and opt.HasGeometry == false then
+		if type(opt.TurnOffBones) == "table" and #opt.TurnOffBones > 0 then
+			return "Sans " .. string.lower(slotLabel:sub(1, 1)) .. slotLabel:sub(2)
+		end
+		return slotLabel .. " " .. index .. " (absent du mod)"
+	end
 	local raw = type(label) == "string" and label or ""
 	local code = raw == "" or raw:match("^[%u%d_]+$") ~= nil -- clé de texte GTA (MNU_EXH1, CMOD_…)
 		or (type(opt) == "table" and opt.Model ~= nil and string.lower(raw) == string.lower(tostring(opt.Model)))
 		or raw:match("^[%l%d]+_[%l%d_]+$") ~= nil -- nom de fichier (e36_wing_1)
-	return code and (slotLabel .. " " .. index) or raw
+	return code and (slotLabel .. " " .. number) or raw
 end
 
 function Custom.GetOptions(model)
 	local cfg = getConfig(model)
 	local mods = {}
 	for slot, info in pairs(cfg.Mods or {}) do
-		local slotLabel = Custom.ModSlotLabels[slot] or info.Label or slot
+		local slotLabel = Custom.ModContentLabel(info) or Custom.ModSlotLabels[slot] or info.Label or slot
 		local labels = {}
+		local number = 0 -- les options de retrait ne prennent pas de numéro : « Essuie-glaces 1, 2, Sans essuie-glaces »
 		for i, opt in ipairs(info.Options) do
-			labels[i] = readableModLabel(opt.Label, slotLabel, i, opt)
+			if not (type(opt) == "table" and opt.HasGeometry == false) then
+				number += 1
+			end
+			labels[i] = readableModLabel(opt.Label, slotLabel, i, opt, number)
 		end
 		mods[slot] = { Label = slotLabel, Options = labels }
 	end

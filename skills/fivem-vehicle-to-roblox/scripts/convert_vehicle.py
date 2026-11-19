@@ -36,6 +36,7 @@ from f2r import collision as collision_mod  # noqa: E402
 from f2r import sound_pack  # noqa: E402
 from f2r import texture_guard  # noqa: E402
 from f2r import brands, cabin, cwxml, gamelib, icon_atlas, inventory, meta, rebadge  # noqa: E402
+from f2r import mod_overlap  # noqa: E402
 from f2r.gltf import GlbWriter, GMaterial, quad  # noqa: E402
 from f2r.performance import apply_real_performance  # noqa: E402
 from f2r.plates import plate_zones  # noqa: E402
@@ -510,6 +511,9 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
 
     # ---- marques : nom du jeu + rebadge (aucune marque réelle dans le véhicule converti)
     naming = rebadge_vehicle(name, vinfo, vb, store, pack_sources, out, args, report)
+    # custom copiée sur la géométrie d'origine (calandres de la 325e) : triangles d'origine séparés et masqués avec
+    # elle, sinon z-fighting dans Roblox (voir f2r/mod_overlap.py)
+    mod_overlap.split_shadowed_stock(vb.parts, mods_cfg, vb.skel.ancestors, report)
 
     # Textures réutilisées du jeu de base (vehshare, txdRelationships…) : on les
     # récupère dans l'installation GTA V du PC avant de construire les matériaux,
@@ -867,6 +871,8 @@ def part_info(p: Part, vb: VehicleBuilder, store: TextureStore, has_tex: bool) -
     if p.mod:
         info["ModSlot"] = p.mod["slot"]
         info["ModIndex"] = p.mod["index"]
+    if p.hide_with:
+        info["HideWithMods"] = p.hide_with
     if p.extra is not None:
         info["Extra"] = p.extra
     if p.window:

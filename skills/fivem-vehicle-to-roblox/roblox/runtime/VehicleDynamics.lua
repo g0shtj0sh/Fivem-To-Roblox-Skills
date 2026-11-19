@@ -91,6 +91,19 @@ Dyn.Tuning = {
 	-- (m422 : +3,0 / −2,4 °, GTA +2,2 / −2,6). La m422 (2,2 Hz) est sous le plafond : inchangée.
 	-- Les amortisseurs suivent (ζ est relatif à k). Les améliorations de suspension raidissent au-dessus.
 	-- 0 = pas de plafond.
+	RollFreqMax = 5.5, -- Hz : PLAFOND de fréquence propre en ROULIS par roue, √((k + 2·kA) / masse de la roue) / 2π
+	-- (2026-11-19, 325e, suspension niveau 5 : « la voiture tremble »). La barre anti-roulis n'était plafonnée nulle
+	-- part : niveau 5 = × (1 + 0,5 × 95 %) × (1 + 0,2 × 5) = × 2,95 (kA 70,6 → 208), roulis à 7 Hz. Sa force est
+	-- calculée une fois par image et tenue jusqu'à la suivante (retard d'une image), sans amortisseur : au-delà
+	-- d'une certaine raideur ce retard ENTRETIENT l'oscillation. CAUSE DÉMONTRÉE EN PLAY (coup de roulis de
+	-- 0,6 rad/s à l'arrêt, conduite par le joueur) : niveau 0 (4,5 Hz) amorti en 3 alternances ; niveau 5 entretenu
+	-- à ~12 alternances/s, 0,25-0,33 rad/s au bout de 2,5 s ; ressorts du niveau 5 + barre du niveau 0 : amorti ;
+	-- ressorts du niveau 0 + barre du niveau 5 : entretenu (0,5 rad/s) ; barre × 0,6 (5,8 Hz) : amorti lentement.
+	-- Plafond choisi en Play (barre seule changée, ressorts du niveau 5) : kA 160 → 0,49/0,32/0,28/0,20 rad/s…
+	-- encore 0,03 à 2 s ; 136 (6 Hz) → 0,012 à 2 s ; 110 (≈ 5,5 Hz) → 0,009 dès 1,1 s ; niveau 0 (4,5 Hz) : 0,009
+	-- dès 0,3 s. ESSAI REJETÉ : un amortisseur propre à la barre (ζ × 2√(kA·m) × (ẋg − ẋd), semi-implicite)
+	-- AGGRAVE l'oscillation (ζ 0,8 : entretenue) : les vitesses de compression sont mesurées avec le même retard.
+	-- La barre est réduite juste ce qu'il faut ; la préparation SuspMult (× 2,5) est plafonnée de même. 0 = sans.
 	BumpK = 0, -- m/s² par m au-delà de la butée de compression. VÉRIFIÉ EN STUDIO (2026-11-12) : la marche de
 	-- 0,149 m prise à 60 km/h monte la roue en une image et dépasse les 0,10 m de course restante au repos ;
 	-- à 400 la butée renvoyait la caisse : +8,4 / −17,7 ° de tangage, 3 images en l'air, 8,7 km/h perdus. À 0 :
@@ -608,6 +621,30 @@ function Dyn.SetUpgrades(sim, levels)
 	P.brake = P.brake * (num("BrakeMult", 0.3, 3) or 1)
 	local susp = num("SuspMult", 0.4, 2.5) or 1
 	P.kF, P.kR, P.arbF, P.arbR = P.kF * susp, P.kR * susp, P.arbF * susp, P.arbR * susp
+	-- plafond de fréquence en roulis (Tuning.RollFreqMax) : barre anti-roulis réduite si ressort + 2 × barre dépasse
+	-- (2π f)² × masse de la roue (moyenne de l'essieu). Ressorts non touchés (RideFreqMax les plafonne déjà au départ).
+	local fRoll = T.RollFreqMax or 0
+	if fRoll > 0 and P.wheels and #P.wheels > 0 then
+		local w2 = (2 * math.pi * fRoll) ^ 2
+		for _, front in ipairs({ true, false }) do
+			local m, n = 0, 0
+			for _, w in ipairs(P.wheels) do
+				if w.front == front and w.massFrac then
+					m += w.massFrac
+					n += 1
+				end
+			end
+			if n > 0 then
+				local k = front and P.kF or P.kR
+				local cap = math.max((w2 * m / n - k) / 2, 0)
+				if front then
+					P.arbF = math.min(P.arbF, cap)
+				else
+					P.arbR = math.min(P.arbR, cap)
+				end
+			end
+		end
+	end
 	P.lowSpeedLoss = num("LowSpeedLoss", 0, 3) or B.lowSpeedLoss
 	local bias = num("DriveBiasFront", 0, 1) -- 0 = propulsion, 1 = traction, entre = intégrale (GTA : 2b / 2(1-b))
 	if bias then
