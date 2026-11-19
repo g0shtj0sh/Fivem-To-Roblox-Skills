@@ -35,6 +35,9 @@ PLATE_FILL = 0.9       # part de l'encadrement remplie : un aplat plein, pas un 
 GLYPH_LUM = (70.0, 150.0)  # clarté (0..255) qui sépare le contour sombre du symbole de son corps clair
 
 
+BLANK_UNDER_ALPHA = 200  # clarté médiane (0..255) du RVB sous les pixels transparents d'une vraie planche d'icônes
+
+
 def has_alpha_mask(img: Image.Image) -> bool:
     """Vrai si l'alpha dessine quelque chose (une part de pixels transparents ET des opaques)."""
     if img.mode not in ("RGBA", "LA", "P"):
@@ -42,6 +45,20 @@ def has_alpha_mask(img: Image.Image) -> bool:
     a = np.asarray(img.convert("RGBA"))[..., 3]
     low = float((a < ALPHA_LOW).mean())
     return MASK_MIN_FRACTION <= low <= 0.98
+
+
+def is_alpha_drawn_atlas(img: Image.Image) -> bool:
+    """Planche dont le dessin n'existe QUE dans l'alpha : masque d'alpha ET RVB sans signification (blanc) sous
+    les pixels transparents. m422 int_emis : clarté médiane 255 sous l'alpha -> planche d'icônes. rm3e36
+    gauges_diffuse (2026-11-19) : 16 -> un vrai cadran dessiné (fond noir, chiffres blancs, zones rouges), dont
+    l'alpha n'est que le masque d'éclairage de nuit ; le traiter en planche repeignait le fond (en rouge, médiane
+    tirée par un aplat rouge) et rendait la pièce transparente : on voyait les cadrans génériques blancs derrière."""
+    if not has_alpha_mask(img):
+        return False
+    a = np.asarray(img.convert("RGBA")).astype(np.float32)
+    low = a[..., 3] < ALPHA_LOW
+    lum = a[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)
+    return float(np.median(lum[low])) >= BLANK_UNDER_ALPHA
 
 
 def _smoothstep(x: np.ndarray, e0: float, e1: float) -> np.ndarray:

@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .icon_atlas import has_alpha_mask, refine_icon_atlas
+from .icon_atlas import is_alpha_drawn_atlas, refine_icon_atlas
 from .light_emissive import emissive_mask, upscale as light_upscale
 from .util import Report
 
@@ -244,12 +244,21 @@ class TextureStore:
             img.save(dst, optimize=True)
             self.cache[key] = dst
             return dst
-        if role in ("color", "opaque") and name.lower() in self.icon_atlases and has_alpha_mask(img):
+        if role in ("color", "opaque") and name.lower() in self.icon_atlases and is_alpha_drawn_atlas(img):
             img = refine_icon_atlas(img, self.max_size)
             if role == "opaque":  # pièce opaque (bouton de porte, console) : symbole clair sur fond sombre, sans trou
                 img.putalpha(255)
             else:
                 self.report.info(f"Planche d'icônes {name} : fond sombre, symboles clairs, agrandie à {img.size[0]} px.")
+        elif (role in ("color", "opaque") and name.lower() in self.icon_atlases and max(img.size) < 1024
+              and not name.lower().startswith("script_rt")):  # cible de rendu GTA : masquée, inutile de l'agrandir
+            # cadran déjà dessiné (fond, chiffres, couleurs dans le RVB : rm3e36 gauges_diffuse 256 px) : lu à 30 cm
+            # de l'œil en vue cockpit -> agrandi x4 (Lanczos), chiffres nets au lieu d'une bouillie de pixels
+            k = max(1, min(4, self.max_size // max(img.size)))
+            if k > 1:
+                img = img.resize((img.size[0] * k, img.size[1] * k), Image.LANCZOS)
+                if role == "opaque":
+                    self.report.info(f"Cadran dessiné {name} : agrandi à {img.size[0]} px (opaque, couleurs d'origine).")
         if role == "opaque" and img.mode != "RGB":
             img = img.convert("RGB")  # pièce opaque : la texture seule, sans alpha (sinon Overlay de Roblox)
         img = resize_for_roblox(img, self.max_size)
@@ -311,7 +320,7 @@ class TextureStore:
             return False
         src = self.find(name)
         img = load_image(src, self.report) if src is not None else None
-        return img is not None and has_alpha_mask(img)
+        return img is not None and is_alpha_drawn_atlas(img)
 
     def has_uniform_alpha(self, name: str | None) -> bool:
         """Alpha partielle et constante (pas un masque de découpe) : voir alpha_kind."""

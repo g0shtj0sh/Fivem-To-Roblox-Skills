@@ -1,0 +1,162 @@
+{
+ "about": "rm3e36 (Bavren N3 Widebody) : aiguilles vivantes sur les cadrans du mod (texture bmw_m3_e36_gauges_diffuse, pièce chassis__dash_emissive). Origin/Du/Dv = ajustement exact (0 mm) des îlots UV de chaque cadran ; Pivot = points rouges de l'auteur ; A0/A1 = angles (degrés, sens horaire depuis le haut de la texture) relevés sur 20/280 km/h, 0/8 tr/min, 0/60 L, repères bleu/rouge. HideParts : cadrans génériques GTA script_rt_dials (redessinés par le jeu dans GTA). 2026-11-19.",
+ "HideParts": [
+  "chassis__dash_emissive_2"
+ ],
+ "HideAlways": true,
+ "Needles": [
+  {
+   "Value": "speed",
+   "Origin": [
+    -0.44619,
+    0.77596,
+    -0.52254
+   ],
+   "Du": [
+    0.14935,
+    0.0,
+    -0.0
+   ],
+   "Dv": [
+    -0.0,
+    -0.14729,
+    0.02488
+   ],
+   "TextureSize": [
+    1024,
+    1024
+   ],
+   "Pivot": [
+    306,
+    308
+   ],
+   "Color": [
+    255,
+    70,
+    20
+   ],
+   "Min": 0,
+   "Max": 280,
+   "A0": -129.6,
+   "A1": 112.5,
+   "Length": 265,
+   "Tail": 45,
+   "Width": 12,
+   "Unit": "kmh"
+  },
+  {
+   "Value": "rpm",
+   "Origin": [
+    -0.40926,
+    0.84117,
+    -0.53355
+   ],
+   "Du": [
+    0.14935,
+    -0.0,
+    0.0
+   ],
+   "Dv": [
+    0.0,
+    -0.14729,
+    0.02488
+   ],
+   "TextureSize": [
+    1024,
+    1024
+   ],
+   "Pivot": [
+    718,
+    762
+   ],
+   "Color": [
+    255,
+    70,
+    20
+   ],
+   "Min": 0,
+   "Max": 8000,
+   "A0": -115.1,
+   "A1": 115.3,
+   "Length": 270,
+   "Tail": 45,
+   "Width": 12
+  },
+  {
+   "Value": "fuel",
+   "Origin": [
+    -0.57775,
+    0.73958,
+    -0.51639
+   ],
+   "Du": [
+    0.12748,
+    0.0,
+    -0.0
+   ],
+   "Dv": [
+    0.0,
+    -0.12595,
+    0.02127
+   ],
+   "TextureSize": [
+    1024,
+    1024
+   ],
+   "Pivot": [
+    822,
+    294
+   ],
+   "Color": [
+    255,
+    70,
+    20
+   ],
+   "Min": 0,
+   "Max": 1,
+   "A0": -38.6,
+   "A1": 37.8,
+   "Length": 185,
+   "Tail": 35,
+   "Width": 11
+  },
+  {
+   "Value": "temp",
+   "Origin": [
+    -0.25591,
+    0.80982,
+    -0.52826
+   ],
+   "Du": [
+    0.12748,
+    -0.0,
+    0.0
+   ],
+   "Dv": [
+    0.0,
+    -0.12595,
+    0.02127
+   ],
+   "TextureSize": [
+    1024,
+    1024
+   ],
+   "Pivot": [
+    202,
+    866
+   ],
+   "Color": [
+    255,
+    70,
+    20
+   ],
+   "Min": 0,
+   "Max": 1,
+   "A0": -33.5,
+   "A1": 35.4,
+   "Length": 195,
+   "Tail": 35,
+   "Width": 11
+  }
+ ]
+}

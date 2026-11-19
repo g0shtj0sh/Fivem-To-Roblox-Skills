@@ -642,6 +642,18 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
         config["ModelName"] = naming.model
         config["DisplayName"] = f"{config['Make']} {naming.model}".strip()
     config["Collision"] = collision_cfg
+    # combiné d'instruments vivant (aiguilles, chiffres) décrit à la main pour ce véhicule : clusters/<nom>.json
+    # (VehicleScreen.lua ; mise en page relevée sur la texture des cadrans et les îlots de la pièce, voir SKILL.md)
+    cluster_file = SKILL_ROOT / "clusters" / f"{name}.json"
+    if cluster_file.exists():
+        try:
+            cl = json.loads(cluster_file.read_text(encoding="utf-8"))
+            cl.pop("about", None)
+            config["ClusterScreen"] = cl
+            report.info(f"Combiné vivant : {cluster_file.name} ({len(cl.get('Needles', []))} aiguille(s), "
+                        f"{len(cl.get('Elements', []))} élément(s), pièces masquées : {', '.join(cl.get('HideParts', [])) or 'aucune'}).")
+        except (OSError, ValueError) as exc:
+            report.warn(f"clusters/{cluster_file.name} illisible ({exc}) : combiné d'origine gardé.")
     # moteur et boîte calés sur les vraies données du véhicule (specs/vehicle_specs.json, SKILL.md § 1f)
     apply_real_performance(name, config, report, getattr(args, "specs", None),
                            not getattr(args, "no_real_specs", False))

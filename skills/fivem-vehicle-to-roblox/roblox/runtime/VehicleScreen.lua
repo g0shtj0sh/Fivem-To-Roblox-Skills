@@ -14,6 +14,13 @@
 --                GTA « script_rt_dials » posé sur le combiné : barres et « 888 » figés)
 --   Elements = { { Kind = "cover"|"gear"|"speed"|"unit"|"clock"|"arc", Rect = {x, y, w, h} | Points = {{x, y}…},
 --                 Size, Align, Value = "speed"|"rpm", Width, Color = {r, g, b} } }
+--   Needles = { { Value = "speed"|"rpm"|"fuel"|"temp", Origin, Du, Dv, TextureSize (repère du CADRAN : îlot UV de la
+--                pièce, souvent différent de celui de l'écran), Pivot = {x, y} px, Min, Max, A0, A1 (degrés, sens horaire
+--                depuis le haut de la texture, à Min / à Max), Length, Tail, Width (px), Color, Lift (m, défaut 0,0008) } }
+--                aiguilles 3D (fines pièces soudées à VehicleRoot, tournées à chaque image) ; Néon phares allumés.
+--                fuel : attribut Fuel (0..1, ou 0..100) du véhicule, sinon 0,75 ; temp : chauffe en ~40 s moteur tournant.
+--   HideAlways = true : HideParts masquées chez tous les clients, tout le temps (cadrans génériques GTA « script_rt »,
+--                redessinés par le jeu dans GTA : sans lui ils restent blancs avec des aiguilles figées).
 -- Construit seulement pour le véhicule où le joueur local est assis ; détruit à la descente.
 
 local Players = game:GetService("Players")
@@ -26,6 +33,7 @@ Screen.Font = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeig
 
 local folder = script.Parent
 local active -- { model, part, gui, update }
+local buildNeedlesOnly -- défini plus bas (aiguilles)
 
 local function c3(t, default)
 	return type(t) == "table" and Color3.fromRGB(t[1], t[2], t[3]) or default
@@ -38,11 +46,145 @@ local function seatedModel()
 	return m and m:FindFirstChild("VehicleConfig") and m.PrimaryPart and m or nil
 end
 
+-- ------------------------------------------------------------------ aiguilles
+local NEEDLE_RATE = 10 -- lissage (1/s) des aiguilles d'essence et de température
+local warm = setmetatable({}, { __mode = "k" }) -- modèle -> température 0..1 (chauffe / refroidit)
+
+local function v3(t)
+	return Vector3.new(t[1], t[2], t[3])
+end
+
+local function makeNeedles(model, cfg, L)
+	local spm = cfg.StudsPerMeter or 3.571
+	local root = model.PrimaryPart
+	local list = {}
+	for i, n in ipairs(L.Needles or {}) do
+		local W, H = n.TextureSize and n.TextureSize[1] or 1024, n.TextureSize and n.TextureSize[2] or 1024
+		local O, Du, Dv = v3(n.Origin), v3(n.Du), v3(n.Dv)
+		local function map(px, py) -- pixel du cadran -> position (studs, repère de VehicleRoot)
+			return (O + Du * (px / W) + Dv * (py / H)) * spm
+		end
+		local normal = Du:Cross(Dv).Unit
+		if normal.Z < 0 then -- face vers le conducteur (habitacle vers +Z, avant du véhicule vers -Z)
+			normal = -normal
+		end
+		local pxScale = (Du.Magnitude / W + Dv.Magnitude / H) / 2 * spm -- studs par pixel
+		local part = Instance.new("Part")
+		part.Name = "F2R_Needle_" .. tostring(n.Value or i)
+		part.Size = Vector3.new((n.Width or 10) * pxScale, ((n.Length or 200) + (n.Tail or 30)) * pxScale, 0.0012 * spm)
+		part.Color = c3(n.Color, Color3.fromRGB(255, 70, 20))
+		part.Material = Enum.Material.SmoothPlastic
+		part.CanCollide, part.CanTouch, part.CanQuery, part.Massless = false, false, false, true
+		part.CastShadow = false
+		part.CFrame = root.CFrame
+		local weld = Instance.new("Weld")
+		weld.Part0, weld.Part1 = root, part
+		weld.Parent = part
+		part.Parent = model
+		local entry = { spec = n, part = part, weld = weld, map = map, normal = normal, lift = (n.Lift or 0.0008) * spm, shown = nil }
+		function entry.set(angleDeg)
+			local a = math.rad(angleDeg)
+			local s, c = math.sin(a), -math.cos(a) -- direction dans la texture (y vers le bas)
+			local px, py = n.Pivot[1], n.Pivot[2]
+			local tip = map(px + s * (n.Length or 200), py + c * (n.Length or 200))
+			local tail = map(px - s * (n.Tail or 30), py - c * (n.Tail or 30))
+			local y = (tip - tail).Unit
+			local x = y:Cross(entry.normal).Unit
+			local z = x:Cross(y).Unit
+			weld.C0 = CFrame.fromMatrix((tip + tail) / 2 + entry.normal * entry.lift, x, y, z)
+		end
+		table.insert(list, entry)
+	end
+	return list
+end
+
+local function needleValue(model, entry, d, dt)
+	local n = entry.spec
+	local v
+	if n.Value == "rpm" then
+		v = d.Engine == false and 0 or (d.Rpm or 0)
+	elseif n.Value == "fuel" then
+		local f = model:GetAttribute("Fuel")
+		f = type(f) == "number" and (f > 1 and f / 100 or f) or 0.75
+		local target = d.Engine == false and 0 or f -- contact coupé : l'aiguille retombe, comme sur l'E36
+		entry.smooth = (entry.smooth or 0) + (target - (entry.smooth or 0)) * (1 - math.exp(-NEEDLE_RATE * 0.3 * dt))
+		v = entry.smooth
+	elseif n.Value == "temp" then
+		local t = warm[model] or 0
+		if d.Engine then
+			t = math.min(0.5, t + dt / 80) -- ~40 s pour atteindre le milieu
+		else
+			t = math.max(0, t - dt / 240)
+		end
+		warm[model] = t
+		v = t
+	else -- speed
+		local kmh = math.abs(d.SpeedMs or 0) * 3.6
+		if d.Speed and d.Unit then
+			kmh = d.Unit == "mph" and d.Speed * 1.609344 or d.Speed -- valeur lissée par VehicleDashboard
+		end
+		v = n.Unit == "mph" and kmh / 1.609344 or kmh
+	end
+	local mn, mx = n.Min or 0, n.Max or 1
+	local t = math.clamp((v - mn) / math.max(mx - mn, 1e-6), 0, 1.04) -- un poil au-delà de la butée
+	return (n.A0 or -120) + t * ((n.A1 or 120) - (n.A0 or -120))
+end
+
+local function updateNeedles(model, list, d, dt)
+	local lit = (d.Headlights or 0) > 0
+	for _, e in ipairs(list) do
+		e.set(needleValue(model, e, d, dt))
+		if e.shown ~= lit then
+			e.part.Material = lit and Enum.Material.Neon or Enum.Material.SmoothPlastic
+			e.shown = lit
+		end
+	end
+end
+
+local function hideParts(model, L, hidden)
+	for _, name in ipairs(L.HideParts or {}) do
+		local hp = model:FindFirstChild(name, true)
+		if hp and hp:IsA("BasePart") then
+			if hidden and hidden[hp] == nil then
+				hidden[hp] = hp.LocalTransparencyModifier
+			end
+			hp:SetAttribute("F2R_ScreenHidden", true) -- respecté par les niveaux de détail (VehicleRuntime)
+			hp.LocalTransparencyModifier = 1
+		end
+	end
+end
+
+-- Combiné sans écran (Origin/Crop absents) : seulement des aiguilles et des pièces masquées.
+buildNeedlesOnly = function(model, cfg, L)
+	local needles = makeNeedles(model, cfg, L)
+	local hidden = {}
+	if not L.HideAlways then
+		hideParts(model, L, hidden)
+	end
+	local Dashboard = require(folder:WaitForChild("VehicleDashboard"))
+	local holder = Instance.new("Folder")
+	return {
+		model = model,
+		part = holder,
+		gui = Instance.new("Folder"),
+		hidden = hidden,
+		needles = needles,
+		everyFrame = true,
+		update = function(dt)
+			local d = Dashboard.Read(model, dt) or {}
+			updateNeedles(model, needles, d, dt)
+		end,
+	}
+end
+
 local function build(model)
 	local cfg = require(model.VehicleConfig)
 	local L = cfg.ClusterScreen
-	if type(L) ~= "table" or not L.Origin or not L.Crop then
+	if type(L) ~= "table" then
 		return nil
+	end
+	if not (L.Origin and L.Crop) then
+		return L.Needles and buildNeedlesOnly(model, cfg, L) or nil
 	end
 	local spm = cfg.StudsPerMeter or 3.571
 	local W, H = L.TextureSize[1], L.TextureSize[2]
@@ -166,22 +308,23 @@ local function build(model)
 		end
 	end
 	local hidden = {}
-	for _, name in ipairs(L.HideParts or {}) do
-		local hp = model:FindFirstChild(name, true)
-		if hp and hp:IsA("BasePart") then
-			hidden[hp] = hp.LocalTransparencyModifier
-			hp:SetAttribute("F2R_ScreenHidden", true) -- respecté par les niveaux de détail (VehicleRuntime)
-			hp.LocalTransparencyModifier = 1
-		end
+	if not L.HideAlways then
+		hideParts(model, L, hidden)
 	end
+	local needles = L.Needles and makeNeedles(model, cfg, L) or nil
 	local Dashboard = require(folder:WaitForChild("VehicleDashboard"))
 	return {
 		model = model,
 		part = part,
 		gui = gui,
 		hidden = hidden,
+		needles = needles,
+		everyFrame = needles ~= nil,
 		update = function(dt)
 			local d = Dashboard.Read(model, dt) or {}
+			if needles then
+				updateNeedles(model, needles, d, dt)
+			end
 			if d.Engine == false then
 				d.Speed, d.Rpm = d.Speed or 0, 0
 			end
@@ -200,13 +343,42 @@ local function stop()
 				hp.LocalTransparencyModifier = v
 			end
 		end
+		for _, e in ipairs(active.needles or {}) do
+			e.part:Destroy()
+		end
 		active.gui:Destroy()
 		active.part:Destroy()
 		active = nil
 	end
 end
 
+-- HideAlways : pièces masquées chez ce client sur tous les véhicules qui le demandent (pas seulement le sien).
+local function prepare(model)
+	task.spawn(function()
+		local cfgModule = model:WaitForChild("VehicleConfig", 30)
+		if not cfgModule then
+			return
+		end
+		local ok, cfg = pcall(require, cfgModule)
+		local L = ok and type(cfg) == "table" and cfg.ClusterScreen
+		if type(L) == "table" and L.HideAlways and L.HideParts then
+			local t0 = os.clock() -- streaming : les pièces (sous Visual/<os>/) peuvent arriver après le modèle
+			for _, name in ipairs(L.HideParts) do
+				while not model:FindFirstChild(name, true) and os.clock() - t0 < 10 and model.Parent do
+					task.wait(0.25)
+				end
+			end
+			hideParts(model, L, nil)
+		end
+	end)
+end
+
 function Screen.Start()
+	local CollectionService = game:GetService("CollectionService")
+	for _, m in ipairs(CollectionService:GetTagged("FiveMVehicle")) do
+		prepare(m)
+	end
+	CollectionService:GetInstanceAddedSignal("FiveMVehicle"):Connect(prepare)
 	local acc = 0
 	RunService.RenderStepped:Connect(function(dt)
 		local m = seatedModel()
@@ -225,7 +397,7 @@ function Screen.Start()
 			end
 		end
 		acc += dt
-		if active and acc >= 1 / Screen.Rate then
+		if active and (active.everyFrame or acc >= 1 / Screen.Rate) then
 			active.update(acc)
 			acc = 0
 		end

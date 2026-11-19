@@ -627,6 +627,57 @@
     ]
    ],
    "why": "« ///M3 » modélisé sur la bande de portière (toute la pièce : « ///M » 71 triangles + « 3 » 73 ; grappes 93/94 vues de profil sur la planche)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "chassis__dash_emissive",
+   "box": [
+    [
+     -0.4815,
+     0.6955,
+     -0.5115
+    ],
+    [
+     -0.4722,
+     0.7275,
+     -0.5041
+    ]
+   ],
+   "why": "aiguille FIXE modélisée de la jauge d'essence (remplacée par une aiguille vivante, clusters/rm3e36.json)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "chassis__dash_emissive",
+   "box": [
+    [
+     -0.248,
+     0.6962,
+     -0.5104
+    ],
+    [
+     -0.2235,
+     0.7206,
+     -0.5045
+    ]
+   ],
+   "why": "aiguille FIXE de la jauge de température (le cache-moyeu, plus large, reste)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "chassis__dash_emissive",
+   "box": [
+    [
+     -0.3263,
+     0.7066,
+     -0.5226
+    ],
+    [
+     -0.3033,
+     0.7258,
+     -0.5172
+    ]
+   ],
+   "why": "aiguille FIXE du compte-tours"
   }
  ]
 }
