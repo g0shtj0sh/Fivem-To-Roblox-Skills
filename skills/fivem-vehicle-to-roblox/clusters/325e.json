@@ -1,0 +1,162 @@
+{
+ "about": "325e (Bavren 355e Turbo) : aiguilles vivantes sur les cadrans VDO du mod (texture gauges, pièce chassis__detail2_12). Origin/Du/Dv = ajustement exact (< 0,6 mm) des îlots UV de chaque cadran. Pivots : compteur (105,106) et compte-tours (311,106) = milieu des repères horizontaux 60/220 km/h et 0,5/7,5 tr/min, sous le repère du haut ; essence (455,165) et température (455,70) = convergence des repères. Angles (degrés horaires depuis le haut) : 22,5° par 20 km/h (140 en haut), 25,7° par 1000 tr/min (4000 en haut), essence R/plein ±59°, température bleu/rouge ±52,5°. HideParts : cadran générique GTA script_rt_dials_ztype (cible de rendu) posé devant. 2026-11-19.",
+ "HideParts": [
+  "chassis__dash_emissive"
+ ],
+ "HideAlways": true,
+ "Needles": [
+  {
+   "Value": "speed",
+   "Origin": [
+    -0.46301,
+    0.74833,
+    -0.61325
+   ],
+   "Du": [
+    0.26067,
+    0.00013,
+    -0.0014
+   ],
+   "Dv": [
+    0.00027,
+    -0.1334,
+    0.03335
+   ],
+   "TextureSize": [
+    512,
+    256
+   ],
+   "Pivot": [
+    105,
+    106
+   ],
+   "Color": [
+    255,
+    95,
+    25
+   ],
+   "Min": 0,
+   "Max": 260,
+   "A0": -157.5,
+   "A1": 135,
+   "Length": 88,
+   "Tail": 16,
+   "Width": 5,
+   "Unit": "kmh"
+  },
+  {
+   "Value": "rpm",
+   "Origin": [
+    -0.44984,
+    0.74835,
+    -0.61333
+   ],
+   "Du": [
+    0.25742,
+    0.00013,
+    -0.00139
+   ],
+   "Dv": [
+    0.00025,
+    -0.13083,
+    0.03271
+   ],
+   "TextureSize": [
+    512,
+    256
+   ],
+   "Pivot": [
+    311,
+    106
+   ],
+   "Color": [
+    255,
+    95,
+    25
+   ],
+   "Min": 0,
+   "Max": 8000,
+   "A0": -102.9,
+   "A1": 102.9,
+   "Length": 88,
+   "Tail": 16,
+   "Width": 5
+  },
+  {
+   "Value": "fuel",
+   "Origin": [
+    -0.75431,
+    0.76039,
+    -0.61473
+   ],
+   "Du": [
+    0.29515,
+    0.00015,
+    -0.00159
+   ],
+   "Dv": [
+    0.0003,
+    -0.15745,
+    0.03937
+   ],
+   "TextureSize": [
+    512,
+    256
+   ],
+   "Pivot": [
+    455,
+    165
+   ],
+   "Color": [
+    255,
+    95,
+    25
+   ],
+   "Min": 0,
+   "Max": 1,
+   "A0": -59,
+   "A1": 59,
+   "Length": 34,
+   "Tail": 8,
+   "Width": 4
+  },
+  {
+   "Value": "temp",
+   "Origin": [
+    -0.49579,
+    0.70263,
+    -0.60165
+   ],
+   "Du": [
+    0.31786,
+    0.00016,
+    -0.00171
+   ],
+   "Dv": [
+    0.00033,
+    -0.16956,
+    0.0424
+   ],
+   "TextureSize": [
+    512,
+    256
+   ],
+   "Pivot": [
+    455,
+    70
+   ],
+   "Color": [
+    255,
+    95,
+    25
+   ],
+   "Min": 0,
+   "Max": 1,
+   "A0": -52.5,
+   "A1": 52.5,
+   "Length": 34,
+   "Tail": 8,
+   "Width": 4
+  }
+ ]
+}

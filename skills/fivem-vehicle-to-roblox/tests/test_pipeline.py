@@ -67,7 +67,11 @@ def test_pipeline():
         from PIL import Image
         for png in (out / "textures").glob("*.png"):
             assert max(Image.open(png).size) <= 2048, png
-        assert Image.open(out / "textures" / "testcar_tyre.png").size == (2048, 2048)
+        # pièce opaque : la texture est écrite « <nom>_opaque.png » depuis 3bcd146 (icônes de l'habitacle)
+        tyre = next((p for p in (out / "textures" / "testcar_tyre.png", out / "textures" / "testcar_tyre_opaque.png")
+                     if p.exists()), None)
+        assert tyre is not None, sorted(p.name for p in (out / "textures").glob("*.png"))
+        assert Image.open(tyre).size == (2048, 2048)
         # sons
         assert len(cfg["Audio"]["EngineLoops"]) >= 4 and cfg["Audio"]["Source"].startswith("awc:")
         for f in cfg["Audio"]["Files"].values():

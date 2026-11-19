@@ -1,5 +1,5 @@
 {
- "about": "325e (BMW 325e E30 « Turbo » de HRH) -> Bavren 355e Turbo. Logos peints relevés le 2026-11-19 sur les textures converties (pixels, haut-gauche, taille = PNG mesurée) ; lettrages modélisés : planche _rebadge/lettrages_modelises.png (grappes 9, 59, 125).",
+ "about": "325e (BMW 325e E30 « Turbo » de HRH) -> Bavren 355e Turbo. Logos peints relevés le 2026-11-19 sur les textures converties (pixels, haut-gauche, taille = PNG mesurée) ; lettrages modélisés : planche _rebadge/lettrages_modelises.png (grappes 9, 59, 125). Badges ajoutés le 2026-11-19 (2e passe, captures de l'utilisateur) : extra 8 « ///M » de la calandre retiré ; badge de coffre extra 6 réécrit « 355e ».",
  "textures": {
   "doortags": {
    "size": [
@@ -522,24 +522,6 @@
      "why": "décalque « ///M3 » entier"
     }
    ]
-  },
-  "m_001_diff": {
-   "size": [
-    256,
-    128
-   ],
-   "ops": [
-    {
-     "op": "fill_all",
-     "color": [
-      0,
-      0,
-      0,
-      0
-     ],
-     "why": "décalque « M » entier"
-    }
-   ]
   }
  },
  "geometry": [
@@ -548,51 +530,124 @@
    "part": "mod_SteeringWheel_5__steeringwheel__paint2",
    "box": [
     [
-     0.0691,
-     -0.0227,
-     -0.0498
+     -0.2993,
+     0.5553,
+     -0.4025
     ],
     [
-     0.114,
-     0.0111,
-     -0.0233
+     -0.2544,
+     0.5925,
+     -0.3761
     ]
    ],
-   "why": "lettrage modélisé du volant (grappe 9)"
+   "why": "lettrage modélisé du volant (grappe 9) ; boîte relevée après le recalage des volants sur leur os (2026-11-19)"
   },
   {
    "op": "remove_islands",
    "part": "mod_SteeringWheel_5__steeringwheel__mesh",
    "box": [
     [
-     0.0692,
-     -0.0227,
-     -0.0498
+     -0.2992,
+     0.5553,
+     -0.4025
     ],
     [
-     0.1099,
-     -0.0074,
-     -0.0237
+     -0.2585,
+     0.5749,
+     -0.3776
     ]
    ],
-   "why": "« sparco » (grappe 125)"
+   "why": "« sparco » (grappe 125) ; boîte relevée après le recalage des volants sur leur os (2026-11-19)"
   },
   {
    "op": "remove_islands",
    "part": "mod_SteeringWheel_5__steeringwheel__mesh",
    "box": [
     [
-     -0.0205,
-     -0.0034,
-     -0.0556
+     -0.3889,
+     0.5723,
+     -0.4131
     ],
     [
-     0.0196,
-     0.0079,
-     -0.0535
+     -0.3488,
+     0.5833,
+     -0.4089
     ]
    ],
-   "why": "« sparco » du centre (grappe 59)"
+   "why": "« sparco » du centre (grappe 59) ; boîte relevée après le recalage des volants sur leur os (2026-11-19)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "extra_8__",
+   "box": [
+    [
+     -0.326,
+     0.36,
+     -2.107
+    ],
+    [
+     -0.244,
+     0.393,
+     -2.08
+    ]
+   ],
+   "why": "badge « ///M » de la calandre (plaque, M et bandes modélisés, extra 8)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "extra_6__mesh",
+   "box": [
+    [
+     0.4135,
+     0.552,
+     2.29
+    ],
+    [
+     0.5268,
+     0.595,
+     2.325
+    ]
+   ],
+   "why": "« 2 » du badge de coffre « 325e » (corps + 2 morceaux de barre)"
+  },
+  {
+   "op": "copy_islands",
+   "part": "extra_6__mesh",
+   "box": [
+    [
+     0.515,
+     0.552,
+     2.29
+    ],
+    [
+     0.577,
+     0.595,
+     2.32
+    ]
+   ],
+   "offset": [
+    -0.0756,
+    0.0,
+    0.0045
+   ],
+   "why": "« 5 » recopié à la place du « 2 » : « 325e » -> « 355e » (nom du jeu)"
+  },
+  {
+   "op": "remove_islands",
+   "part": "mod_SteeringWheel_2__steeringwheel__detail2_3",
+   "box": [
+    [
+     -5,
+     -5,
+     -5
+    ],
+    [
+     5,
+     5,
+     5
+    ]
+   ],
+   "why": "décalque « M » du volant de custom 2 (seule pièce qui plaque toute la texture m_001_diff ; les autres n'y prennent que du gris ou du noir : autocollants coupe-circuit « E » et éclair de l'extra 7, qui devenaient tout noirs quand la texture était vidée)"
   }
  ]
 }

@@ -323,11 +323,18 @@ def rebadge_vehicle(name: str, vinfo: dict, vb: VehicleBuilder, store: TextureSt
         spec_path = cand if cand.exists() else None
     geometry_ops = rebadge.load_geometry_spec(Path(spec_path)) if spec_path else []
     if geometry_ops:
+        # une boîte qui ne trouve plus rien = une marque qui revient (325e, 2026-11-19 : « sparco » revenu sur un
+        # volant après le recalage des pièces de custom sur leur os) : la conversion échoue (code 4), pas un simple
+        # avertissement noyé dans le journal
+        summary["geometry_misses"] = misses = []
         summary["geometry_removed_tris"] = rebadge.remove_geometry(
-            vb.parts, [o for o in geometry_ops if o.get("op") == "remove_islands"], report)
+            vb.parts, [o for o in geometry_ops if o.get("op") == "remove_islands"], report, misses)
         summary["restyled_parts"] = rebadge.restyle_geometry(
             vb.parts, [o for o in geometry_ops if o.get("op") == "restyle_islands"], out / "_rebadge", report)
-        unknown = [o.get("op") for o in geometry_ops if o.get("op") not in ("remove_islands", "restyle_islands")]
+        summary["geometry_copied_tris"] = rebadge.copy_geometry(
+            vb.parts, [o for o in geometry_ops if o.get("op") == "copy_islands"], report, misses)
+        unknown = [o.get("op") for o in geometry_ops
+                   if o.get("op") not in ("remove_islands", "restyle_islands", "copy_islands")]
         if unknown:
             raise ValueError(f"spec du véhicule, clé geometry : opération(s) inconnue(s) {unknown}")
     letters = rebadge.lettering_candidates(vb.parts)
@@ -538,7 +545,7 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                             "retrouvées dans l'installation GTA V.")
 
     lo, hi = vb.bounds()
-    paint_default = default_colors(variation)
+    paint_default = default_colors(variation, paint_defaults_override(name))
     glb = GlbWriter()
     parts_cfg: dict = {}
     livery_names: list[str] = []
@@ -592,9 +599,10 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
                 info["EmissiveCoverage"] = round(mask_coverage(mat.emissive_png, p.uv, p.idx), 3)
             except (OSError, ValueError, IndexError):
                 pass
-        # capots transparents des feux (verre sans os de vitre) : pas de texture de vitre. Elle y posait la sérigraphie
-        # à points de GTA sur toute l'optique (325e : feux arrière « texturés », demande de l'utilisateur 2026-11-19)
-        if p.kind == "glass" and p.tex_diffuse and p.window:
+        # capots transparents des feux (verre sans os de vitre) : ils gardent leur texture (sérigraphie à points de GTA),
+        # le runtime les rend presque transparents (VehicleCustomization, LightCoverTransparency ; utilisateur 2026-11-19 :
+        # « remets les textures mais beaucoup moins opaques »)
+        if p.kind == "glass" and p.tex_diffuse:
             # texture des vitres (bordure sérigraphiée noire, dégivrage, teinte : vehicle_generic_glasswindows*) :
             # jetée avant le 2026-11-16 (verre uni). Mise en ligne à part comme les masques d'émission (glass/), id
             # lu avec les sons (--sound-ids), posée par le Setup en SurfaceAppearance à transparence
@@ -774,14 +782,30 @@ def convert_one(name: str, inv: inventory.Inventory, metas: dict, out: Path, arg
     return stats
 
 
-def default_colors(variation: dict) -> dict:
+def paint_defaults_override(name: str) -> dict:
+    """Couleurs par défaut imposées pour un véhicule : clé ``PaintDefaults`` de ``specs/vehicle_specs.json``
+    ({calque: indice de palette GTA}). 325e (2026-11-19) : la 1re combinaison du mod habille cuir, planche et volant
+    en crème (107) ; « textures très blanchâtres » pour l'utilisateur -> intérieur anthracite (22) et ciel de toit
+    gris foncé (8), indices pris dans les autres combinaisons du même mod (toutes restent au choix en jeu)."""
+    path = Path(__file__).resolve().parent.parent / "specs" / "vehicle_specs.json"
+    try:
+        entry = json.loads(path.read_text(encoding="utf-8")).get("vehicles", {}).get(name.lower(), {})
+    except (OSError, ValueError):
+        return {}
+    return {k: int(v) for k, v in (entry.get("PaintDefaults") or {}).items() if k in PAINT_ORDER}
+
+
+def default_colors(variation: dict, override: dict | None = None) -> dict:
     out = {"Default": [1.0, 1.0, 1.0]}
     cols = variation.get("colors") or []
     idx = cols[0]["indices"] if cols else []
     fallback = [[0.85, 0.85, 0.85], [0.1, 0.1, 0.1], [0.85, 0.85, 0.85], [0.15, 0.15, 0.15],
                 [0.1, 0.1, 0.1], [0.1, 0.1, 0.1]]
     for i, layer in enumerate(PAINT_ORDER):
-        out[layer] = palette_rgb(idx[i]) if i < len(idx) else fallback[i]
+        if override and layer in override:
+            out[layer] = palette_rgb(override[layer])
+        else:
+            out[layer] = palette_rgb(idx[i]) if i < len(idx) else fallback[i]
     return out
 
 
@@ -1040,7 +1064,7 @@ def build_config(name, vinfo, variation, carcols, handling, vb: VehicleBuilder, 
         "Bones": bones_min,
         "DynamicBones": dynamic,
         "Bounds": {"Min": r4(lo), "Max": r4(hi)},
-        "Colors": {"Default": default_colors(variation),
+        "Colors": {"Default": default_colors(variation, paint_defaults_override(name)),
                    "Variations": [c["indices"] for c in variation.get("colors", [])]},
         "Wheels": wheels,
         "WheelFollowers": vb.wheel_followers(),
@@ -1254,6 +1278,12 @@ def main(argv=None) -> int:
                      indent=2, ensure_ascii=False))
     if not results:
         return 1
+    missed = [m for r in results for m in ((r.get("rebadge") or {}).get("geometry_misses") or [])]
+    if missed:
+        print("[ERREUR] Rebadge : opération(s) de la spec du véhicule sans effet (marque possiblement revenue) : "
+              + " ; ".join(missed) + ". Relever les boîtes sur _rebadge/lettrages_modelises.json et reconvertir.",
+              file=sys.stderr)
+        return 4
     if any((r.get("texture_guard") or {}).get("status") == "regression" for r in results):
         print("[ATTENTION] Régression des textures : voir report.md (section en tête). Version à ne pas installer.",
               file=sys.stderr)

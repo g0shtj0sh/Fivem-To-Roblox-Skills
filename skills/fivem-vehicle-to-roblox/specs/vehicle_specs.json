@@ -85,7 +85,8 @@
     "Le mod ajoute un kit turbo (« Single turbocharger kit », absent de la vraie 325e) : la fiche est celle de la voiture de série ; le turbo du mod passe par l'amélioration Turbo du garage (Readme : « Use turbo tuning with engine tuning »).",
     "Version européenne sans catalyseur 1985-1987 (129 ch, 240 Nm) ; avec catalyseur : 122 ch, 230 Nm.",
     "Rupteur 4 800 tr/min (moteur eta à bas régime, Wikipedia BMW M20).",
-    "ShiftTimeS est une ESTIMATION (boîte manuelle 0,4-0,6 s)."
+    "ShiftTimeS est une ESTIMATION (boîte manuelle 0,4-0,6 s).",
+    "PaintDefaults : intérieur anthracite (22) et ciel de toit gris foncé (8) au lieu du crème (107) de la 1re combinaison du mod (demande de l'utilisateur, 2026-11-19)."
    ],
    "sources": [
     "https://en.wikipedia.org/wiki/BMW_M20",
@@ -93,7 +94,11 @@
     "https://www.auto-abc.eu/BMW-3-serija/v2096-1986",
     "https://en.wikipedia.org/wiki/BMW_E30"
    ],
-   "checked": "2026-11-19"
+   "checked": "2026-11-19",
+   "PaintDefaults": {
+    "InteriorTrim": 22,
+    "Dashboard": 8
+   }
   }
  }
 }

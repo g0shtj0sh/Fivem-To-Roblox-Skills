@@ -119,7 +119,24 @@ PNG dans `brands/logos/`, galerie `brands/README.md`) :
   `brands/vehicles/<nom>.json`, clé `geometry` :
   `{"op": "remove_islands", "part": "<pièce>", "box": [[x0,y0,z0],[x1,y1,z1]], "why": "///M du pommeau"}`
   (marge de 2 mm ; un îlot n'est retiré que s'il est entièrement dans la boîte). Reconvertir : le rapport dit
-  « Lettrage modélisé supprimé (…) : N triangle(s) », ou avertit si une boîte ne trouve plus rien.
+  « Lettrage modélisé supprimé (…) : N triangle(s) ». **Une boîte qui ne trouve plus rien fait échouer la
+  conversion (code 4, « [ERREUR] Rebadge »)** : la marque est revenue. 325e (2026-11-19) : le recalage des volants
+  de custom sur leur os avait déplacé le « sparco », les boîtes relevées avant ne le trouvaient plus et le simple
+  avertissement est passé inaperçu ; relever les boîtes sur la nouvelle planche (les numéros de grappes restent).
+  Une option entière qui n'est qu'un logo (décalque plaqué sur toute la texture) : `part` = son nom exact et une
+  boîte large `[[-5,-5,-5],[5,5,5]]`.
+- **Réécrire un nom modélisé avec ses propres glyphes** (même clé `geometry`) : `{"op": "copy_islands", "part": …,
+  "box": …, "offset": [dx, dy, dz], "why": …}` duplique les îlots de la boîte, décalés (appliqué après les
+  `remove_islands`). 325e : badge de coffre « 325e » → **« 355e »** (nom du jeu) = `remove_islands` du « 2 » (corps +
+  2 morceaux de barre) puis copie du « 5 » décalée de −7,56 cm en x (+4,5 mm en z, courbure du coffre). Vérifier en
+  dessinant les îlots vus de face avant de publier.
+- **Ne pas vider une texture de logo sans regarder qui l'utilise** : la 325e réutilise `m_001_diff` (un « M » gris
+  sur fond transparent) comme simple palette pour des autocollants (coupe-circuit « E », éclair) ; la vider les a
+  rendus tout noirs. Superposer les UV de chaque pièce sur la texture : seule celle qui plaque le logo entier
+  (décalque du volant 2) part, en géométrie.
+- **Couleurs par défaut** (`specs/vehicle_specs.json`, `PaintDefaults` : {calque : indice de palette GTA}) : quand la
+  1re combinaison du mod donne un rendu jugé faux. 325e : intérieur crème (107) → anthracite (22), ciel de toit gris
+  foncé (8) ; les combinaisons d'usine du mod restent au choix en jeu.
 - **Pièce à restyler seule** (même fichier, clé `geometry`) : `{"op": "restyle_islands", "part": "<pièce>", "box": …,
   "name": "silencer", "color": [r, g, b], "roughness": 0.55, "metal": true, "why": "…"}` sort les îlots de la boîte
   dans une pièce neuve `<pièce>__<name>` (même os) au matériau imposé (texture unie + carte métal / rugosité unie,

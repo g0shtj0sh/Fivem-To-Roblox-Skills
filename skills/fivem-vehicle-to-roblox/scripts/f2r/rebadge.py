@@ -458,7 +458,7 @@ def restyle_geometry(parts: list, ops: list[dict], out_dir: Path, report: Report
     return created
 
 
-def remove_geometry(parts: list, ops: list[dict], report: Report) -> int:
+def remove_geometry(parts: list, ops: list[dict], report: Report, misses: list | None = None) -> int:
     """Applique les opérations ``geometry`` d'un ``brands/vehicles/<nom>.json`` : ``remove_islands`` supprime
     tout îlot dont TOUS les sommets sont dans ``box`` (mètres, repère du véhicule au repos, tolérance 1 mm),
     limité aux pièces dont le nom commence par ``part`` si donné. Renvoie le nombre de triangles retirés."""
@@ -487,6 +487,48 @@ def remove_geometry(parts: list, ops: list[dict], report: Report) -> int:
         else:
             report.warn(f"Lettrage modélisé « {why} » : aucun îlot dans la boîte {op['box']} "
                         f"(géométrie du mod changée ? relever la boîte sur la planche lettrages_modelises).")
+            if misses is not None:
+                misses.append(why or str(op["box"]))
         total += removed
     parts[:] = [p for p in parts if p.tri_count > 0]
+    return total
+
+
+def copy_geometry(parts: list, ops: list[dict], report: Report, misses: list | None = None) -> int:
+    """``copy_islands`` : duplique dans la même pièce tout îlot dont TOUS les sommets sont dans ``box`` (comme
+    ``remove_islands``), décalé de ``offset`` (mètres, repère du véhicule). Sert à réécrire un lettrage modélisé avec
+    ses propres glyphes : 325e (2026-11-19), « 325e » du coffre -> « 355e » (nom du jeu) en retirant le « 2 » par
+    ``remove_islands`` puis en posant une copie du « 5 » à sa place. Appliqué APRÈS ``remove_islands`` : la copie
+    tombe souvent dans la boîte de ce qu'on retire. Renvoie le nombre de triangles ajoutés."""
+    total = 0
+    for op in ops:
+        lo = np.array(op["box"][0], np.float32) - BOX_TOLERANCE_M
+        hi = np.array(op["box"][1], np.float32) + BOX_TOLERANCE_M
+        off = np.array(op["offset"], np.float32)
+        added = 0
+        for p in parts:
+            if p.tri_count == 0 or (op.get("part") and not p.name.startswith(op["part"])):
+                continue
+            tris = p.idx.reshape(-1, 3)
+            pick = [isl for isl in _islands(p.idx, len(p.pos))
+                    if (p.pos[np.unique(tris[isl])] >= lo).all() and (p.pos[np.unique(tris[isl])] <= hi).all()]
+            if not pick:
+                continue
+            sel = tris[np.concatenate(pick)]
+            verts = np.unique(sel)
+            remap = {int(v): len(p.pos) + i for i, v in enumerate(verts)}
+            p.pos = np.concatenate([p.pos, p.pos[verts] + off]).astype(np.float32)
+            p.nrm = np.concatenate([p.nrm, p.nrm[verts]]).astype(np.float32)
+            p.uv = np.concatenate([p.uv, p.uv[verts]]).astype(p.uv.dtype)
+            new = np.vectorize(remap.get)(sel)
+            p.idx = np.concatenate([tris, new]).reshape(-1).astype(np.uint32)
+            added += len(sel)
+        why = op.get("why", "")
+        if added:
+            report.info(f"Lettrage modélisé recopié ({why}) : {added} triangle(s).")
+        else:
+            report.warn(f"Copie de lettrage « {why} » : aucun îlot dans la boîte {op['box']}.")
+            if misses is not None:
+                misses.append(why or str(op["box"]))
+        total += added
     return total
