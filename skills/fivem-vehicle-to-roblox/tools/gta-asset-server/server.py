@@ -50,6 +50,11 @@ SERVER_VERSION = "1.0.0"
 # 6 Mo de donnÃ©es brutes -> ~8 Mo en base64.
 CHUNK_BYTES = 6 * 1024 * 1024
 
+# Zips de véhicules servis à la VM (dossier « Cars » du joueur) : contourne la limite de téléversement
+# de la VM (100 Mo). Seuls les .zip/.rar/.7z de ce dossier sont servis, rien d'autre du PC.
+CARS_EXT = (".zip", ".rar", ".7z")
+CARS_ROOT: Path | None = None
+
 CACHE_ROOT = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "fivem2roblox" / "asset-server"
 BUNDLES = CACHE_ROOT / "bundles"
 
@@ -293,7 +298,7 @@ class AssetService:
         entry = next((f for f in man["files"] if f["file"] == file), None)
         if entry is None:
             raise ValueError("fichier absent du lot : " + str(file))
-        p = bdir / entry["file"]
+        p = Path(entry["source"]) if entry.get("source") else bdir / entry["file"]
         with open(p, "rb") as f:
             f.seek(index * CHUNK_BYTES)
             data = f.read(CHUNK_BYTES)
@@ -303,6 +308,53 @@ class AssetService:
                 "chunks": entry["chunks"], "bytes": len(data),
                 "last": index >= entry["chunks"] - 1,
                 "data": base64.b64encode(data).decode("ascii")}
+
+    # -- zips de véhicules (dossier Cars) ------------------------------------
+
+    def _car_path(self, rel: str) -> Path:
+        if CARS_ROOT is None:
+            raise ValueError("aucun dossier de véhicules configuré (start-server.bat --cars <dossier> "
+                             "ou variable F2R_CARS_DIR)")
+        rel = (rel or "").replace("\\", "/").strip("/")
+        p = (CARS_ROOT / rel).resolve()
+        if CARS_ROOT not in p.parents or p.suffix.lower() not in CARS_EXT or not p.is_file():
+            raise ValueError("véhicule introuvable dans le dossier Cars : " + rel)
+        return p
+
+    def cars_list(self, query: str | None = None) -> dict:
+        if CARS_ROOT is None:
+            raise ValueError("aucun dossier de véhicules configuré")
+        q = (query or "").lower().split()
+        out = []
+        for p in sorted(CARS_ROOT.rglob("*")):
+            if p.is_file() and p.suffix.lower() in CARS_EXT:
+                rel = p.relative_to(CARS_ROOT).as_posix()
+                if all(w in rel.lower() for w in q):
+                    out.append({"path": rel, "bytes": p.stat().st_size})
+        return {"root": str(CARS_ROOT), "count": len(out), "cars": out}
+
+    def cars_prepare(self, rel: str) -> dict:
+        """Manifeste d'un zip du dossier Cars, servi par gta_chunk SANS copie : le manifeste (écrit par le
+        serveur seul) garde le chemin source. L'empreinte n'est recalculée que si le fichier a changé."""
+        p = self._car_path(rel)
+        st = p.stat()
+        bundle = _bundle_dir("car", f"{p}|{st.st_size}|{st.st_mtime_ns}")
+        man_path = bundle / "manifest.json"
+        with self._lock:
+            if man_path.is_file():
+                try:
+                    return json.loads(man_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            bundle.mkdir(parents=True, exist_ok=True)
+            man = {"bundle": bundle.name, "chunk_bytes": CHUNK_BYTES, "status": "ok",
+                   "path": p.relative_to(CARS_ROOT).as_posix(),
+                   "files": [{"file": p.name, "source": str(p), "bytes": st.st_size, "sha256": _sha256(p),
+                              "chunks": max(1, -(-st.st_size // CHUNK_BYTES))}]}
+            tmp = bundle / f"manifest.{os.getpid()}.tmp"
+            tmp.write_text(json.dumps(man, indent=2), encoding="utf-8")
+            os.replace(tmp, man_path)
+            return man
 
     def build_index(self) -> dict:
         with self._lock:
@@ -374,6 +426,19 @@ TOOLS = [
             },
             "required": ["bundle", "file"],
         },
+    },
+    {
+        "name": "cars_list",
+        "description": "Liste les zips de véhicules du dossier Cars du PC (chemin relatif, taille). "
+                       "query : mots à retrouver dans le chemin, ex. « skyline r34 ».",
+        "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+    },
+    {
+        "name": "cars_prepare",
+        "description": "Prépare l'envoi d'un zip du dossier Cars (chemin relatif renvoyé par cars_list) : "
+                       "manifeste avec taille, SHA-256 et nombre de morceaux ; utiliser ensuite gta_chunk. "
+                       "Sert à dépasser la limite de téléversement de la VM.",
+        "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
     },
     {
         "name": "gta_build_index",
@@ -507,6 +572,10 @@ class McpHandler(BaseHTTPRequestHandler):
             data = svc.chunk(a.get("bundle"), a.get("file"), int(a.get("index") or 0))
         elif name == "gta_build_index":
             data = svc.build_index()
+        elif name == "cars_list":
+            data = svc.cars_list(a.get("query"))
+        elif name == "cars_prepare":
+            data = svc.cars_prepare(a.get("path") or "")
         else:
             return {"isError": True,
                     "content": [{"type": "text", "text": "outil inconnu : " + str(name)}]}
@@ -523,7 +592,15 @@ def main(argv=None) -> int:
     ap.add_argument("--prewarm", action="store_true", help="charger l'index RPF au dÃ©marrage")
     ap.add_argument("--build-index", action="store_true",
                     help="construire aussi l'index complet des textures au dÃ©marrage (~30 s)")
+    ap.add_argument("--cars", help="dossier des zips de véhicules à servir à la VM (sinon F2R_CARS_DIR)")
     args = ap.parse_args(argv)
+    global CARS_ROOT
+    cars = args.cars or os.environ.get("F2R_CARS_DIR")
+    if cars:
+        if Path(cars).is_dir():
+            CARS_ROOT = Path(cars).resolve()
+        else:
+            log(f"ATTENTION : dossier de véhicules introuvable : {cars}")
 
     if args.game:
         game = Path(args.game)
@@ -553,6 +630,7 @@ def main(argv=None) -> int:
     log(f"GTA V      : {game}")
     log(f"Ã‰dition    : {'Enhanced (gen9)' if gen9 else 'Legacy'}")
     log(f"Extracteur : {exe}")
+    log(f"Véhicules  : {CARS_ROOT or '(aucun dossier : --cars ou F2R_CARS_DIR)'}")
 
     svc = AssetService(game, gen9, exe)
     if args.prewarm or args.build_index:

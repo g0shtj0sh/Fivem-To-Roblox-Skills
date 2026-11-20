@@ -1126,7 +1126,9 @@ def load_sound_ids(path: str | None, sounds_dir: Path) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="FiveM / GTA V -> Roblox (véhicules)")
-    ap.add_argument("input", help="zip / dossier de la ressource FiveM / dossier d'exports CodeWalker XML")
+    ap.add_argument("input", help="zip / dossier de la ressource FiveM / dossier d'exports CodeWalker XML, "
+                                  "ou cars:<catégorie>/<fichier>.zip (zip du dossier Cars du PC, via le "
+                                  "serveur d'assets ; liste : python scripts/cars.py list)")
     ap.add_argument("-o", "--out", default="roblox_out", help="dossier de sortie")
     ap.add_argument("--vehicle", action="append", help="nom du modèle à convertir (défaut : tous)")
     ap.add_argument("--lod", default="high", choices=["high", "med", "low", "vlow"])
@@ -1196,6 +1198,20 @@ def main(argv=None) -> int:
 
     report = Report()
     out = Path(args.out).resolve()
+    if args.input.lower().startswith("cars:"):
+        # zip du dossier Cars du PC, transféré par le serveur d'assets (pas de limite de taille)
+        if args.game_server_url:
+            os.environ["F2R_GAME_SERVER_URL"] = args.game_server_url
+        g = gamelib.GameAssets.discover(report)
+        got = g.fetch_car(args.input[5:], retry=args.retry_gamefiles) if g else None
+        if g is not None:
+            report.info("Transfert depuis le serveur d'assets : " + g.transfer_summary())
+            g.close()
+        if got is None:
+            print(f"Véhicule « {args.input} » non récupéré (serveur d'assets démarré, avec --cars ?).",
+                  file=sys.stderr)
+            return 2
+        args.input = str(got)
     # Dossier de travail propre à CETTE conversion : plusieurs agents peuvent convertir en même temps
     # dans la même sortie sans s'effacer leurs fichiers. Supprimé à la fin (F2R_KEEP_WORK=1 pour le garder).
     work = out / f"_work_{os.getpid()}"

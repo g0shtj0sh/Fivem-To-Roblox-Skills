@@ -345,7 +345,7 @@ class GameAssets:
         # Mesures du transfert PC -> VM (rapportées dans report.md).
         self.stats: dict[str, dict] = {
             k: {"prepare_s": 0.0, "download_s": 0.0, "files": 0, "chunks": 0, "bytes": 0, "cached": 0}
-            for k in ("textures", "audio")}
+            for k in ("textures", "audio", "cars")}
 
     # -- cycle de vie -------------------------------------------------------
 
@@ -498,6 +498,38 @@ class GameAssets:
         for bad in man.get("failed") or []:
             self.report.warn(f"Texture {bad.get('name')} illisible côté PC : {bad.get('error')}")
         return out
+
+    # -- zips de véhicules du PC (dossier Cars) -------------------------------
+
+    def list_cars(self, query: str = "") -> list[dict]:
+        if self.client is None:
+            raise GameLibError("serveur d'assets injoignable")
+        return (self.client.call("cars_list", query=query) or {}).get("cars") or []
+
+    def fetch_car(self, rel: str, *, retry: bool = False) -> Path | None:
+        """Télécharge un zip du dossier Cars du PC (contourne la limite de téléversement de la VM).
+        Mis en cache par empreinte : un zip inchangé n'est transféré qu'une fois."""
+        if self.client is None:
+            self.report.warn("Véhicule « cars:" + rel + " » : serveur d'assets injoignable.")
+            return None
+        t0 = time.monotonic()
+        try:
+            man = self.client.call("cars_prepare", path=rel)
+        except Exception as exc:                                # noqa: BLE001
+            self.report.warn(f"Véhicule « {rel} » indisponible sur le PC : {exc}")
+            return None
+        finally:
+            self.stats["cars"]["prepare_s"] += time.monotonic() - t0
+        entry = (man.get("files") or [None])[0]
+        if not entry:
+            return None
+        dest = _cache_dir(f"cars/{entry['sha256'][:16]}") / entry["file"]
+        if dest.is_file() and dest.stat().st_size == entry["bytes"] and not retry:
+            self.stats["cars"]["cached"] += 1
+            return dest
+        self.report.info(f"Transfert de {man.get('path', rel)} depuis le PC "
+                         f"({entry['bytes'] / 1e6:.0f} Mo, {entry['chunks']} morceaux)…")
+        return self._download(man, entry, dest, "cars")
 
     # -- audio --------------------------------------------------------------
 

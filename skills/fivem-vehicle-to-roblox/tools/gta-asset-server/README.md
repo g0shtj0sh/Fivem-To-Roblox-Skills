@@ -27,6 +27,19 @@ présentes. Le dossier retenu est mémorisé dans `~/.fivem2roblox/gta-server.js
 Prérequis : Python 3.10+, SDK .NET 8+, git (les deux derniers seulement pour la première
 compilation de `gta-extract`).
 
+## Zips de véhicules du PC (dossier « Cars »)
+
+La VM ne peut pas recevoir de fichier de plus de 100 Mo par téléversement. Le serveur peut
+servir les zips d'un dossier du PC à la place : définir une fois la variable d'environnement
+`F2R_CARS_DIR` (ou `start-server.bat` → `server.py --cars "<dossier>"`). Seuls les
+`.zip`/`.rar`/`.7z` de ce dossier (sous-dossiers compris) sont servis.
+
+Dans la VM : `python scripts/cars.py list skyline` puis
+`python scripts/convert_vehicle.py "cars:sport/nissan_nskygtrr34.zip" -o <sortie>`.
+Transfert en morceaux de 6 Mo vérifiés par SHA-256 (~0,75 Mo/s), mis en cache côté VM : un
+zip inchangé n'est envoyé qu'une fois. Plusieurs agents peuvent en tirer en même temps (le
+débit du tunnel est alors partagé).
+
 ## Branchement dans vibestarter
 
 Une seule fois : **Paramètres › My MCP servers › ajouter un serveur HTTP** avec l'URL
@@ -54,6 +67,8 @@ curl http://127.0.0.1:27300/health
 | `gta_prepare_textures` | extrait → PNG ≤ 1024 px (puissance de 2, alpha conservé) → manifeste |
 | `gta_prepare_audio` | suit `audioNameHash` → dat151 → dat54 → AWC → `.wav` : moteur, klaxon, sirènes |
 | `gta_chunk` | un morceau d'un fichier du lot, en base64 |
+| `cars_list` | zips du dossier Cars (chemin relatif, taille), filtre par mots |
+| `cars_prepare` | manifeste d'un zip du dossier Cars (servi sans copie, empreinte en cache) |
 | `gta_build_index` | index complet des textures véhicules (~30 s, optionnel) |
 
 Chaque lot renvoie, par fichier, sa taille, son **SHA-256** et son nombre de morceaux ;

@@ -43,6 +43,10 @@ Mesures, choix et pièges : [`docs/studio-import-tests.md`](../../docs/studio-im
 cd skills/fivem-vehicle-to-roblox
 python scripts/convert_vehicle.py "<zip>" -o "<sortie>" [--plate "TEXTE"  (défaut : plaque unique générée en jeu)] [--texture-overrides <dossier>]
 ```
+**Zip resté sur le PC** (> 100 Mo, la VM refuse le téléversement) : l'utilisateur nomme le véhicule →
+`python scripts/cars.py list <mots>` (zips du dossier Cars servis par le serveur d'assets), puis entrée
+`"cars:<catégorie>/<zip>"` au lieu du zip : transfert en morceaux vérifiés, mis en cache.
+
 Options : `--vehicle <nom>` (pack multi-véhicules), `--lod med` (> 300 000 triangles),
 `--no-collision` (hitbox = simple boîte), `--no-wheel-collision` (cylindres de roues non solides ; par défaut ils portent le véhicule),
 `--studs-per-meter`, `--texture-overrides <dossier>` (PNG/DDS de même nom qui remplacent les
