@@ -573,11 +573,25 @@ roue debout, deux joueurs, téléphone.
   28/31 km/h, dégâts 8,8/8,8, écart final 4 m ; côté 50 → 0 : 24/26 km/h, 7,5/7,5 ; biais 45° 60 + 60 : centres à
   4 m, dégâts égaux, rien ne bascule ; avant décalé (0,4 m de recouvrement) : Δv 12 au lieu de 17,5, lacet 55° et
   135° ; 80 contre 20 : 26/31 km/h (attendu 28/31) ; PIT 75 sur 60 : Δv 1,8 chacune, lacet de la poussée.
-  Limites : arrière 60 → 0, la percutante a encore eu une fois sur deux un roulis passager (20°, vu 0,57 de « haut »
-  par le serveur) APRÈS la séparation, cause non isolée ; voiture poussée de côté arrêtée en ~0,3 s (adhérence
-  latérale GTA ~1,6 g, hors chocs) ; chute d'une voiture sur une autre : aucun changement de vitesse (le sol porte
-  celle du dessous), dégâts de toit seulement si la voiture du dessus en prend ; non mesuré : vraie latence Internet,
-  téléphone, autres modèles que la 355e.
+  **Suite du 2026-11-22 (défauts restants + véhicules DIFFÉRENTS, N4 225 contre 355e 119 unités de masse)** :
+  - roulis passager à l'arrière : la petite poussée d'écartement plafonnait à 0,5 m/s (frein moteur), la collision
+    revenait sur des voitures encore l'une dans l'autre. Écartement à l'arrêt = glissement de POSITION ; collision
+    jamais rendue tant qu'elles se chevauchent ; freinage anticipé (`PairBrakeDecel`) et à fond si chevauchement ;
+    un nouveau contact avec la même voiture dans les 2 s n'est compté que par le client qui fonce vers l'autre (la
+    copie, lancée à son ancienne vitesse, provoquait un faux second choc) ;
+  - panneau arraché (capot, portière, coffre) ignoré des rayons de suspension (coque bombée = « bosse » de 0,5 m :
+    une N4 sur le capot de la 355e se soulevait de 0,53 m, roulis 21°) ; une roue arrachée reste une bosse ;
+  - glissade de travers après un choc : adhérence × `PairSlideGrip` 0,45 pendant `PairMemory` (≈ 0,86 g mesuré au
+    lieu de ~1,9 g ; 6,3 m de glissade à 35 km/h, calcul 6,2) ;
+  - retombée sur une autre voiture : dégâts sur la vitesse de CHUTE au contact (> `PairLandMin` 3 m/s), celle du
+    dessous reçoit l'élan × rapport des masses (borné 0,5-2) : N4 lâchée de 2,5 m sur une 355e → 950 / 774.
+  Mesuré (Studio PC, 2 clients) : arrière 355e 60 → 355e arrêtée : hausse 0 / 0, écart 4 m ; N4 60 contre 355e 60
+  de face : Δv 12,1 / 22,9 (attendu ~12 / ~23), carrosserie 920 / 677, hausse 2 cm malgré le capot arraché ;
+  355e 60 → N4 arrêtée : 11,6 / 6,1 (attendu 11,4 / 6,0) ; N4 60 → 355e arrêtée : 6,2 / 11,7 (6,1 / 11,5) ;
+  N4 50 dans le flanc de la 355e : 5,2 / 9,8 (5,3 / 9,6) ; biais 45° N4/355e : dégâts 10,1 / 19,1, lacets 128° / 95°,
+  rien ne bascule ; positions identiques sur les deux écrans dans tous les cas.
+  Limites : non mesuré avec une vraie latence Internet, sur téléphone, ni avec d'autres gabarits (le jeu n'a que
+  ces deux modèles) ; biais 45° : ~15 % de quantité de mouvement perdue dans les 0,3 s qui suivent (frottements).
 - **Piéton** : poussé DEBOUT devant la voiture comme par un chasse-neige (51 m à 40 km/h, aucun dégât). Le client du
   conducteur le repère dans l'emprise de la voiture (`PedMinSpeed`), le serveur valide (« HitPed » : conducteur,
   distance, vitesse plafonnée à celle qu'il voit, 1 coup par seconde et par victime), déclenche le BindableEvent

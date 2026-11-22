@@ -179,13 +179,14 @@ Drive.PairImpactDv = 0.6 -- m/s de variation horizontale en une image (60 Hz) : 
 -- infinie la voiture montait dessus (roulis 41-44°). Un freinage à 1 g fait 0,16 m/s par image : seul un contact
 -- (avec une voiture d'un autre joueur à portée, qui se rapproche) atteint 0,6.
 Drive.PairVerticalDv = 2 -- m/s de variation verticale : retombée sur l'autre
+Drive.PairLandMin = 3 -- m/s de chute au contact en deçà desquels une retombée ne fait pas de dégâts
 Drive.PairElasticity = 0.05
 Drive.PairWindow = 0.5 -- s : arbitrage entre les deux clients, et à-coups de la copie annulés pendant
 Drive.PairStepDv = 1 -- m/s dans l'axe du choc en un pas, pendant la fenêtre : poussée de la copie, annulée
 Drive.PairSnapDv = 0.5 -- m/s : rapprochement en dessous duquel un à-coup contre une copie est un rattrapage réseau
 Drive.PairSnapRel = 1.5 -- m/s : … à condition que les deux ne bougent presque pas l'une par rapport à l'autre
 Drive.PairGhostMin = 0.4 -- s : le temps que la copie de l'autre reflète le choc (réplication)
-Drive.PairGhostMax = 3 -- s
+Drive.PairGhostMax = 3 -- s : au-delà, fantôme gardé seulement tant qu'elles se chevauchent (au plus le double)
 -- Après le choc, chaque client a arrêté sa voiture contre la copie EN RETARD de l'autre : les vraies voitures finissent
 -- l'une dans l'autre (de face 60 + 60 km/h : centres CROISÉS, mesuré 2026-11-22). Chacune s'écarte alors de l'autre
 -- dans l'axe du choc jusqu'à la distance de deux pare-chocs moins PairCrumple (tôle écrasée), à PairSeparate de plus
@@ -193,6 +194,9 @@ Drive.PairGhostMax = 3 -- s
 Drive.PairSeparate = 2.5 -- m/s
 Drive.PairSeparateMaxDv = 0.02 -- m/s par pas au plus (≈ 5 m/s² à 240 Hz) : poussée douce, jamais de lancer
 Drive.PairCrumple = 1 -- m : écrasement total des deux tôles laissé
+Drive.PairSlideGrip = 0.45 -- adhérence des pneus qui glissent de travers après un choc (≈ 0,8 g au lieu de ~1,9 g)
+Drive.PairSlideMinLat = 2 -- m/s de glissade latérale au-delà desquels elle s'applique
+Drive.PairBrakeDecel = 7 -- m/s² supposés pour notre freinage : distance d'arrêt du freinage anticipé
 Drive.PairFullAngle = 50 -- ° entre rapprochement et axe des centres : en deçà, choc plein
 Drive.PairTiltDamp = 0.96 -- par pas à 240 Hz : vitesses de tangage et de roulis divisées par ~10 en 0,25 s, après un choc
 -- Mémoire d'un choc avec chaque autre voiture : un message « PairHit » de l'autre arrivé après la fenêtre (0,6 s sous
@@ -315,14 +319,14 @@ ghostOverlap.RespectCanCollide = false
 -- à PairSeparate (chacun de son côté) : de face, chaque client arrête sa voiture contre la copie EN RETARD de
 -- l'autre, les vraies voitures finissent l'une dans l'autre (60 + 60 km/h : centres à 1 m, mesuré 2026-11-22) ; rendre
 -- la collision ainsi les faisait exploser (roulis 49°, 1 m de hausse).
-local function updateGhost(a, root, now)
+local function updateGhost(a, root, now, dt)
 	local g = a.ghost
 	if not g then
 		return nil
 	end
 	local el = now - g.t0
 	local oroot = g.model.PrimaryPart
-	if el > Drive.PairGhostMax or not g.model.Parent or not oroot then
+	if not g.model.Parent or not oroot or el > 2 * Drive.PairGhostMax then
 		restoreGhost(a)
 		return nil
 	end
@@ -356,10 +360,18 @@ local function updateGhost(a, root, now)
 	-- de deux voitures pare-chocs contre pare-chocs, moins l'écrasement de la tôle
 	local dist = (root.Position - oroot.Position):Dot(n)
 	local want = (extentAlong(a.car, root.CFrame, n) + extentAlong(g.model, oroot.CFrame, n) - Drive.PairCrumple) * spm
-	if dist < want then
-		if el >= Drive.PairGhostMin then
-			local target = vO:Dot(n) + Drive.PairSeparate * spm
-			local v = root.AssemblyLinearVelocity
+	-- freinage anticipé : on se rapproche de l'autre (vitesse de sa copie) assez vite pour finir dedans avant d'avoir
+	-- freiné (décélération Drive.PairBrakeDecel) : on freine déjà, avant d'être trop près
+	local vNow = root.AssemblyLinearVelocity
+	local closing = vO:Dot(n) - vNow:Dot(n)
+	local brakeZone = want
+	if closing > 0 then
+		brakeZone += closing * closing / (2 * Drive.PairBrakeDecel * spm) + 0.5 * spm
+	end
+	if dist < brakeZone then
+		if el >= Drive.PairGhostMin or dist >= want then
+			local target = vO:Dot(n) + (dist < want and Drive.PairSeparate * spm or 0)
+			local v = vNow
 			local cur = v:Dot(n)
 			if cur < target then
 				-- on roule vers l'autre : ce sont NOS freins qui ralentissent (vitesse imposée à la caisse, les pneus
@@ -369,19 +381,26 @@ local function updateGhost(a, root, now)
 				-- dès qu'on roule (en avant ou en arrière) vers l'autre. De biais à 45°, une fois la glissade latérale
 				-- mangée par les pneus, chaque voiture repartait dans l'axe de son capot, droit dans l'autre (centres
 				-- à 0,6 m à l'arrêt, mesuré 2026-11-22)
-				local amount = math.clamp((target - cur) / spm / 4, 0.25, 1)
+				-- à fond dès qu'elles se chevauchent : l'autre, frein serré, s'arrêtait à ~1 g et la nôtre, freinée à
+				-- moitié, finissait dedans (second faux choc, 0,67 m de hausse, mesuré 2026-11-22)
+				local amount = (dist < want - 0.3 * spm) and 1 or math.clamp((target - cur) / spm / 1.5, 0.5, 1)
 				if fwd > 0.5 and -look:Dot(n) > 0.3 then
 					return nil, amount
 				elseif fwd < -0.5 and look:Dot(n) > 0.3 then
 					return nil, amount, nil, true -- en marche arrière, c'est l'accélérateur qui freine
 				end
-				-- à l'arrêt ou presque : petite poussée, freins relâchés (sinon ils retiennent les roues). Sous ~0,3 m/s
-				-- les pneus « collent » (VehicleDynamics, VStick) et annulaient 0,02 m/s par pas : départ à 0,6 m/s
-				local step = Drive.PairSeparateMaxDv * spm
-				if math.abs(cur) < 0.6 * spm then
-					step = math.max(step, 0.6 * spm - math.abs(cur))
+				-- à l'arrêt ou presque : glissement de POSITION à PairSeparate (ni pneus ni moteur à vaincre). Une
+				-- vitesse imposée plafonnait à 0,5 m/s (frein moteur en 1re, pneus qui collent sous 0,3 m/s) : au
+				-- bout de PairGhostMax la collision revenait sur des voitures encore l'une dans l'autre, séparées
+				-- d'un coup par le moteur physique (roulis passager, mesuré 2026-11-22)
+				if dist >= want then
+					return nil -- trop près pour la vitesse, mais pas l'une dans l'autre : rien à glisser
 				end
-				return v + n * math.min(target - cur, step), nil, true
+				local slide = math.min(want - dist, Drive.PairSeparate * spm * (dt or 1 / 240))
+				if slide > 0 then
+					root.CFrame = root.CFrame + n * slide
+				end
+				return nil, nil, true
 			end
 		end
 		return nil
@@ -422,6 +441,7 @@ local function matchWheels(a, v)
 end
 
 local function logPair(a, other, tServer, n)
+	a.lastPairAt = os.clock()
 	a.pairLog = a.pairLog or setmetatable({}, { __mode = "k" })
 	local rec = a.pairLog[other]
 	if rec and os.clock() - rec.t < Drive.PairMemory then
@@ -470,9 +490,16 @@ local function pairImpact(a, root, vWorld, wWorld, now)
 	local tS = Workspace:GetServerTimeNow()
 	if dvY >= Drive.PairVerticalDv and dvY > dvH then
 		-- choc vertical : on retombe sur l'autre (au-dessus) ; le sol la porte, seules ses dégâts de toit sont à faire
-		if oroot.Position.Y < root.Position.Y - 0.5 * spm and prev.Y < 0 then
+		-- dégâts comptés sur la VITESSE DE CHUTE au contact, pas sur la variation d'un pas : la suspension étale le choc
+		-- et une N4 lâchée de 2,5 m (7 m/s) sur le toit d'une 355e ne faisait aucun dégât (mesuré 2026-11-22). Celle du
+		-- dessus perd toute sa chute ; celle du dessous, posée au sol, reçoit son élan (rapport des masses, borné)
+		if oroot.Position.Y < root.Position.Y - 0.5 * spm and prev.Y < -Drive.PairLandMin * spm then
+			local fall = -prev.Y
+			local ratio = math.clamp(root.AssemblyMass / math.max(oroot.AssemblyMass, 1e-3), 0.5, 2)
 			a.pair = { root = oroot, model = other, untilT = now + Drive.PairWindow, tServer = tS, prevVel = prev }
-			a.pendingPair = { other, Vector3.new(0, -(vWorld.Y - prev.Y), 0), tS, nil, "top" }
+			logPair(a, other, tS, nil)
+			a.pendingPair = { other, Vector3.new(0, -fall * ratio, 0), tS, Vector3.new(0, fall, 0), "top" }
+			return nil, nil, true -- dégâts appliqués par le serveur
 		end
 		return nil
 	end
@@ -514,6 +541,15 @@ local function pairImpact(a, root, vWorld, wWorld, now)
 	-- Impulsion au POINT DE CONTACT (reconstruction d'accidents, modèle « choc plein ») : vitesse ET rotation de
 	-- lacet de chacune. Centré : comme avant (rotation nulle). Décalé (coin contre coin) : moins de vitesse perdue,
 	-- et les voitures tournent. Avant (2026-11-22), un choc avant avec 0,4 m de recouvrement arrêtait net les deux.
+	-- nouveau contact avec la même voiture peu après un choc : compté seulement si c'est NOUS qui fonçons vers elle
+	-- (notre vitesse est exacte, sa copie est en retard). Sinon, c'est sa copie, encore lancée à son ancienne vitesse
+	-- alors que la vraie a freiné, qui nous rattrape : à l'arrière, la percutée recalculait un faux second choc de
+	-- 2,1 m/s et se soulevait de 0,67 m (mesuré 2026-11-22)
+	if rec and -uA < 0.5 * (uB - uA) then
+		a.pair = { root = oroot, model = other, n = n, untilT = now + Drive.PairWindow, tServer = tS, prevVel = prev }
+		ghostCopy(a, other, a.ghost and a.ghost.vOther or vB, n, vB)
+		return prev, a.prevAng, true
+	end
 	local e = Drive.PairElasticity
 	local t = Vector3.new(-n.Z, 0, n.X) -- horizontal, perpendiculaire à l'axe
 	local cA, cB = root.Position * XZ, oroot.Position * XZ
@@ -708,6 +744,24 @@ end
 
 -- ------------------------------------------------------------------ dégâts de roue, herse
 -- Herse : une pièce taguée « SpikeStrip », ou dans un modèle tagué ainsi (jusqu'à 3 parents).
+-- panneau arraché (capot, portière, coffre : VehicleAccess.SpawnDebris) : la caisse le touche et le pousse, mais
+-- les rayons de suspension l'ignorent. Sa coque convexe (capot bombé) faisait une « bosse » de 0,5 m : une N4 qui
+-- roulait sur le capot de l'autre se soulevait de 0,53 m avec 21° de roulis (mesuré 2026-11-22). Une roue arrachée
+-- reste une vraie bosse.
+local function isFlatDebris(inst)
+	for _ = 1, 4 do
+		if not inst then
+			return false
+		end
+		local kind = inst:GetAttribute("DebrisKind")
+		if kind then
+			return kind ~= "wheel"
+		end
+		inst = inst.Parent
+	end
+	return false
+end
+
 local function isSpike(inst)
 	for _ = 1, 4 do
 		if not inst then
@@ -780,7 +834,7 @@ local function step(a, dt)
 		-- ignorent CanCollide (les herses, non solides, doivent être vues) : on roulait sur les cylindres de roues
 		-- d'une voiture qu'on percutait, l'avant montait dessus (mesuré 2026-11-22, Play 2 joueurs)
 		for _ = 1, 3 do
-			if not hit or hit.Instance.CanCollide or isSpike(hit.Instance) then
+			if not hit or isSpike(hit.Instance) or (hit.Instance.CanCollide and not isFlatDebris(hit.Instance)) then
 				break
 			end
 			a.params:AddToFilter(hit.Instance)
@@ -819,6 +873,12 @@ local function step(a, dt)
 				c.vLong = vc:Dot(fwd) / spm
 				c.vLat = vc:Dot(right) / spm
 				c.grip = Dyn.MaterialGrip(hit.Material.Name)
+				-- glissade de travers juste après un choc entre joueurs : pneus en frottement de glissement (~0,8 g)
+				-- et non à l'adhérence de pointe GTA (~1,9 g : une voiture prise par le côté à 35 km/h s'arrêtait en
+				-- 0,4 s au lieu de glisser ~6 m, mesuré 2026-11-22). Conduite normale inchangée.
+				if os.clock() - (a.lastPairAt or -math.huge) < Drive.PairMemory and math.abs(c.vLat) > Drive.PairSlideMinLat then
+					c.grip *= Drive.PairSlideGrip
+				end
 			else
 				a.xPrev[i] = nil
 			end
@@ -878,14 +938,11 @@ local function step(a, dt)
 	if fixedW then
 		root.AssemblyAngularVelocity = fixedW
 	end
-	local sepV, sepBrake, sepNudge, sepReverse = updateGhost(a, root, os.clock())
+	local sepV, sepBrake, _, sepReverse = updateGhost(a, root, os.clock(), dt)
 	if sepBrake and sepReverse then
 		inp.Throttle, inp.Brake = math.max(inp.Throttle or 0, sepBrake), 0
 	elseif sepBrake then
 		inp.Brake, inp.Throttle = math.max(inp.Brake or 0, sepBrake), 0
-	end
-	if sepNudge then
-		inp.Brake, inp.Handbrake, inp.Throttle = 0, false, 0
 	end
 	if sepV then
 		root.AssemblyLinearVelocity = sepV
