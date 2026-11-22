@@ -55,6 +55,14 @@ Access.MassScale = 0.1
 -- pièces solides d'un débris : celles dont la boîte fait au moins cette part du volume de la plus grosse (pneu, tôle) ;
 -- les petites (poignée, rétro, écrou) suivent sans collision
 Access.DebrisColliderShare = 0.2
+-- PROPRIÉTAIRE RÉSEAU du débris : vu d'un client, un objet qu'il ne simule pas est une copie de masse infinie ; une voiture
+-- conduite qui heurte un débris du serveur le prend comme un mur (même cause que les chocs entre deux joueurs, coffre :
+-- « Choc entre objets simulés par des machines différentes »). Le serveur confie donc le débris au joueur dont la
+-- position prévue (personnage ou voiture, vitesse × DebrisOwnerLookahead) en est la plus proche, à moins de
+-- DebrisOwnerReach studs ; sinon il le garde.
+Access.DebrisOwnerEvery = 0.2 -- s
+Access.DebrisOwnerLookahead = { 0, 0.5, 1.0 } -- s
+Access.DebrisOwnerReach = 40 -- studs (≈ 9 m)
 -- Rebond des pièces de collision du véhicule. Roblox donne 0,5 au plastique par défaut : une voiture qui tape un
 -- poteau à 51 km/h repartait en arrière à 11,5 km/h, et à 92 km/h le choc la renvoyait à 33 km/h puis la catapultait
 -- (+0,75 m, roulis 48°) en rebondissant sur le sol (mesuré en Play, 325e, 2026-11-19). Une carrosserie absorbe le
@@ -991,6 +999,36 @@ function Access.SpawnDebris(model, bone, kind, pieces, linVel, angVel, lifetime)
 				end
 			end
 			debris:SetAttribute("DebrisSolidAt", os.clock() - t0)
+		end
+	end)
+	task.spawn(function()
+		local Players = game:GetService("Players")
+		local owner = nil
+		while debris.Parent and biggest.Parent == debris do
+			local pos = biggest.Position
+			local best, bestD = nil, Access.DebrisOwnerReach
+			for _, plr in ipairs(Players:GetPlayers()) do
+				local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local v = hrp.AssemblyLinearVelocity
+					for _, t in ipairs(Access.DebrisOwnerLookahead) do
+						local d = (hrp.Position + v * t - pos).Magnitude
+						if d < bestD then
+							best, bestD = plr, d
+						end
+					end
+				end
+			end
+			if best ~= owner then
+				local ok = pcall(function()
+					biggest:SetNetworkOwner(best)
+				end)
+				if ok then
+					owner = best
+					debris:SetAttribute("DebrisOwner", best and best.Name or "")
+				end
+			end
+			task.wait(Access.DebrisOwnerEvery)
 		end
 	end)
 	return debris

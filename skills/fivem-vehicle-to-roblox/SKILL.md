@@ -525,8 +525,13 @@ collision de SA voiture, testé par `GetPartsInPart` toutes les 0,1 s, 3 s au pl
 englobantes) touchait toujours la boîte du châssis et le débris restait fantôme. Le cylindre de la roue arrachée
 (voiture garée) est coupé tout de suite. Mesuré en Play (brolver-rp, 325e garée, runtime `0c41beae658e`) : roue
 24,9 kg, solide à 0,45 s ; portière 30,8 kg, solide à 0,11 s ; portière lâchée sur le toit d'une m422 : reste sur la
-caisse (Y 5,87 puis 3,39, sol à 0) ; spherecast du groupe `FiveMVehicle` sur la roue au sol : touche. Non vérifié :
-un véhicule conduit qui heurte un débris (effet ressenti), deux joueurs.
+caisse (Y 5,87 puis 3,39, sol à 0) ; spherecast du groupe `FiveMVehicle` sur la roue au sol : touche.
+**Propriétaire réseau** : vu d'un client, un débris du serveur est une copie de masse infinie (un mur pour la voiture qui
+suit). Le serveur le confie toutes les 0,2 s au joueur dont la position prévue (0 / 0,5 / 1 s × sa vitesse) est la plus
+proche, à moins de `DebrisOwnerReach` (40 studs), sinon il le garde. Banc conduit (runtime `979093dcfec4`, 355e à
+~49 km/h sur une roue de BavrenN4 couchée, 40 kg) : débris confié au conducteur à 19 m, projeté à 9,7 m/s, glissé de
+5,5 m ; voiture : Δv max 0,45 m/s par pas, soulevée de 8 cm, aucun dégât. Non vérifié : sans l'attribution (témoin),
+roue debout, deux joueurs, téléphone.
 
 **Chocs, suite (2026-11-19, banc `scripts/vehicles/crash_bench.lua` du jeu brolver-rp : murs, voitures garées,
 2 joueurs, piétons)** :
