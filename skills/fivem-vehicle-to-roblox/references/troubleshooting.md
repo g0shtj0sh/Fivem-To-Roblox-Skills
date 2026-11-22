@@ -49,6 +49,11 @@ En Studio (m422, Play PC, 1 joueur) : la pose bloquée relevée (voiture abîmé
 correctif (pas de régression : écarts < 1 stud). Lancer le banc : `lune run tests/lune/diagonal_unload.luau
 <sortie>/vehicle_config.json` depuis le dossier du skill (code 1 = échec).
 
+**Autre fait mesuré (non corrigé)** : la collision de caisse GTA (fond plat sur toute la largeur) passe 3-5 cm sous les
+bas de caisse visibles. Garde au sol de la collision (m422) : 0,55 stud (12,8 cm) d'origine, 0,29 stud (6,8 cm) en
+suspension niveau 4, sous une bordure de 0,45 stud : la caisse frotte alors, invisible, sans bloquer à plein gaz ni à
+50 %. Si un blocage revient sur une voiture abaissée, commencer par là (relever le fond de la collision).
+
 **Diagnostic rapide** si ça revient : sur la pose bloquée, lire `Drive.Get().out.wheels[i].Fz` et `out.omega[i]` :
 une roue motrice à Fz = 0 qui tourne vite pendant que les autres sont à ~0 = ce cas. Une pièce solide qui touche se
 voit avec `workspace:GetPartsInPart` sur chaque pièce `CanCollide` de la voiture (les cylindres de roue sont non
