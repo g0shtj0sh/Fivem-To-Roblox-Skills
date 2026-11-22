@@ -52,7 +52,7 @@ Repère : `VehicleRoot.CFrame.LookVector` = avant du véhicule, `UpVector` = hau
 | `Parked` | bool | `VehicleRoot` ancré par le stationnement |
 | `Flipped` | bool | retourné ou sur le côté depuis plus de 2 s, quasi immobile |
 | `RecoverCooldown` | s (5) | délai entre deux remises sur les roues |
-| `Engine` | bool | moteur allumé (auto au passage du conducteur, `AutoStartEngine`) |
+| `Engine` | bool | moteur allumé (auto au passage du conducteur, `AutoStartEngine`) ; **coupé quand le conducteur descend**, sauf `EngineAlwaysOn` ; moteur coupé = **tous les feux et les néons éteints** (seule l'alarme fait clignoter les warnings) |
 | `Headlights` | 0/1/2 | éteint / codes / pleins phares |
 | `Indicator` | "Off"/"Left"/"Right"/"Hazard" | clignotants |
 | `Brake`, `Reverse` | bool | feux stop / recul |
@@ -744,7 +744,7 @@ Le skill fournit le côté véhicule ; le menu (interface, navigation, qui y a a
    | `"Freeze"` | booléen | `SetFrozen` (ancré même conduit) |
    | `"Visible"` | booléen | `SetVisible` (attribut `Invisible` ; feux éteints côté client) |
    | `"Alarm"` | booléen | `SetAlarm` (détresse + klaxon, `AlarmDuration` s) |
-   | `"Engine"` / `"EngineAlwaysOn"` | booléen | moteur ; `SetEngineAlwaysOn` (le serveur refuse de le couper) |
+   | `"Engine"` / `"EngineAlwaysOn"` | booléen | moteur ; `SetEngineAlwaysOn` (vMenu « Engine Always On » : le moteur reste allumé quand on descend ; la touche moteur le coupe toujours) |
    | `"Lights"` | `"Auto"` / `"Off"` / `"On"` | `SetLights` (Auto : selon `Lighting.ClockTime`, une fois) |
    | `"Lock"` | booléen | `VehicleAccess.SetLocked` |
    | `"KickOut"` | — | `KickOccupants` |

@@ -1018,7 +1018,10 @@ function Custom.RefreshNeons(model)
 		if p:IsA("BasePart") then
 			local side = neonSideOf(model, p)
 			-- épave (VehicleDamage : véhicule en feu) : plus d'électricité, néons coupés jusqu'à la réparation
+			-- moteur coupé : néons éteints, comme tous les feux (VehicleRuntime._updateLights) ; les côtés choisis
+			-- (Neon_<côté>) restent et se rallument au démarrage (FiveMVehiclesServer suit l'attribut Engine)
 			local on = side ~= nil and neonOn(model, side) and not hidden and model:GetAttribute("Wrecked") ~= true
+				and model:GetAttribute("Engine") == true
 			p.Color = color
 			-- tube toujours invisible une fois calé (GTA V : on ne voit pas les barres, on voit leur lumière) ; un
 			-- véhicule pas encore calé (hors Workspace) garde l'ancien tube visible
@@ -2260,9 +2263,7 @@ OPS.Engine = function(model, on)
 	if type(on) ~= "boolean" then
 		return false, "invalid"
 	end
-	if not on and model:GetAttribute("EngineAlwaysOn") == true then
-		return false, "always_on"
-	end
+	-- « Moteur toujours allumé » ne bloque plus la coupure (vMenu : il agit à la descente, FiveMVehiclesServer)
 	if on and model:GetAttribute("EngineDead") == true then
 		return false, "engine_dead" -- moteur HS ou véhicule en feu (VehicleDamage) : il faut réparer
 	end

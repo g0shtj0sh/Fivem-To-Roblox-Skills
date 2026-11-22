@@ -17,6 +17,48 @@
 | Trop de pièces / lag | modèle très détaillé | `--lod med`, ou `--max-tris` plus grand n'aide pas (limite Roblox) |
 | Mod visible en permanence | `Mod_<Slot>` ≠ 0 ou Refresh non appelé | `Custom.SetMod(car, slot, 0)` côté serveur |
 
+## Voiture bloquée penchée sur un trottoir, une bordure ou un talus (tremble, n'avance ni ne recule)
+
+**Symptôme** (Brolver, m422, 2026-11-22) : la voiture penchée en diagonale (une roue avant sur un trottoir de 10 cm,
+un bord de pelouse, l'avant sur un talus) tremble et n'avance plus ni ne recule, alors que rien de visible ne touche.
+
+**Cause démontrée** (Play Studio, pose m422 à 15° du bord, roue avant droite sur la bordure) : la caisse reposait sur
+la diagonale avant droite / arrière gauche ; l'arrière droite, au sol mais à **charge nulle** (Fz = 0), passait dans
+la branche « roue en l'air » de `VehicleDynamics` : elle recevait sa part de couple, s'emballait (224 rad/s) ; le
+régime moteur, moyenne des roues motrices, partait au rupteur et coupait la poussée de la roue qui porte. Même chose
+d'essieu à essieu sur une 4 roues motrices (avant soulevé : les deux roues avant à 138 rad/s). Aucune pièce solide ne
+touchait (sondage `GetPartsInPart` de toutes les collisions de la voiture et du personnage assis à chaque image).
+
+**Correction (runtime `7420eb159a09`)** : `Dyn.step` donne le couple des roues motrices **déchargées** (au sol sous
+`Tuning.UnloadedLoadFrac` = 25 % de leur charge au repos, ou en l'air) aux roues motrices qui portent (même essieu
+d'abord, sinon l'autre), et la roue déchargée tourne comme elles (`Tuning.UnloadedWheelLock`, `true` par défaut).
+Toutes déchargées (saut) : rien ne change. Tous les véhicules convertis en profitent sans reconversion (runtime commun).
+Premier essai rejeté : « charge nulle » seulement → l'avant gauche à 13 % de sa charge s'emballait encore (146 rad/s).
+
+**Mesuré** : banc hors jeu `tests/lune/diagonal_unload.luau` (vrai `VehicleDynamics`, pose diagonale relevée en Studio,
+plein gaz 1 s / marche arrière 2 s, caisse libre en ligne droite) :
+
+| véhicule | route plate (avant / arrière) | diagonale SANS correctif | diagonale AVEC |
+|---|---|---|---|
+| m422 (4 roues motrices) | 3,10 / −7,22 m (identique avec) | −0,12 / +0,25 m (bloquée) | 2,93 / −5,20 m |
+| 325e (propulsion) | 2,23 / −4,21 m (identique) | −0,08 / +0,03 m | 1,24 / −5,03 m |
+| E36 (propulsion) | 3,28 / −8,30 m (identique) | −0,08 / +0,29 m | 2,38 / −8,10 m |
+
+En Studio (m422, Play PC, 1 joueur) : la pose bloquée relevée (voiture abîmée par un choc) faisait 0,9 / −1,2 stud ;
+36 poses le long d'une bordure dégagée et des approches au pas ne bloquent pas une voiture neuve, avec ou sans
+correctif (pas de régression : écarts < 1 stud). Lancer le banc : `lune run tests/lune/diagonal_unload.luau
+<sortie>/vehicle_config.json` depuis le dossier du skill (code 1 = échec).
+
+**Diagnostic rapide** si ça revient : sur la pose bloquée, lire `Drive.Get().out.wheels[i].Fz` et `out.omega[i]` :
+une roue motrice à Fz = 0 qui tourne vite pendant que les autres sont à ~0 = ce cas. Une pièce solide qui touche se
+voit avec `workspace:GetPartsInPart` sur chaque pièce `CanCollide` de la voiture (les cylindres de roue sont non
+solides pendant la conduite ; le personnage assis est dans `FiveMVehicleOccupant`, qui touche le décor). Attention
+aux faux positifs : une borne à incendie ou un poteau devant la roue bloque normalement.
+
+**Piège de banc** : téléporter la voiture depuis le client (PivotTo) déclenche le contrôle de vraisemblance du serveur,
+qui la remet en place et l'ancre : faire les poses par `Access.Teleport` côté serveur. À 30 % d'accélérateur la voiture
+rampe à 0,3 m/s même à plat (départ façon GTA) : tester plein gaz.
+
 ## Ressources du jeu de base (textures partagées, son vanilla)
 
 | Symptôme | Cause | Correctif |

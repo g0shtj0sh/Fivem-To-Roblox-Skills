@@ -142,6 +142,11 @@ Dyn.Tuning = {
 	-- virage 40 : roulis établi 1,26 → 1,24 °, 1,638 → 1,645 g, rayon 8,14 → 8,11 m (imperceptible).
 	-- 0 = garde coupée. Un trottoir, un choc ou un tremplin peuvent toujours retourner la voiture.
 	KArb = 1.0, -- anti-roulis : kA = AntiRollBarForce × biais × g / course × KArb (loi inconnue)
+	UnloadedWheelLock = true, -- roue motrice déchargée : elle cède son couple aux roues qui portent et tourne avec
+	-- elles (sinon voiture bloquée en diagonale sur un trottoir, roue déchargée qui s'emballe ; Dyn.step, 2026-11-22)
+	UnloadedLoadFrac = 0.25, -- « déchargée » = sous cette part de sa charge au repos. MESURÉ (banc
+	-- tests/lune/diagonal_unload.luau, pose relevée en Studio) : avec « charge nulle » seulement, l'avant gauche à 13 %
+	-- de sa charge (0,33 / 2,48 m/s²) s'emballait encore (146 rad/s), régime au rupteur, 1,3 m au lieu de 3,1 en 1 s
 	IwRel = 0.03, -- inertie de roue + transmission, spécifique : Iw = IwRel × r² / 4 (1,5 mesuré trop lourd :
 	-- la roue accélérait au rythme de la voiture et le pneu restait sous son pic, 0,26 g au lieu de ~0,6 g).
 	-- CALÉ sur les mesures m422 : 0,25 ajoutait 25 % d'inertie équivalente, ce qui rendait impossible de tenir
@@ -1186,6 +1191,59 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		limitK = math.clamp((P.limiter + band - math.abs(vf)) / band, 0, 1)
 	end
 
+	-- couple d'un essieu moteur dont une roue ne porte plus rien (charge nulle : roue en l'air, OU au sol mais
+	-- déchargée par la caisse posée en diagonale sur un trottoir / un dévers) : il passe tout entier à l'autre roue,
+	-- et la roue déchargée tourne avec elle (Tuning.UnloadedWheelLock). CAUSE DÉMONTRÉE (Studio, m422, 2026-11-22) :
+	-- roue avant droite sur un trottoir de 10 cm, voiture à 15° du bord → caisse en appui sur la diagonale avant droite
+	-- / arrière gauche, arrière droite à Fz = 0 ; elle recevait sa moitié du couple, s'emballait (224 rad/s), le
+	-- régime (moyenne des roues motrices) partait au rupteur et coupait la poussée de l'arrière gauche, chargée :
+	-- 0,9 m en avant en 1 s à plein gaz, 1,2 m en arrière en 2 s, roue arrière qui tremble. Un différentiel ouvert
+	-- réel ferait pareil ; GTA ne le simule pas (la voiture repart toujours avec la roue qui porte), la M4 a un
+	-- autobloquant. « Déchargée » = sous Tuning.UnloadedLoadFrac de sa charge au repos (une roue à 13 % s'emballait
+	-- encore) ; au-dessus, partage d'origine.
+	-- Même chose d'un essieu à l'autre (4 roues motrices, m422 xDrive) : avant soulevé par une bordure ou un talus,
+	-- les deux roues avant à charge nulle s'emballaient (138 rad/s) et coupaient la poussée de l'arrière, qui porte
+	-- (mesuré le même jour). Le couple des roues motrices déchargées va aux roues motrices qui portent (même essieu
+	-- d'abord, sinon toutes) ; chaque roue déchargée tourne comme sa voisine d'essieu chargée, sinon comme la plus
+	-- rapide des roues qui portent. Toutes déchargées (saut) : partage d'origine, les roues tournent libres.
+	local share = {}
+	local slaveOf = {}
+	for i, w in ipairs(P.wheels) do
+		share[i] = w.driveShare
+	end
+	if T.UnloadedWheelLock ~= false then
+		local loaded, unloaded = {}, {}
+		for i, w in ipairs(P.wheels) do
+			if w.driveShare > 0 and (w.state or 0) < 3 then
+				if contacts[i] and contacts[i].grounded and N[i] > (T.UnloadedLoadFrac or 0) * w.load then
+					table.insert(loaded, i)
+				else
+					table.insert(unloaded, i)
+				end
+			end
+		end
+		if #loaded > 0 and #unloaded > 0 then
+			for _, i in ipairs(unloaded) do
+				local wi = P.wheels[i]
+				local mates = {}
+				for _, j in ipairs(loaded) do
+					if P.wheels[j].front == wi.front then
+						table.insert(mates, j)
+					end
+				end
+				if #mates == 0 then
+					mates = loaded
+				end
+				local add = share[i] / #mates
+				for _, j in ipairs(mates) do
+					share[j] += add
+				end
+				share[i] = 0
+				slaveOf[i] = mates
+			end
+		end
+	end
+
 	-- sous-pas : régime, embrayage, roues, pneus
 	local nSub = math.max(1, T.SubSteps)
 	local h = dt / nSub
@@ -1370,7 +1428,7 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 		for i, w in ipairs(P.wheels) do
 			local c = contacts[i] or { grounded = false, vLong = 0, vLat = 0, grip = 1 }
 			local vLong, vLat = c.vLong or 0, c.vLat or 0
-			local aW = (w.state or 0) >= 3 and 0 or aDrive * w.driveShare -- roue arrachée : le moyeu n'entraîne rien
+			local aW = (w.state or 0) >= 3 and 0 or aDrive * share[i] -- roue arrachée : le moyeu n'entraîne rien
 			if burnout then
 				-- burn : tout le couple va aux roues qui patinent (une transmission intégrale garde l'avant
 				-- freiné et sans couple) ; sans ça la poussée partagée ne vainc pas l'adhérence (essai m422 4×4)
@@ -1517,6 +1575,19 @@ function Dyn.step(sim, inp, contacts, dt, ctx)
 			-- burn : la roue garde toute la réaction du sol (elle patine), la caisse n'en reçoit qu'une part
 			sumFx[i] += (burnout and w.burnSpin) and Fx * T.BurnoutPush or Fx
 			sumFy[i] += Fy
+		end
+		-- roue motrice déchargée (voir share plus haut) : elle tourne avec sa voisine d'essieu, sans s'emballer ; le
+		-- régime moteur, moyenne des roues motrices, reste donc celui de la roue qui pousse
+		if not burnout then
+			for i, mates in pairs(slaveOf) do
+				local o = S.omega[mates[1]]
+				for _, j in ipairs(mates) do
+					if math.abs(S.omega[j]) > math.abs(o) then
+						o = S.omega[j]
+					end
+				end
+				S.omega[i] = o
+			end
 		end
 		-- burn : les roues motrices patinent ensemble (deux traces, deux fumées, comme dans GTA) ; sans ça, la
 		-- moins chargée part seule et l'autre reste tenue (essai du 2026-11-14 : une seule roue arrière tournait)

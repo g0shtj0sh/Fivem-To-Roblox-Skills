@@ -254,9 +254,8 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		if key == "Siren" and not model:GetAttribute("HasSiren") then
 			return refuse()
 		end
-		if key == "Engine" and value == false and model:GetAttribute("EngineAlwaysOn") == true then
-			return refuse() -- « Moteur toujours allumé » (Custom.SetEngineAlwaysOn)
-		end
+		-- « Moteur toujours allumé » (Custom.SetEngineAlwaysOn) : comme dans vMenu, il garde le moteur allumé quand on
+		-- descend ; la touche moteur peut toujours le couper (avant le 2026-11-22 : coupure refusée)
 		if key == "Engine" and value == true and model:GetAttribute("EngineDead") == true then
 			return refuse() -- moteur détruit (VehicleDamage) : il faut réparer
 		end
@@ -867,6 +866,13 @@ local function setupVehicle(model)
 					Access.EjectOccupant(model, seat, prev[1], prev[2])
 				end
 				if isDriver then
+					-- le conducteur descend : moteur coupé (et avec lui tous les feux et les néons), sauf « Moteur toujours
+					-- allumé » (Custom.SetEngineAlwaysOn, RMenu). Coupé ainsi et non par la touche moteur
+					-- (EngineOffByDriver reste vide) : il redémarre quand on remonte, comme GTA. Demande de
+					-- l'utilisateur, 2026-11-22 (remplace « le moteur continue de tourner en sortant », 2026-11-18).
+					if model:GetAttribute("EngineAlwaysOn") ~= true and model:GetAttribute("Engine") == true then
+						model:SetAttribute("Engine", false)
+					end
 					model:SetAttribute("DriverUserId", 0)
 					model:SetAttribute("Horn", false)
 					model:SetAttribute("Brake", false)
@@ -891,6 +897,11 @@ local function setupVehicle(model)
 			refreshPrompts(model)
 		end)
 	end
+	-- néons (lumières serveur) : éteints moteur coupé, rallumés au démarrage (Custom.RefreshNeons lit Engine)
+	model:GetAttributeChangedSignal("Engine"):Connect(function()
+		pcall(Custom.RefreshNeons, model)
+	end)
+	pcall(Custom.RefreshNeons, model)
 	-- invites : portes / capot / coffre (G), monter (F), remettre sur ses roues (F, maintenu)
 	for _, prompt in ipairs(model:GetDescendants()) do
 		if not prompt:IsA("ProximityPrompt") then

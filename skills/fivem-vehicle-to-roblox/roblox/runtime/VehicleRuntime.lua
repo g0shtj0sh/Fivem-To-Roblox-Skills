@@ -943,8 +943,12 @@ function Runtime:_lightProfile()
 end
 
 function Runtime:_updateLights(s)
-	-- véhicule rendu invisible (VehicleCustomization.SetVisible) : tous les feux éteints
-	if s.Invisible then
+	-- véhicule rendu invisible (VehicleCustomization.SetVisible) : tous les feux éteints.
+	-- Moteur coupé : TOUS les feux éteints aussi (phares, feux de jour, arrière, stop, recul, clignotants, détresse,
+	-- plaque, plafonnier, feux additionnels, gyrophares ; néons : VehicleCustomization.RefreshNeons). Les réglages
+	-- (niveau des phares, clignotant posé) restent : ils reviennent au redémarrage. Seule l'alarme (détresse qui
+	-- clignote sur un véhicule garé) passe outre. Demande de l'utilisateur, 2026-11-22.
+	if s.Invisible or (not s.Engine and not s.Alarm) then
 		for role in pairs(self.LightObjects or {}) do
 			self:_setRole(role, false)
 		end
@@ -955,6 +959,16 @@ function Runtime:_updateLights(s)
 		-- 2026-11-19 ; la condition « not s.Invisible » plus bas n'était jamais atteinte)
 		self:_cabinLight("interior", false)
 		self:_cabinLight("plate", false)
+		-- pièces de gyrophare (allumées par la boucle plus bas, hors _setRole) : éteintes aussi
+		for i, parts in pairs(self.SirenParts or {}) do
+			local key = "siren" .. i
+			if self.LastLightState[key] ~= "0" then
+				self.LastLightState[key] = "0"
+				for _, p in ipairs(parts) do
+					setPart(p, false)
+				end
+			end
+		end
 		return
 	end
 	-- temps serveur : les clignotants et la sirène battent en même temps chez tous les joueurs (os.clock déphasait)
