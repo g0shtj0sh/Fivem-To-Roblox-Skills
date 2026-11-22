@@ -126,6 +126,9 @@ function Drive.Stop()
 	for _, c in ipairs(a.conns) do
 		c:Disconnect()
 	end
+	if a.ghost and Drive.RestoreGhost then
+		Drive.RestoreGhost(a)
+	end
 	if a.unbind then
 		pcall(a.unbind)
 	end
@@ -150,13 +153,53 @@ end
 -- Chaque conducteur simule SA voiture ; celle d'un autre joueur n'est chez lui qu'une copie reçue par le réseau, que
 -- le moteur physique traite comme un objet de masse infinie qui avance. Mesuré (Play 2 joueurs, 2026-11-19, 355e
 -- contre m422, 41 + 41 km/h de face) : chacune repartait EN ARRIÈRE à 35-38 km/h, comme une balle sur un mur qui
--- avance. Correction : au pas du choc, la vitesse dans l'axe des deux véhicules est remplacée par celle d'un choc
--- entre deux masses (quantité de mouvement conservée, rebond PairElasticity), calculée avec la vitesse de l'autre
--- AVANT le choc ; les deux clients font le même calcul et trouvent le même résultat. Un véhicule dont ce client
--- possède aussi la physique (voiture garée réveillée, VehicleAccess) n'est pas concerné : là, la physique est juste.
-Drive.PairImpactDv = 2 -- m/s de variation horizontale en un pas : seuil de choc
+-- avance. 1re correction (2026-11-19) : au pas du choc, vitesse dans l'axe des deux véhicules = choc entre deux masses.
+-- Banc 2 joueurs du 2026-11-22 (crash2_bench, 355e contre 355e) : encore faux dès que les deux clients ne voient pas
+-- le choc au même moment.
+--   * arrière 60 km/h sur voiture arrêtée (attendu : les deux à ~30) : la percutante s'arrêtait net (elle retapait
+--     la copie de l'autre, encore immobile chez elle le temps de la réplication), la percutée partait à 18 km/h (son
+--     client voyait le choc 0,25 s plus tard, avec la vitesse de l'autre déjà réduite) ;
+--   * côté 50 km/h : la percutée 14 km/h et AUCUN dégât (sa variation de vitesse < MinImpact) ;
+--   * de face 60 + 60 : arrêt juste, mais 0,5 m de hausse, roulis 18-31°, lacet 31° et 13 km/h de recul pour l'une
+--     (la copie, de masse infinie, pousse aussi en hauteur et en rotation, et continue d'avancer).
+-- Méthode actuelle :
+--   1. le premier client qui voit le choc calcule le résultat pour LES DEUX (quantité de mouvement conservée, rebond
+--      PairElasticity), avec sa vitesse et celle de la copie juste avant ; la poussée du pas (hausse, rotation,
+--      dérive) est ramenée à la part réelle du choc (facteur k) ;
+--   2. il l'envoie (« PairHit ») : le serveur applique les dégâts aux deux (même Δv, chacun de son côté) et transmet
+--      au conducteur de l'autre sa variation de vitesse ; s'il a vu le choc plus tard, ou pas encore, il l'adopte (le
+--      plus ancien GetServerTimeNow l'emporte des deux côtés) ;
+--   3. la copie de l'autre ne nous touche plus (groupe fantôme, local) tant qu'elle est en retard sur la vraie
+--      voiture : au moins PairGhostMin, jusqu'à ce qu'elles ne se chevauchent plus, au plus PairGhostMax.
+-- Voiture qui retombe sur une autre : pas de changement de vitesse (le sol porte celle du dessous), mais le client
+-- de celle du dessus fait appliquer à l'autre les dégâts du toit. Une voiture garée réveillée (simulée par nous,
+-- VehicleAccess) n'est pas concernée : là, la physique est juste.
+Drive.PairImpactDv = 0.6 -- m/s de variation horizontale en une image (60 Hz) : seuil de choc. 2 avant le 2026-11-22 :
+-- un second contact lent (on rattrape l'autre, qui freine) restait à la physique, et contre une copie de masse
+-- infinie la voiture montait dessus (roulis 41-44°). Un freinage à 1 g fait 0,16 m/s par image : seul un contact
+-- (avec une voiture d'un autre joueur à portée, qui se rapproche) atteint 0,6.
+Drive.PairVerticalDv = 2 -- m/s de variation verticale : retombée sur l'autre
 Drive.PairElasticity = 0.05
-Drive.PairWindow = 0.35 -- s : la copie de l'autre continue d'avancer le temps d'un aller-retour réseau ; corrigé pendant
+Drive.PairWindow = 0.5 -- s : arbitrage entre les deux clients, et à-coups de la copie annulés pendant
+Drive.PairStepDv = 1 -- m/s dans l'axe du choc en un pas, pendant la fenêtre : poussée de la copie, annulée
+Drive.PairSnapDv = 0.5 -- m/s : rapprochement en dessous duquel un à-coup contre une copie est un rattrapage réseau
+Drive.PairSnapRel = 1.5 -- m/s : … à condition que les deux ne bougent presque pas l'une par rapport à l'autre
+Drive.PairGhostMin = 0.4 -- s : le temps que la copie de l'autre reflète le choc (réplication)
+Drive.PairGhostMax = 3 -- s
+-- Après le choc, chaque client a arrêté sa voiture contre la copie EN RETARD de l'autre : les vraies voitures finissent
+-- l'une dans l'autre (de face 60 + 60 km/h : centres CROISÉS, mesuré 2026-11-22). Chacune s'écarte alors de l'autre
+-- dans l'axe du choc jusqu'à la distance de deux pare-chocs moins PairCrumple (tôle écrasée), à PairSeparate de plus
+-- que la vraie voiture de l'autre : un rebond réel (coefficient 0,1-0,2 à 60 km/h) est du même ordre.
+Drive.PairSeparate = 2.5 -- m/s
+Drive.PairSeparateMaxDv = 0.02 -- m/s par pas au plus (≈ 5 m/s² à 240 Hz) : poussée douce, jamais de lancer
+Drive.PairCrumple = 1 -- m : écrasement total des deux tôles laissé
+Drive.PairFullAngle = 50 -- ° entre rapprochement et axe des centres : en deçà, choc plein
+Drive.PairTiltDamp = 0.96 -- par pas à 240 Hz : vitesses de tangage et de roulis divisées par ~10 en 0,25 s, après un choc
+-- Mémoire d'un choc avec chaque autre voiture : un message « PairHit » de l'autre arrivé après la fenêtre (0,6 s sous
+-- charge, mesuré 2026-11-22) était pris pour un NOUVEAU choc et réappliqué (les deux renvoyées à ~30 km/h) ; et un
+-- second à-coup contre la même voiture garde l'axe du premier (centres croisés : l'axe recalculé s'inversait).
+Drive.PairMemory = 2 -- s
+Drive.PairGhostGroup = "FiveMVehicleDebris" -- groupe déjà non collisionnable avec les véhicules (VehicleAccess)
 local CollectionService = game:GetService("CollectionService")
 local XZ = Vector3.new(1, 0, 1)
 
@@ -203,50 +246,371 @@ local function otherVehicleInContact(car, root, spm)
 	return best
 end
 
--- vitesse corrigée (monde, studs/s) ou nil
-local function pairImpact(a, root, vWorld, now)
-	local spm = a.spm
-	local pair = a.pair
-	if not pair then
-		if not a.prevVel or ((vWorld - a.prevVel) * XZ).Magnitude / spm < Drive.PairImpactDv then
-			return nil
-		end
-		local other = otherVehicleInContact(a.car, root, spm)
-		if not other then
-			return nil
-		end
-		local oroot = other.PrimaryPart
-		pair = {
-			root = oroot,
-			mB = oroot.AssemblyMass,
-			vB = a.prevOther and a.prevOther[other] or oroot.AssemblyLinearVelocity,
-			vA = a.prevVel,
-			untilT = now + Drive.PairWindow,
-		}
-		a.pair = pair
+-- la copie de l'autre véhicule passe dans le groupe fantôme, chez nous seulement (propriété non répliquée)
+local function restoreGhost(a)
+	local g = a.ghost
+	if not g then
+		return
 	end
-	if now > pair.untilT or not pair.root.Parent then
-		a.pair = nil
+	a.ghost = nil
+	for p, group in pairs(g.saved) do
+		if p.Parent and p.CollisionGroup == Drive.PairGhostGroup then
+			p.CollisionGroup = group
+		end
+	end
+end
+Drive.RestoreGhost = restoreGhost
+
+-- vOther : vitesse estimée de la VRAIE voiture de l'autre après le choc (la copie, en retard, ne la montre pas encore)
+-- demi-boîte (m) du véhicule, lue dans sa VehicleConfig
+local halfCache = setmetatable({}, { __mode = "k" })
+local function halfOf(model)
+	local h = halfCache[model]
+	if h then
+		return h
+	end
+	h = Vector3.new(1, 0.8, 2.3)
+	local m = model:FindFirstChild("VehicleConfig")
+	local ok, cfg = pcall(function()
+		return m and require(m)
+	end)
+	local b = ok and cfg and cfg.Bounds
+	if b then
+		h = Vector3.new(b.Max[1] - b.Min[1], b.Max[2] - b.Min[2], b.Max[3] - b.Min[3]) / 2
+	end
+	halfCache[model] = h
+	return h
+end
+-- étendue (m) de la boîte du véhicule dans la direction n (monde)
+local function extentAlong(model, cf, n)
+	local h = halfOf(model)
+	return math.abs(n:Dot(cf.RightVector)) * h.X + math.abs(n:Dot(cf.UpVector)) * h.Y + math.abs(n:Dot(cf.LookVector)) * h.Z
+end
+
+-- vOther : vitesse estimée de la VRAIE voiture de l'autre après le choc (la copie, en retard, ne la montre pas encore) ;
+-- n : axe du choc (de l'autre vers nous) au moment où on l'a vu
+local function ghostCopy(a, other, vOther, n, vPre)
+	if a.ghost and a.ghost.model == other then
+		a.ghost.t0 = os.clock()
+		a.ghost.vOther = vOther or a.ghost.vOther
+		a.ghost.n = n or a.ghost.n
+		a.ghost.vPre = vPre or a.ghost.vPre
+		return
+	end
+	restoreGhost(a)
+	local saved = {}
+	for _, p in ipairs(other:GetDescendants()) do
+		if p:IsA("BasePart") and p.CanCollide and p.CollisionGroup ~= Drive.PairGhostGroup then
+			saved[p] = p.CollisionGroup
+			p.CollisionGroup = Drive.PairGhostGroup
+		end
+	end
+	a.ghost = { model = other, saved = saved, t0 = os.clock(), checkAt = 0, vOther = vOther, n = n, vPre = vPre }
+end
+
+local ghostOverlap = OverlapParams.new()
+ghostOverlap.FilterType = Enum.RaycastFilterType.Include
+ghostOverlap.RespectCanCollide = false
+-- Rend la vitesse corrigée (ou nil). Tant que les deux se chevauchent (après PairGhostMin), on s'écarte de la copie
+-- à PairSeparate (chacun de son côté) : de face, chaque client arrête sa voiture contre la copie EN RETARD de
+-- l'autre, les vraies voitures finissent l'une dans l'autre (60 + 60 km/h : centres à 1 m, mesuré 2026-11-22) ; rendre
+-- la collision ainsi les faisait exploser (roulis 49°, 1 m de hausse).
+local function updateGhost(a, root, now)
+	local g = a.ghost
+	if not g then
 		return nil
 	end
-	local d = (root.Position - pair.root.Position) * XZ
+	local el = now - g.t0
+	local oroot = g.model.PrimaryPart
+	if el > Drive.PairGhostMax or not g.model.Parent or not oroot then
+		restoreGhost(a)
+		return nil
+	end
+	-- remis dans son groupe par une réplication (pièce remplacée, réglage du serveur) : de nouveau fantôme
+	for p in pairs(g.saved) do
+		if p.Parent and p.CollisionGroup ~= Drive.PairGhostGroup then
+			p.CollisionGroup = Drive.PairGhostGroup
+		end
+	end
+	local spm = a.spm
+	local n = g.n
+	if not n then
+		local d = (root.Position - oroot.Position) * XZ
+		n = d.Magnitude > 1e-3 and d.Unit or nil
+	end
+	if not n then
+		return nil
+	end
+	-- la copie montre-t-elle déjà le choc (sa vitesse a fait l'essentiel du chemin vers celle estimée) ? Avant, elle
+	-- est en retard : c'est l'estimation qui compte. Après, c'est elle (l'autre peut freiner fort : à l'arrière, la
+	-- percutée freinait à ~1 g, la percutante la rattrapait dans la copie fantôme puis montait dessus, roulis 41°,
+	-- mesuré 2026-11-22).
+	local vCopy = oroot.AssemblyLinearVelocity
+	if not g.caught then
+		local est = g.vOther and g.vOther:Dot(n)
+		local pre = g.vPre and g.vPre:Dot(n)
+		g.caught = not est or not pre or math.abs(vCopy:Dot(n) - est) <= 0.4 * math.abs(pre - est) + 1 * spm
+	end
+	local vO = g.caught and vCopy or g.vOther or vCopy
+	-- distance des centres dans l'axe du choc (fixé au choc : il s'inversait quand elles se traversaient) contre celle
+	-- de deux voitures pare-chocs contre pare-chocs, moins l'écrasement de la tôle
+	local dist = (root.Position - oroot.Position):Dot(n)
+	local want = (extentAlong(a.car, root.CFrame, n) + extentAlong(g.model, oroot.CFrame, n) - Drive.PairCrumple) * spm
+	if dist < want then
+		if el >= Drive.PairGhostMin then
+			local target = vO:Dot(n) + Drive.PairSeparate * spm
+			local v = root.AssemblyLinearVelocity
+			local cur = v:Dot(n)
+			if cur < target then
+				-- on roule vers l'autre : ce sont NOS freins qui ralentissent (vitesse imposée à la caisse, les pneus
+				-- poussaient au ras du sol et la voiture se cabrait, 20° mesurés le 2026-11-22)
+				local look = root.CFrame.LookVector
+				local fwd = v:Dot(look) / spm
+				-- dès qu'on roule (en avant ou en arrière) vers l'autre. De biais à 45°, une fois la glissade latérale
+				-- mangée par les pneus, chaque voiture repartait dans l'axe de son capot, droit dans l'autre (centres
+				-- à 0,6 m à l'arrêt, mesuré 2026-11-22)
+				local amount = math.clamp((target - cur) / spm / 4, 0.25, 1)
+				if fwd > 0.5 and -look:Dot(n) > 0.3 then
+					return nil, amount
+				elseif fwd < -0.5 and look:Dot(n) > 0.3 then
+					return nil, amount, nil, true -- en marche arrière, c'est l'accélérateur qui freine
+				end
+				-- à l'arrêt ou presque : petite poussée, freins relâchés (sinon ils retiennent les roues). Sous ~0,3 m/s
+				-- les pneus « collent » (VehicleDynamics, VStick) et annulaient 0,02 m/s par pas : départ à 0,6 m/s
+				local step = Drive.PairSeparateMaxDv * spm
+				if math.abs(cur) < 0.6 * spm then
+					step = math.max(step, 0.6 * spm - math.abs(cur))
+				end
+				return v + n * math.min(target - cur, step), nil, true
+			end
+		end
+		return nil
+	end
+	if el < Drive.PairGhostMin or not g.caught or now < g.checkAt then
+		return nil
+	end
+	g.checkAt = now + 0.1
+	local list = {}
+	for p in pairs(g.saved) do
+		if p.Parent then
+			table.insert(list, p)
+		end
+	end
+	ghostOverlap.FilterDescendantsInstances = list
+	for _, p in ipairs(a.car:GetDescendants()) do
+		if p:IsA("BasePart") and p.CanCollide and #Workspace:GetPartsInPart(p, ghostOverlap) > 0 then
+			return nil -- encore l'une dans l'autre (coins) : on attend
+		end
+	end
+	restoreGhost(a)
+	return nil
+end
+
+Drive.PairTrace = {}
+local function pairTrace(line)
+	table.insert(Drive.PairTrace, line)
+	if #Drive.PairTrace > 30 then
+		table.remove(Drive.PairTrace, 1)
+	end
+end
+
+-- roues remises à la vitesse imposée (Dyn.MatchWheelSpeed)
+local function matchWheels(a, v)
+	if a.sim and Dyn.MatchWheelSpeed then
+		Dyn.MatchWheelSpeed(a.sim, -a.root.CFrame:VectorToObjectSpace(v).Z / a.spm)
+	end
+end
+
+local function logPair(a, other, tServer, n)
+	a.pairLog = a.pairLog or setmetatable({}, { __mode = "k" })
+	local rec = a.pairLog[other]
+	if rec and os.clock() - rec.t < Drive.PairMemory then
+		rec.t = os.clock()
+		rec.n = rec.n or n
+		return rec
+	end
+	rec = { t = os.clock(), tServer = tServer, n = n }
+	a.pairLog[other] = rec
+	return rec
+end
+local function recentPair(a, other)
+	local rec = a.pairLog and a.pairLog[other]
+	return rec and os.clock() - rec.t < Drive.PairMemory and rec or nil
+end
+
+-- Rend vitesse et vitesse angulaire corrigées (ou nil), et true si la mesure de dégâts de ce pas est à sauter
+-- (dégâts d'un choc entre joueurs appliqués par le serveur, « PairHit »).
+local function pairImpact(a, root, vWorld, wWorld, now)
+	local spm = a.spm
+	local prev = a.prevVel
+	local pair = a.pair
+	if pair and (now > pair.untilT or not pair.root or not pair.root.Parent) then
+		a.pair = nil
+		pair = nil
+	end
+	if pair then
+		if pair.n and prev and math.abs((vWorld - prev):Dot(pair.n)) / spm > Drive.PairStepDv then
+			return prev, a.prevAng, true -- la copie pousse encore (en retard ou en avance sur la vraie voiture)
+		end
+		return nil
+	end
+	if not prev then
+		return nil
+	end
+	local dvH = ((vWorld - prev) * XZ).Magnitude / spm
+	local dvY = math.abs(vWorld.Y - prev.Y) / spm
+	if dvH < Drive.PairImpactDv and dvY < Drive.PairVerticalDv then
+		return nil
+	end
+	local other = otherVehicleInContact(a.car, root, spm)
+	if not other then
+		return nil
+	end
+	local oroot = other.PrimaryPart
+	local tS = Workspace:GetServerTimeNow()
+	if dvY >= Drive.PairVerticalDv and dvY > dvH then
+		-- choc vertical : on retombe sur l'autre (au-dessus) ; le sol la porte, seules ses dégâts de toit sont à faire
+		if oroot.Position.Y < root.Position.Y - 0.5 * spm and prev.Y < 0 then
+			a.pair = { root = oroot, model = other, untilT = now + Drive.PairWindow, tServer = tS, prevVel = prev }
+			a.pendingPair = { other, Vector3.new(0, -(vWorld.Y - prev.Y), 0), tS, nil, "top" }
+		end
+		return nil
+	end
+	local vB = a.prevOther and a.prevOther[other] or oroot.AssemblyLinearVelocity
+	local d = (root.Position - oroot.Position) * XZ
 	if d.Magnitude < 1e-3 then
 		return nil
 	end
-	local n = d.Unit -- de l'autre véhicule vers le nôtre
-	local mA = root.AssemblyMass
-	local uA, uB = pair.vA:Dot(n), pair.vB:Dot(n)
-	if uA - uB >= 0 then
-		return nil -- ne se rapprochaient pas dans cet axe
+	local rec = recentPair(a, other)
+	local n = rec and rec.n or d.Unit -- de l'autre véhicule vers le nôtre (celui du premier choc s'il est récent)
+	-- choc franc : l'axe est celui du rapprochement (vitesses exactes) et non des centres (la copie de l'autre est en
+	-- retard : de biais à 45°, l'axe des centres penchait vers sa trajectoire et 60 % de la quantité de mouvement se
+	-- perdait, mesuré 2026-11-22). Les deux repartent à la même vitesse (modèle « choc plein » de la reconstruction
+	-- d'accidents). Choc rasant (au-delà de PairFullAngle) : axe des centres, un frottement ne les colle pas.
+	local rel = (prev - vB) * XZ
+	if not rec and rel.Magnitude > 0.5 * spm then
+		local nRel = -rel.Unit
+		if nRel:Dot(n) > math.cos(math.rad(Drive.PairFullAngle)) then
+			n = nRel
+		end
 	end
+	local mA, mB = root.AssemblyMass, oroot.AssemblyMass
+	local uA, uB = prev:Dot(n), vB:Dot(n)
+	if uA - uB > -Drive.PairSnapDv * spm then
+		if rel.Magnitude > Drive.PairSnapRel * spm then
+			-- elles bougent l'une par rapport à l'autre mais pas dans cet axe : contact rasant (coins), laissé à la
+			-- physique. Le traiter en rattrapage rendait la copie fantôme : de biais à 45°, les deux voitures se
+			-- traversaient (mesuré 2026-11-22)
+			return nil
+		end
+		-- ne se rapprochaient pas (ou à peine), et pourtant un à-coup : c'est la copie de l'autre qui rattrape la vraie
+		-- voiture d'un coup (réplication suspendue puis reprise : copie figée 0,5 s à 6 m de sa place, puis saut,
+		-- mesuré de face 60 + 60 le 2026-11-22 : nous renvoyait à 31 km/h en arrière). Aucun choc réel : pas annulé.
+		a.pair = { root = oroot, model = other, n = n, untilT = now + Drive.PairWindow, tServer = tS, prevVel = prev }
+		ghostCopy(a, other, vB, n, vB)
+		logPair(a, other, tS, n)
+		return prev, a.prevAng, true
+	end
+	-- Impulsion au POINT DE CONTACT (reconstruction d'accidents, modèle « choc plein ») : vitesse ET rotation de
+	-- lacet de chacune. Centré : comme avant (rotation nulle). Décalé (coin contre coin) : moins de vitesse perdue,
+	-- et les voitures tournent. Avant (2026-11-22), un choc avant avec 0,4 m de recouvrement arrêtait net les deux.
 	local e = Drive.PairElasticity
-	local u = (mA * uA + pair.mB * uB - pair.mB * e * (uA - uB)) / (mA + pair.mB)
-	-- seule la composante dans l'axe du choc est remplacée ; ce qui est transversal et vertical reste à la physique
-	local cur = vWorld:Dot(n)
-	if math.abs(cur - u) < 0.05 * spm then
-		return nil
+	local t = Vector3.new(-n.Z, 0, n.X) -- horizontal, perpendiculaire à l'axe
+	local cA, cB = root.Position * XZ, oroot.Position * XZ
+	local wA = extentAlong(a.car, root.CFrame, t) * spm
+	local wB = extentAlong(other, oroot.CFrame, t) * spm
+	local tA, tB = cA:Dot(t), cB:Dot(t)
+	local lo, hi = math.max(tA - wA, tB - wB), math.min(tA + wA, tB + wB)
+	local tc = lo < hi and (lo + hi) / 2 or (tA + tB) / 2 -- milieu de la zone qui se recouvre
+	local sA = cA:Dot(n) - extentAlong(a.car, root.CFrame, n) * spm -- face de A tournée vers B
+	local sB = cB:Dot(n) + extentAlong(other, oroot.CFrame, n) * spm -- face de B tournée vers A
+	local pC = n * ((sA + sB) / 2) + t * tc
+	local rA, rB = pC - cA, pC - cB
+	local function crossY(r, vec) -- (r × vec).Y
+		return r.Z * vec.X - r.X * vec.Z
 	end
-	return vWorld + n * (u - cur)
+	local hA, hB = halfOf(a.car), halfOf(other)
+	local IA = mA * ((2 * hA.X * spm) ^ 2 + (2 * hA.Z * spm) ^ 2) / 12 -- lacet, boîte pleine
+	local IB = mB * ((2 * hB.X * spm) ^ 2 + (2 * hB.Z * spm) ^ 2) / 12
+	local wAy = (a.prevAng or wWorld).Y
+	local wBy = oroot.AssemblyAngularVelocity.Y
+	local vpA = prev + Vector3.new(wAy * rA.Z, 0, -wAy * rA.X)
+	local vpB = vB + Vector3.new(wBy * rB.Z, 0, -wBy * rB.X)
+	local vrel = (vpA - vpB):Dot(n)
+	if vrel >= 0 then
+		vrel = uA - uB -- les points de contact s'éloignent déjà (rotation) : choc compté au centre
+		rA, rB = Vector3.zero, Vector3.zero
+	end
+	local rnA, rnB = crossY(rA, n), crossY(rB, n)
+	local k = 1 / mA + 1 / mB + rnA * rnA / IA + rnB * rnB / IB
+	local j = -(1 + e) * vrel / k -- impulsion reçue par nous, le long de n
+	local dvA, dvB = n * (j / mA), -n * (j / mB)
+	local dwA, dwB = rnA * j / IA, -rnB * j / IB
+	local v = prev + dvA
+	-- rotation : celle d'avant le choc + celle de l'impulsion ; le reste du pas (tangage, roulis donnés par la copie
+	-- de masse infinie) est jeté
+	local w = (a.prevAng or Vector3.zero) + Vector3.new(0, dwA, 0)
+	a.pair = { root = oroot, model = other, n = n, untilT = now + Drive.PairWindow, tServer = tS, prevVel = prev, prevAng = a.prevAng }
+	ghostCopy(a, other, vB + dvB, n, vB)
+	logPair(a, other, tS, n)
+	a.pendingPair = { other, dvB, tS, dvA, nil, dwB }
+	-- trace (bancs d'essai, 30 dernières lignes) : chocs calculés ici et reçus de l'autre client
+	pairTrace(string.format("local t=%.2f uA=%.1f uB=%.1f vrel=%.1f dvA=%.1f dvB=%.1f dwA=%.2f n=(%.2f,%.2f)",
+		tS % 100, uA / spm, uB / spm, vrel / spm, dvA.Magnitude / spm, dvB.Magnitude / spm, dwA, n.X, n.Z))
+	return v, w, true
+end
+
+-- Variation de vitesse calculée par le client de l'autre conducteur (serveur, « PairHit ») : dvVec en studs/s,
+-- tServer = heure serveur où il a vu le choc.
+function Drive.OnPairHit(fromCar, dvVec, tServer, dwY)
+	local a = Drive.Active
+	if not a or typeof(fromCar) ~= "Instance" or typeof(dvVec) ~= "Vector3" or type(tServer) ~= "number" then
+		return
+	end
+	dwY = (type(dwY) == "number" and dwY == dwY) and math.clamp(dwY, -12, 12) or 0 -- rad/s de lacet
+	pairTrace(string.format("remote t=%.2f dv=%.1f dw=%.2f pair=%s", tServer % 100, dvVec.Magnitude / a.spm, dwY,
+		tostring(a.pair and a.pair.model == fromCar and (a.pair.tServer % 100))))
+	if dvVec.Magnitude / a.spm > 60 then
+		return
+	end
+	local root = a.root
+	local pair = a.pair
+	if pair and pair.model == fromCar and os.clock() <= pair.untilT then
+		if pair.tServer <= tServer then
+			return -- nous l'avons vu en premier : notre calcul fait foi (l'autre client adopte le nôtre)
+		end
+		-- vu avant nous par l'autre (nous, avec sa copie en retard) : son calcul fait foi, tel quel (même axe des deux
+		-- côtés, sinon chacun corrigeait dans le sien)
+		local cur = root.AssemblyLinearVelocity
+		local v = pair.prevVel + dvVec
+		v = Vector3.new(v.X, cur.Y, v.Z)
+		root.AssemblyAngularVelocity = (pair.prevAng or Vector3.zero) + Vector3.new(0, dwY, 0)
+		root.AssemblyLinearVelocity = v
+		a.prevVel = v
+		matchWheels(a, v)
+		pair.tServer = tServer
+		return
+	end
+	if recentPair(a, fromCar) then
+		return -- ce choc est déjà traité ici (message arrivé après la fenêtre) : ne pas le réappliquer
+	end
+	-- pas encore vu ici (la copie de l'autre n'est pas encore arrivée au contact)
+	local oroot = fromCar.PrimaryPart
+	local vCopy = (a.prevOther and a.prevOther[fromCar]) or (oroot and oroot.AssemblyLinearVelocity) or Vector3.zero
+	local mRatio = oroot and root.AssemblyMass / math.max(oroot.AssemblyMass, 1e-3) or 1
+	local v = root.AssemblyLinearVelocity + dvVec
+	root.AssemblyLinearVelocity = v
+	root.AssemblyAngularVelocity += Vector3.new(0, dwY, 0)
+	a.prevVel = v
+	a.prevAng = root.AssemblyAngularVelocity
+	matchWheels(a, v)
+	local h = dvVec * XZ
+	a.pair = {
+		root = fromCar.PrimaryPart, model = fromCar, n = h.Magnitude > 1e-3 and h.Unit or nil,
+		untilT = os.clock() + Drive.PairWindow, tServer = tServer, prevVel = v - dvVec,
+	}
+	ghostCopy(a, fromCar, vCopy - dvVec * mRatio, h.Magnitude > 1e-3 and h.Unit or nil, vCopy)
+	logPair(a, fromCar, tServer, h.Magnitude > 1e-3 and h.Unit or nil)
 end
 
 -- vitesses des autres véhicules au pas précédent (avant un choc, la copie reçue n'a pas encore bougé)
@@ -412,6 +776,16 @@ local function step(a, dt)
 		-- roue arrachée (WheelState 3, VehicleDamage) : le contact reste (le moyeu frotte, VehicleDynamics)
 		local state = w.state or 0
 		local hit = Workspace:Spherecast(origin, r * 0.95, -up * len, a.params)
+		-- pièce non solide (roue d'une autre voiture, décor) touchée par le rayon : pas un sol. Les rayons
+		-- ignorent CanCollide (les herses, non solides, doivent être vues) : on roulait sur les cylindres de roues
+		-- d'une voiture qu'on percutait, l'avant montait dessus (mesuré 2026-11-22, Play 2 joueurs)
+		for _ = 1, 3 do
+			if not hit or hit.Instance.CanCollide or isSpike(hit.Instance) then
+				break
+			end
+			a.params:AddToFilter(hit.Instance)
+			hit = Workspace:Spherecast(origin, r * 0.95, -up * len, a.params)
+		end
 		local c = { grounded = false, x = 0, xdot = 0, vLong = 0, vLat = 0, grip = 1 }
 		if hit and state == 0 and isSpike(hit.Instance) then
 			-- herse (tag SpikeStrip) : le serveur vérifie et crève le pneu (« Spike »)
@@ -495,10 +869,36 @@ local function step(a, dt)
 	local vWorld = root.AssemblyLinearVelocity
 	-- choc contre la voiture d'un autre joueur : vitesse corrigée (voir pairImpact) AVANT la mesure des dégâts, qui
 	-- comptait sinon le double (rebond sur une copie de masse infinie)
-	local fixed = pairImpact(a, root, vWorld, os.clock())
-	if fixed then
-		root.AssemblyLinearVelocity = fixed
-		vWorld = fixed
+	local fixedV, fixedW, pairSkip = pairImpact(a, root, vWorld, root.AssemblyAngularVelocity, os.clock())
+	if fixedV then
+		root.AssemblyLinearVelocity = fixedV
+		vWorld = fixedV
+		matchWheels(a, fixedV)
+	end
+	if fixedW then
+		root.AssemblyAngularVelocity = fixedW
+	end
+	local sepV, sepBrake, sepNudge, sepReverse = updateGhost(a, root, os.clock())
+	if sepBrake and sepReverse then
+		inp.Throttle, inp.Brake = math.max(inp.Throttle or 0, sepBrake), 0
+	elseif sepBrake then
+		inp.Brake, inp.Throttle = math.max(inp.Brake or 0, sepBrake), 0
+	end
+	if sepNudge then
+		inp.Brake, inp.Handbrake, inp.Throttle = 0, false, 0
+	end
+	if sepV then
+		root.AssemblyLinearVelocity = sepV
+		vWorld = sepV
+		-- roues comprises : freinée par la caisse et poussée par des roues encore lancées, elle se cabrait (22°)
+		matchWheels(a, sepV)
+	end
+	-- tangage et roulis amortis tant que dure l'après-choc entre joueurs : la caisse plongeait au choc (-6°) puis la
+	-- suspension la renvoyait nez en l'air (12-23°, mesuré à l'arrière 60 km/h le 2026-11-22) ; lacet libre
+	if a.ghost or a.pair then
+		local wl = cf:VectorToObjectSpace(root.AssemblyAngularVelocity)
+		local f = Drive.PairTiltDamp
+		root.AssemblyAngularVelocity = cf:VectorToWorldSpace(Vector3.new(wl.X * f, wl.Y, wl.Z * f))
 	end
 	rememberOthers(a)
 	findPedestrians(a, root, cf, vWorld, os.clock())
@@ -511,7 +911,7 @@ local function step(a, dt)
 	if root.Anchored or not a.prevVel then
 		a.impactArmedAt = os.clock() + 0.5
 	end
-	if Damage and a.prevVel and not root.Anchored and os.clock() >= (a.impactArmedAt or 0) then
+	if Damage and a.prevVel and not root.Anchored and not pairSkip and os.clock() >= (a.impactArmedAt or 0) then
 		-- choc 3D (VehicleDamage.Measure) : horizontal, vertical (toit, dessous) et rotation stoppée net (tonneaux)
 		local dv = cf:VectorToObjectSpace(vWorld - a.prevVel) / spm
 		local dw = a.prevAng and cf:VectorToObjectSpace(wWorld - a.prevAng) or Vector3.zero
@@ -668,6 +1068,15 @@ function Drive.Start(car)
 	Dyn.SetWheelStates(sim, wheelStates(car))
 	-- chocs mesurés dans la boucle physique, envoyés au serveur ici (VehicleDamage)
 	table.insert(a.conns, RunService.Heartbeat:Connect(function()
+		-- choc entre joueurs (pairImpact) : calcul pour les deux, envoyé au serveur (dégâts des deux, transmis à l'autre)
+		local pp = a.pendingPair
+		if pp then
+			a.pendingPair = nil
+			local remote = folder:FindFirstChild("VehicleEvent")
+			if remote then
+				remote:FireServer(car, "PairHit", pp[1], pp[2], pp[3], pp[4], pp[5], pp[6])
+			end
+		end
 		local imp = a.pendingImpact
 		if imp then
 			a.pendingImpact = nil

@@ -546,6 +546,38 @@ roue debout, deux joueurs, téléphone.
   mouvement, `PairElasticity`), avec la vitesse de l'autre au pas précédent ; « l'autre » = `DriverUserId` d'un autre
   joueur (`ReceiveAge` ne distingue pas). Mesuré : deux 355e → 0 km/h toutes les deux ; 355e contre m422 (1,9 × plus
   lourde) → 15 km/h en arrière et 10 km/h en avant (théorie 12,8). Reste un à-coup d'un pas avant la correction.
+  **Refait le 2026-11-22** (banc `crash2_bench.lua` du projet brolver-rp : 2 clients Studio, départ synchronisé sur
+  l'heure serveur, chaque voiture mesurée sur SON client + ce que l'autre en voit ; 355e contre 355e). La 1re version
+  ne tenait que si les deux clients voyaient le choc au même instant ; mesuré avant : arrière 60 → voiture arrêtée,
+  la percutante s'arrêtait net et la percutée partait à 18 km/h (attendu 30/30) ; côté 50 km/h, la percutée ne
+  prenait AUCUN dégât ; de face 60 + 60, 0,5 m de hausse, roulis 31°. Méthode actuelle (VehicleDrive, en tête de
+  « choc contre le véhicule d'un autre joueur ») :
+  1. Le premier client qui voit le choc (seuil `PairImpactDv` 0,6 m/s en un pas, une voiture d'un autre joueur à
+     portée) calcule pour LES DEUX l'impulsion au point de contact (vitesse + lacet ; axe = rapprochement si à moins
+     de `PairFullAngle` 50° de l'axe des centres, sinon axe des centres ; rebond `PairElasticity`). Il l'envoie
+     (« PairHit ») : le serveur applique les dégâts aux deux (même Δv), transmet à l'autre conducteur sa variation de
+     vitesse et de lacet ; le plus ancien `GetServerTimeNow` fait foi des deux côtés ; un message arrivé après la
+     fenêtre n'est pas réappliqué (`PairMemory` 2 s).
+  2. La copie de l'autre passe en groupe fantôme (local) tant qu'elle est en retard : chaque client arrête sa voiture
+     contre la copie EN RETARD de l'autre, les vraies finissent l'une dans l'autre. Elles s'écartent jusqu'à deux
+     pare-chocs moins `PairCrumple` (1 m) : par les FREINS si on roule vers l'autre (une vitesse imposée à la caisse
+     faisait pousser les pneus au ras du sol : cabrage 20°), sinon petite poussée (départ 0,6 m/s : sous `VStick` les
+     pneus collent). La collision revient quand la copie montre le choc, qu'elles sont à distance et ne se touchent plus.
+  3. Un à-coup contre une copie SANS rapprochement réel (< 1,5 m/s) = rattrapage réseau (copie figée puis sautée) :
+     annulé. Avec un rapprochement mais pas dans l'axe = contact de coin : laissé à la physique (sinon traversée).
+  4. Roues remises à la nouvelle vitesse (`Dyn.MatchWheelSpeed`) ; tangage/roulis amortis pendant l'après-choc.
+  5. Les rayons de suspension ignorent les pièces non solides (sauf herses) : ils touchaient les cylindres de roues
+     de la voiture percutée et l'avant montait dessus (cause des « voitures qui grimpent »).
+  Mesuré (Studio PC, 2 clients) : de face 60 + 60 → 0/0 km/h, centres à 3,8 m, hausse ≤ 0,3 m, dégâts 17,5/17,5,
+  positions identiques sur les deux écrans ; 100 + 100 → 0/0, dégâts 28,5/28,5, rien ne bascule ; arrière 60 → 0 :
+  28/31 km/h, dégâts 8,8/8,8, écart final 4 m ; côté 50 → 0 : 24/26 km/h, 7,5/7,5 ; biais 45° 60 + 60 : centres à
+  4 m, dégâts égaux, rien ne bascule ; avant décalé (0,4 m de recouvrement) : Δv 12 au lieu de 17,5, lacet 55° et
+  135° ; 80 contre 20 : 26/31 km/h (attendu 28/31) ; PIT 75 sur 60 : Δv 1,8 chacune, lacet de la poussée.
+  Limites : arrière 60 → 0, la percutante a encore eu une fois sur deux un roulis passager (20°, vu 0,57 de « haut »
+  par le serveur) APRÈS la séparation, cause non isolée ; voiture poussée de côté arrêtée en ~0,3 s (adhérence
+  latérale GTA ~1,6 g, hors chocs) ; chute d'une voiture sur une autre : aucun changement de vitesse (le sol porte
+  celle du dessous), dégâts de toit seulement si la voiture du dessus en prend ; non mesuré : vraie latence Internet,
+  téléphone, autres modèles que la 355e.
 - **Piéton** : poussé DEBOUT devant la voiture comme par un chasse-neige (51 m à 40 km/h, aucun dégât). Le client du
   conducteur le repère dans l'emprise de la voiture (`PedMinSpeed`), le serveur valide (« HitPed » : conducteur,
   distance, vitesse plafonnée à celle qu'il voit, 1 coup par seconde et par victime), déclenche le BindableEvent

@@ -919,6 +919,21 @@ function Dyn.new(cfg, comLocal, overrides, upgrades)
 	return sim
 end
 
+-- Roues remises à la vitesse du véhicule (vLong, m/s, + avant) : après une vitesse imposée d'un coup (choc entre
+-- joueurs, VehicleDrive). Sinon les roues tournent encore à l'ancienne vitesse et poussent comme un patinage : à
+-- l'arrière, la percutante poussait l'autre et cabrait (23°), mesuré 2026-11-22.
+function Dyn.MatchWheelSpeed(sim, vLong)
+	local S, P = sim.S, sim.P
+	for i, w in ipairs(P.wheels) do
+		if w.radius and w.radius > 0 then
+			S.omega[i] = vLong / w.radius
+			S.slip[i] = 0
+			S.slipV[i] = 0
+			S.slipLong[i] = 0
+		end
+	end
+end
+
 -- Remet l'état dynamique au repos (roues arrêtées, ralenti, 1re) : après un téléport, une remise sur
 -- les roues ou une chute rattrapée, sinon les roues lancées en l'air relancent le véhicule.
 function Dyn.reset(sim)

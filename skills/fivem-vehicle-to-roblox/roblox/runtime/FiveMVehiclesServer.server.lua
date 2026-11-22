@@ -200,6 +200,7 @@ task.spawn(function()
 		end
 	end
 end)
+local pairSeen = setmetatable({}, { __mode = "k" }) -- véhicule -> { autre véhicule -> os.clock() } (« PairHit »)
 local function impactCap(model)
 	local now = os.clock()
 	local function peak(m)
@@ -307,6 +308,64 @@ remote.OnServerEvent:Connect(function(player, model, action, key, value, ...)
 		-- un client pouvait mettre sa voiture en feu avec ses passagers (audit 2026-11-19)
 		strength = math.min(strength, impactCap(model))
 		Damage.Apply(model, Vector3.new(dx, dy, dz), strength)
+	elseif action == "PairHit" then
+		-- choc entre deux voitures conduites, calculé par le client qui l'a vu le premier (VehicleDrive.pairImpact) :
+		-- other = l'autre véhicule, dvOther / dvSelf = variations de vitesse (studs/s, monde), tS = heure serveur du
+		-- choc, mode « top » = retombée sur l'autre (dégâts de toit, pas de vitesse transmise). Le serveur applique les
+		-- dégâts aux deux (même Δv de part et d'autre : avant, la percutée n'en prenait souvent aucun, mesuré
+		-- 2026-11-22) et transmet au conducteur de l'autre sa variation de vitesse.
+		local other, dvOther, tS, dvSelf, mode, dwOther = key, value, ...
+		if not Damage or not isDriver(player, model) or not allowed(player, "impact") then
+			return
+		end
+		if typeof(other) ~= "Instance" or other == model or not CollectionService:HasTag(other, TAG) then
+			return
+		end
+		if typeof(dvOther) ~= "Vector3" or type(tS) ~= "number" or tS ~= tS then
+			return
+		end
+		if (dvSelf ~= nil and typeof(dvSelf) ~= "Vector3") or (mode ~= nil and mode ~= "top") then
+			return
+		end
+		local r1, r2 = model.PrimaryPart, other.PrimaryPart
+		if not r1 or not r2 or math.abs(tS - workspace:GetServerTimeNow()) > 3 then
+			return
+		end
+		local spm = spmOf(model)
+		-- le serveur voit les deux en retard : 12 m + 0,5 s de trajet de chacune
+		local reach = 12 * spm + 0.5 * (r1.AssemblyLinearVelocity.Magnitude + r2.AssemblyLinearVelocity.Magnitude)
+		if (r1.Position - r2.Position).Magnitude > reach then
+			return
+		end
+		-- un seul calcul par choc : le premier reçu (celui du client qui l'a vu le premier) ; l'autre client l'adopte
+		local now = os.clock()
+		local last = math.max(pairSeen[model] and pairSeen[model][other] or 0, pairSeen[other] and pairSeen[other][model] or 0)
+		if now - last < 0.6 then
+			return
+		end
+		pairSeen[model] = pairSeen[model] or setmetatable({}, { __mode = "k" })
+		pairSeen[model][other] = now
+		local function hit(m, dv)
+			local mag = dv.Magnitude
+			if mag > 1e-3 and m.PrimaryPart then
+				local s = math.min(mag / spmOf(m), impactCap(m))
+				-- direction du centre vers le point touché = à l'opposé de la variation de vitesse (VehicleDamage)
+				Damage.Apply(m, m.PrimaryPart.CFrame:VectorToObjectSpace(-dv / mag), s)
+			end
+		end
+		hit(other, dvOther)
+		if dvSelf then
+			hit(model, dvSelf)
+		end
+		if mode == nil and dvOther.Magnitude / spm <= 60 then
+			local driverId = other:GetAttribute("DriverUserId")
+			local drv = type(driverId) == "number" and Players:GetPlayerByUserId(driverId)
+			if drv and drv ~= player then
+				-- dwOther : variation de sa vitesse de lacet (rad/s, choc décalé), bornée
+				local dw = (type(dwOther) == "number" and dwOther == dwOther) and math.clamp(dwOther, -12, 12) or 0
+				remote:FireClient(drv, "PairHit", model, dvOther, tS, dw)
+			end
+		end
 	elseif action == "Spike" then
 		-- roue sur une herse (tag SpikeStrip), signalée par le client du conducteur : le serveur vérifie qu'une herse
 		-- est bien sous cette roue (positions vues par le serveur) puis crève le pneu (VehicleDamage.Puncture)

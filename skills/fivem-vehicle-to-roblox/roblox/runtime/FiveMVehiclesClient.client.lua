@@ -212,12 +212,17 @@ end
 
 local knockToken = nil -- renversement en cours (« Knockdown ») : le dernier reçu décide de la fin
 -- Descente : le serveur choisit où poser le personnage ; le client, qui possède sa physique, s'y place.
-remote.OnClientEvent:Connect(function(kind, cf, key, value)
+remote.OnClientEvent:Connect(function(kind, cf, key, value, extra)
 	if kind == "Resync" then
 		-- demande refusée par le serveur : on remet la vraie valeur (cf = le modèle ici)
 		if typeof(cf) == "Instance" and type(key) == "string" then
 			cf:SetAttribute(key, value)
 		end
+		return
+	end
+	if kind == "PairHit" then
+		-- choc avec la voiture d'un autre joueur vu d'abord par son client : notre variation de vitesse (VehicleDrive)
+		Drive.OnPairHit(cf, key, value, extra)
 		return
 	end
 	if kind == "Knockdown" then
