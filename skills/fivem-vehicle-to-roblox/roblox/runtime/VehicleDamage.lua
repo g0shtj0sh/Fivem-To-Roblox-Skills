@@ -295,7 +295,7 @@ local function custom()
 end
 
 -- Copie physique des pièces d'une roue, qui tombe, roule et disparaît après DebrisLifetime s (comme un ouvrant
--- arraché, VehicleCustomization.RemoveDoor), dans le groupe des débris (ne touche ni véhicule ni occupant).
+-- arraché, VehicleCustomization.RemoveDoor) : VehicleAccess.SpawnDebris (solide pour tous une fois sortie de sa voiture).
 local function dropWheel(model, bone)
 	local C = custom()
 	local root = model.PrimaryPart
@@ -314,42 +314,22 @@ local function dropWheel(model, bone)
 	if #pieces == 0 then
 		return
 	end
-	local debris = Instance.new("Model")
-	debris.Name = model.Name .. "_" .. bone .. "_debris"
-	local first
-	for _, part in ipairs(pieces) do
-		local copy = part:Clone()
-		for _, d in ipairs(copy:GetDescendants()) do
-			if d:IsA("JointInstance") or d:IsA("WeldConstraint") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
-				d:Destroy()
-			end
-		end
-		copy.Anchored, copy.CanCollide, copy.CanQuery, copy.CanTouch, copy.Massless = false, false, false, false, true
-		copy:SetAttribute("F2RPart", nil)
-		copy.Parent = debris
-		if first then
-			local wc = Instance.new("WeldConstraint")
-			wc.Part0, wc.Part1, wc.Parent = first, copy, copy
-		else
-			first = copy
-			copy.CanCollide = true -- une seule pièce touche le sol (assez pour tomber et rouler)
-			copy.Massless = false
-		end
-	end
-	debris.PrimaryPart = first
+	-- débris physique commun (VehicleAccess.SpawnDebris, 2026-11-22) : masse réelle de la roue, fantôme pour sa
+	-- voiture tant qu'il est dedans, puis solide pour tous (le véhicule qui suit le heurte, ses roues montent dessus)
 	local okA, Access = pcall(require, script.Parent:WaitForChild("VehicleAccess", 5))
-	if okA and Access and Access.TagDebris then
-		Access.TagDebris(debris)
+	if not (okA and Access and Access.SpawnDebris) then
+		return
 	end
-	debris.Parent = workspace
-	local away = (first.Position - root.Position) * Vector3.new(1, 0, 1)
+	local c = Vector3.zero
+	for _, part in ipairs(pieces) do
+		c += part.Position
+	end
+	c /= #pieces
+	local away = (c - root.Position) * Vector3.new(1, 0, 1)
 	away = away.Magnitude > 1e-3 and away.Unit or Vector3.zero
-	first.AssemblyLinearVelocity = root.AssemblyLinearVelocity + away * 10 + Vector3.new(0, 8, 0)
-	first.AssemblyAngularVelocity = root.CFrame.RightVector * (root.AssemblyLinearVelocity.Magnitude / 1.5) -- elle roule
-	pcall(function()
-		first:SetNetworkOwner(nil)
-	end)
-	game:GetService("Debris"):AddItem(debris, (C and C.DebrisLifetime) or 60)
+	Access.SpawnDebris(model, bone, "wheel", pieces, root.AssemblyLinearVelocity + away * 10 + Vector3.new(0, 8, 0),
+		root.CFrame.RightVector * (root.AssemblyLinearVelocity.Magnitude / 1.5), -- elle roule
+		(C and C.DebrisLifetime) or 60)
 end
 
 -- SERVEUR. État d'une roue (ne fait que monter jusqu'à la réparation) ; 3 = arrachée (débris, pièces masquées).
@@ -364,6 +344,14 @@ function Damage.SetWheelState(model, bone, state)
 	model:SetAttribute("WheelState_" .. bone, state)
 	if state >= 3 then
 		dropWheel(model, bone)
+		-- cylindre de cette roue (voiture garée) : il ne porte plus rien et ne doit pas bloquer le débris
+		-- (VehicleAccess.SetWheelColliders ne le relisait qu'au prochain changement de conducteur)
+		local col = model:FindFirstChild("Collision")
+		for _, d in ipairs(col and col:GetDescendants() or {}) do
+			if d:IsA("BasePart") and d:GetAttribute("Kind") == "collision_wheel" and tostring(d:GetAttribute("Owner")) == bone then
+				d.CanCollide = false
+			end
+		end
 		local C = custom()
 		if C and C.Refresh then
 			pcall(C.Refresh, model) -- masque la roue sur la voiture (VehicleCustomization.Refresh)

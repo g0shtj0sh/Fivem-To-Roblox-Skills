@@ -72,8 +72,10 @@ Fx.JoinCos = math.cos(math.rad(2.5))
 Fx.SegMax = 8 -- au-delà (téléport, saut), la trace repart de zéro
 Fx.Lift = 0.04 -- studs au-dessus du sol
 Fx.MaxMarks = 1500 -- segments gardés sur ce client (les plus vieux sont repris)
-Fx.MarkLife = 120 -- s avant que la trace ne commence à s'effacer
-Fx.MarkFade = 20 -- s d'effacement
+-- 2026-11-22 (utilisateur : « qu'elles restent visibles moins longtemps, une trentaine de secondes ») : 30 s en tout
+-- (avant : 120 + 20 s)
+Fx.MarkLife = 24 -- s avant que la trace ne commence à s'effacer
+Fx.MarkFade = 6 -- s d'effacement
 Fx.PatchEvery = 0.35 -- s : burn sur place, une couche de gomme de plus sous la roue
 Fx.PatchMax = 5 -- couches au plus au même endroit
 Fx.SmokeTexture = "rbxasset://textures/particles/smoke_main.dds"

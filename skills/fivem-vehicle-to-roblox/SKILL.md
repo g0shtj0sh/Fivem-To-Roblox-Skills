@@ -513,6 +513,21 @@ Banc rejouable (jeu brolver-rp) : `scripts/vehicles/crash_pole_bench.lua`. Limit
 déformation). Pied au plancher à 92 km/h : 2 essais sur 2 plaqués au poteau avec ce runtime, mais un essai antérieur
 (débris isolés par un correctif provisoire) avait glissé autour du poteau et l'avait franchi : cas non exclu.
 
+**Débris solides (2026-11-22, demande de l'utilisateur : le morceau tombé doit avoir une physique, la voiture qui suit
+doit le prendre).** Un seul constructeur, `VehicleAccess.SpawnDebris` (ouvrants et roues) : copie des pièces visibles,
+racine = la plus grosse pièce, pièces solides = celles d'au moins `DebrisColliderShare` (20 %) de son volume ; **masse
+réelle** portée par un lest invisible `DebrisBallast` (masse GTA de l'os `Physics.ChildMassKg`, sinon
+`DebrisMassKg`, × `MassScale` 0,1 = MASS_SCALE du Setup). Le lest est obligatoire : la masse d'un MeshPart suit sa
+géométrie, pas sa boîte (pneu de la 325e : 0,29 à la densité maximale 100 pour 2,49 voulus). Le débris naît fantôme
+(`FiveMVehicleDebris`), puis passe dans `FiveMVehicleDebrisSolid` (touche véhicules, piétons, décor ; jamais les
+occupants) et `CanQuery` (les rayons des roues montent dessus) dès qu'aucune de ses pièces solides ne touche la
+collision de SA voiture, testé par `GetPartsInPart` toutes les 0,1 s, 3 s au plus : `GetPartBoundsInBox` (boîtes
+englobantes) touchait toujours la boîte du châssis et le débris restait fantôme. Le cylindre de la roue arrachée
+(voiture garée) est coupé tout de suite. Mesuré en Play (brolver-rp, 325e garée, runtime `0c41beae658e`) : roue
+24,9 kg, solide à 0,45 s ; portière 30,8 kg, solide à 0,11 s ; portière lâchée sur le toit d'une m422 : reste sur la
+caisse (Y 5,87 puis 3,39, sol à 0) ; spherecast du groupe `FiveMVehicle` sur la roue au sol : touche. Non vérifié :
+un véhicule conduit qui heurte un débris (effet ressenti), deux joueurs.
+
 **Chocs, suite (2026-11-19, banc `scripts/vehicles/crash_bench.lua` du jeu brolver-rp : murs, voitures garées,
 2 joueurs, piétons)** :
 - **Voiture garée** : ancrée après `ParkAnchorDelay` s, elle était un mur indestructible (m422 garée percutée de côté à
@@ -679,7 +694,8 @@ Une modification du runtime se propage par `FiveMRuntime` (version = empreinte d
   l'écran : véhicules, décor et terrain derrière, reflétés. Détail, API et mesures : `references/roblox-integration.md`
   (« Caméra façon Assetto Corsa »).
 - **Traces de pneus, fumée et burn façon GTA** (`VehicleTyreFx`, chaque client ; `VehicleDynamics`) : par roue,
-  trace noire au sol + fumée légère **ensemble**, dès que la roue glisse dans son propre repère au-delà du pic
+  trace noire au sol (visible **30 s** : `MarkLife` 24 + `MarkFade` 6, demande de l'utilisateur du 2026-11-22 ;
+  avant 120 + 20) + fumée légère **ensemble**, dès que la roue glisse dans son propre repère au-delà du pic
   d'adhérence : patinage ou roue bloquée (burn, départ, frein à main) marquent seuls ; une glisse **de côté** ne marque
   que si la **voiture dérive** (angle entre le cap et la trajectoire de l'**essieu arrière** ≥ `DriftStart` 14°, plein à
   24° ; pas au centre de gravité, où la géométrie seule donne 5 à 14° à pleine butée) — braquer à fond dans un virage

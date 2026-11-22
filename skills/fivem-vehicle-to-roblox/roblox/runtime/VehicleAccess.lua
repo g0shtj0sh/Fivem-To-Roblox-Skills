@@ -38,6 +38,23 @@ Access.OccupantGroup = "FiveMVehicleOccupant"
 -- occupants. Créés à la place de la pièce, donc DANS la coque du véhicule : solides contre lui, Roblox les séparait
 -- en déplaçant la voiture (325e 2026-11-19, choc de face à 92 km/h : +0,68 m en un pas, 0,3 s après le choc)
 Access.DebrisGroup = "FiveMVehicleDebris"
+-- DÉBRIS SOLIDES (2026-11-22, utilisateur : « faut que ça garde une physique […] que la personne qui est derrière, si
+-- elle se prend le morceau, ça a un incident sur lui »). Un débris naît dans DebrisGroup (fantôme pour TOUS les
+-- véhicules, sinon il repousse la voiture dont il sort, voir plus haut), puis passe dans DebrisSolidGroup dès que sa
+-- boîte ne touche plus la collision de SA voiture : il heurte alors les véhicules (le suivant comme le sien), les
+-- piétons et le décor, et les roues (rayons, CanQuery) montent dessus. Jamais les occupants assis.
+Access.DebrisSolidGroup = "FiveMVehicleDebrisSolid"
+Access.DebrisGraceMax = 3 -- s : encore dans sa voiture après ça (coincé dessous), il reste fantôme jusqu'à sa fin
+Access.DebrisCheckEvery = 0.1 -- s
+-- Masse des débris : la masse GTA de l'os (Physics.ChildMassKg du .yft), sinon ces valeurs (kg), × MassScale
+-- (= MASS_SCALE du Setup, unités Roblox par kg : la voiture de 1 500 kg pèse 150). Avant, un débris n'avait que la
+-- masse de sa première pièce en plastique (le reste Massless) et une seule pièce solide.
+Access.DebrisMassKg = { wheel = 20, door = 22, bonnet = 16, boot = 14, default = 15 }
+Access.DebrisMassMinKg, Access.DebrisMassMaxKg = 3, 60
+Access.MassScale = 0.1
+-- pièces solides d'un débris : celles dont la boîte fait au moins cette part du volume de la plus grosse (pneu, tôle) ;
+-- les petites (poignée, rétro, écrou) suivent sans collision
+Access.DebrisColliderShare = 0.2
 -- Rebond des pièces de collision du véhicule. Roblox donne 0,5 au plastique par défaut : une voiture qui tape un
 -- poteau à 51 km/h repartait en arrière à 11,5 km/h, et à 92 km/h le choc la renvoyait à 33 km/h puis la catapultait
 -- (+0,75 m, roulis 48°) en rebondissant sur le sol (mesuré en Play, 325e, 2026-11-19). Une carrosserie absorbe le
@@ -131,7 +148,7 @@ local function ensureGroups()
 		return
 	end
 	groupsReady = true
-	for _, g in ipairs({ Access.VehicleGroup, Access.OccupantGroup, Access.DebrisGroup }) do
+	for _, g in ipairs({ Access.VehicleGroup, Access.OccupantGroup, Access.DebrisGroup, Access.DebrisSolidGroup }) do
 		if not PhysicsService:IsCollisionGroupRegistered(g) then
 			PhysicsService:RegisterCollisionGroup(g)
 		end
@@ -139,6 +156,8 @@ local function ensureGroups()
 	PhysicsService:CollisionGroupSetCollidable(Access.VehicleGroup, Access.OccupantGroup, false)
 	PhysicsService:CollisionGroupSetCollidable(Access.DebrisGroup, Access.VehicleGroup, false)
 	PhysicsService:CollisionGroupSetCollidable(Access.DebrisGroup, Access.OccupantGroup, false)
+	PhysicsService:CollisionGroupSetCollidable(Access.DebrisSolidGroup, Access.VehicleGroup, true)
+	PhysicsService:CollisionGroupSetCollidable(Access.DebrisSolidGroup, Access.OccupantGroup, false)
 end
 
 local function config(model)
@@ -843,6 +862,138 @@ function Access.TagDebris(debris)
 			p.CollisionGroup = Access.DebrisGroup
 		end
 	end
+end
+
+-- SERVEUR. Débris physique d'une pièce arrachée (ouvrant : VehicleCustomization.RemoveDoor ; roue :
+-- VehicleDamage) : copie des pièces VISIBLES `pieces` (les originales sont ensuite masquées par Custom.Refresh),
+-- soudées entre elles, masse réelle, lancée avec `linVel` / `angVel`, détruite après `lifetime` s. Renvoie le modèle.
+function Access.SpawnDebris(model, bone, kind, pieces, linVel, angVel, lifetime)
+	if #pieces == 0 then
+		return nil
+	end
+	ensureGroups()
+	local debris = Instance.new("Model")
+	debris.Name = model.Name .. "_" .. bone .. "_debris"
+	local copies, biggest, bigVol = {}, nil, 0
+	for _, part in ipairs(pieces) do
+		local copy = part:Clone()
+		-- TOUS les descendants : la plaque est une pièce enfant (PlateSurfaceRear) soudée à la pièce d'origine ;
+		-- sa soudure clonée garderait la copie accrochée au véhicule
+		for _, d in ipairs(copy:GetDescendants()) do
+			if d:IsA("JointInstance") or d:IsA("WeldConstraint") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
+				d:Destroy()
+			end
+		end
+		for _, d in ipairs(copy:GetDescendants()) do
+			if d:IsA("BasePart") then
+				d.Anchored, d.CanCollide, d.CanQuery, d.CanTouch, d.Massless = false, false, false, false, true
+				local w = Instance.new("WeldConstraint")
+				w.Part0, w.Part1, w.Parent = copy, d, d
+			end
+		end
+		copy.Anchored, copy.CanCollide, copy.CanQuery, copy.CanTouch, copy.Massless = false, false, false, false, true
+		copy:SetAttribute("F2RPart", nil)
+		copy.Parent = debris
+		table.insert(copies, copy)
+		local vol = copy.Size.X * copy.Size.Y * copy.Size.Z
+		if vol > bigVol then
+			biggest, bigVol = copy, vol
+		end
+	end
+	-- la plus grosse pièce porte la masse et sert de racine ; les autres y sont soudées
+	for _, copy in ipairs(copies) do
+		if copy ~= biggest then
+			local w = Instance.new("WeldConstraint")
+			w.Part0, w.Part1, w.Parent = biggest, copy, copy
+		end
+		local vol = copy.Size.X * copy.Size.Y * copy.Size.Z
+		if vol >= Access.DebrisColliderShare * bigVol then
+			copy.CanCollide = true
+			copy:SetAttribute("DebrisCollider", true)
+		end
+	end
+	-- MASSE : un lest invisible (bloc, masse = densité × volume exacte) soudé à la plus grosse pièce. La masse d'un
+	-- MeshPart suit sa géométrie de collision, pas sa boîte : le pneu de la 325e (boîte 1 × 2,5 × 2,5 studs) ne pesait
+	-- que 0,29 à la densité maximale 100, pour 2,49 voulus (mesuré en Play, 2026-11-22). Les pièces visibles restent
+	-- sans masse ; le lest ne touche rien.
+	local cfg = config(model)
+	local childKg = cfg.Physics and cfg.Physics.ChildMassKg
+	local kg = (childKg and childKg[bone]) or Access.DebrisMassKg[kind] or Access.DebrisMassKg.default
+	kg = math.clamp(kg, Access.DebrisMassMinKg, Access.DebrisMassMaxKg)
+	local target = kg * Access.MassScale
+	local ballast = Instance.new("Part")
+	ballast.Name = "DebrisBallast"
+	ballast.Size = Vector3.new(math.max(biggest.Size.X, 0.2), math.max(biggest.Size.Y, 0.2), math.max(biggest.Size.Z, 0.2)) * 0.5
+	ballast.CFrame = biggest.CFrame
+	ballast.Transparency = 1
+	ballast.Anchored, ballast.CanCollide, ballast.CanQuery, ballast.CanTouch, ballast.Massless = false, false, false, false, false
+	ballast.CastShadow = false
+	local cur = biggest.CurrentPhysicalProperties
+	local vol = ballast.Size.X * ballast.Size.Y * ballast.Size.Z
+	ballast.CustomPhysicalProperties = PhysicalProperties.new(math.clamp(target / vol, 0.01, 100), 0.3, 0.1, 1, 1)
+	ballast.Parent = debris
+	local bw = Instance.new("WeldConstraint")
+	bw.Part0, bw.Part1, bw.Parent = biggest, ballast, ballast
+	-- contact des pièces solides : frottement d'origine, peu de rebond (comme la carrosserie, Access.CrashElasticity)
+	for _, copy in ipairs(copies) do
+		if copy.CanCollide then
+			local c = copy.CurrentPhysicalProperties
+			copy.CustomPhysicalProperties = PhysicalProperties.new(c.Density, c.Friction, 0.15, c.FrictionWeight, 1)
+		end
+	end
+	debris.PrimaryPart = biggest
+	debris:SetAttribute("DebrisKind", kind)
+	debris:SetAttribute("DebrisMassKg", kg)
+	-- groupe fantôme AVANT d'entrer dans le monde : né dans la coque du véhicule, il ne doit pas la toucher
+	Access.TagDebris(debris)
+	debris.Parent = workspace
+	biggest.AssemblyLinearVelocity = linVel
+	biggest.AssemblyAngularVelocity = angVel
+	pcall(function()
+		biggest:SetNetworkOwner(nil)
+	end)
+	game:GetService("Debris"):AddItem(debris, lifetime)
+	-- solide dès qu'il est sorti de la collision de sa voiture
+	task.spawn(function()
+		local op = OverlapParams.new()
+		op.FilterType = Enum.RaycastFilterType.Include
+		op.FilterDescendantsInstances = { model }
+		op.RespectCanCollide = true
+		local t0 = os.clock()
+		local clear = false
+		while debris.Parent and os.clock() - t0 < Access.DebrisGraceMax do
+			task.wait(Access.DebrisCheckEvery)
+			if not model.Parent then
+				clear = true
+				break
+			end
+			-- géométrie réelle (GetPartsInPart) : une boîte englobante touche toujours la grande boîte du châssis
+			-- (325e : col__chassis__1 = 7,5 × 4,9 × 19 studs) et le débris restait fantôme (mesuré, 2026-11-22)
+			local inside = false
+			for _, p in ipairs(debris:GetChildren()) do
+				if p:IsA("BasePart") and p:GetAttribute("DebrisCollider") and #Workspace:GetPartsInPart(p, op) > 0 then
+					inside = true
+					break
+				end
+			end
+			if not inside then
+				clear = true
+				break
+			end
+		end
+		if clear and debris.Parent then
+			for _, p in ipairs(debris:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.CollisionGroup = Access.DebrisSolidGroup
+					if p:GetAttribute("DebrisCollider") then
+						p.CanQuery = true
+					end
+				end
+			end
+			debris:SetAttribute("DebrisSolidAt", os.clock() - t0)
+		end
+	end)
+	return debris
 end
 
 Access.SetOccupantGroup = setOccupantGroup

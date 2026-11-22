@@ -132,6 +132,17 @@ function Custom.Refresh(model)
 			removed[bone] = true
 		end
 	end
+	-- roues arrachées (VehicleDamage, WheelState_<os> = 3) : pneu, jante et jantes de custom disparaissent.
+	-- 2026-11-22 (signalé par l'utilisateur : « visuellement elle reste, mais on la voit quand même partir ») : ce bloc
+	-- avait glissé DANS la boucle des décalques (branche « véhicule invisible ») au commit aad114f ; il ne tournait donc
+	-- jamais sur un véhicule visible et la roue restait affichée pendant que sa copie partait. Il doit rester ICI, avant
+	-- la boucle des pièces ; le test Edit « roue arrachée » (pièces visibles de l'os avant / après) le garde.
+	for bone in pairs(cfg.Wheels or {}) do
+		if (model:GetAttribute("WheelState_" .. bone) or 0) >= 3 then
+			hidden[bone] = true
+			removed[bone] = true
+		end
+	end
 	-- collision des pièces arrachées (col__<os> soudés à la charnière) : non solide, sinon une portière invisible et
 	-- solide restait sur la voiture (audit 2026-11-19) ; rendue à la réparation
 	for _, d in ipairs(model:GetDescendants()) do
@@ -154,13 +165,6 @@ function Custom.Refresh(model)
 				if d:GetAttribute("BaseTransparency") == nil then
 					d:SetAttribute("BaseTransparency", d.Transparency)
 				end
-	-- roues arrachées (VehicleDamage, WheelState_<os> = 3) : pneu, jante et jantes de custom disparaissent
-	for bone in pairs(cfg.Wheels or {}) do
-		if (model:GetAttribute("WheelState_" .. bone) or 0) >= 3 then
-			hidden[bone] = true
-			removed[bone] = true
-		end
-	end
 				d.Transparency = 1
 			elseif d:GetAttribute("BaseTransparency") ~= nil then
 				d.Transparency = d:GetAttribute("BaseTransparency")
@@ -1598,60 +1602,24 @@ function Custom.RemoveDoor(model, bone, keepDebris)
 			end
 		end
 		if #pieces > 0 then
-			local debris = Instance.new("Model")
-			debris.Name = model.Name .. "_" .. bone .. "_debris"
-			local first
-			for _, part in ipairs(pieces) do
-				local copy = part:Clone()
-				-- TOUS les descendants : la plaque est une pièce enfant (PlateSurfaceRear) soudée à la pièce d'origine ;
-				-- sa soudure clonée garderait la copie accrochée au véhicule
-				local nested = {}
-				for _, d in ipairs(copy:GetDescendants()) do
-					if d:IsA("JointInstance") or d:IsA("WeldConstraint") or d:IsA("Constraint") or d:IsA("Attachment") or d:IsA("Light") then
-						d:Destroy()
-					elseif d:IsA("BasePart") then
-						d.Anchored, d.CanCollide, d.CanQuery, d.CanTouch, d.Massless = false, false, false, false, true
-						table.insert(nested, d)
-					end
-				end
-				copy.Anchored = false
-				copy.Massless = false
-				copy.CanCollide = false
-				copy.CanQuery = false
-				copy.CanTouch = false
-				copy:SetAttribute("F2RPart", nil)
-				copy.Parent = debris
-				for _, n in ipairs(nested) do
-					local w = Instance.new("WeldConstraint")
-					w.Part0, w.Part1, w.Parent = copy, n, n
-				end
-				if first then
-					local w = Instance.new("WeldConstraint")
-					w.Part0, w.Part1, w.Parent = first, copy, copy
-				else
-					first = copy
-					copy.CanCollide = true -- une seule pièce touche le sol (assez pour tomber et rouler)
-				end
-			end
-			debris.PrimaryPart = first
-			-- groupe des débris AVANT d'entrer dans le monde : né dans la coque du véhicule, il ne doit pas la toucher
+			-- débris physique commun (VehicleAccess.SpawnDebris, 2026-11-22) : masse réelle, fantôme pour sa voiture
+			-- tant qu'il est dedans, puis solide pour tous (véhicule suivant, piétons). Il part avec l'élan du véhicule,
+			-- un peu écarté de la caisse (sinon il reste « posé » dessus).
 			local okAccess, Access = pcall(require, runtimeFolder():WaitForChild("VehicleAccess", 5))
-			if okAccess and Access and Access.TagDebris then
-				Access.TagDebris(debris)
-			end
-			debris.Parent = workspace
-			-- elle part avec l'élan du véhicule, un peu écartée de la caisse (sinon elle reste « posée » dessus)
 			local root = model.PrimaryPart
-			if root and first then
-				local away = (first.Position - root.Position) * Vector3.new(1, 0, 1)
+			if okAccess and Access and Access.SpawnDebris and root then
+				local c = Vector3.zero
+				for _, part in ipairs(pieces) do
+					c += part.Position
+				end
+				c /= #pieces
+				local away = (c - root.Position) * Vector3.new(1, 0, 1)
 				away = away.Magnitude > 1e-3 and away.Unit or Vector3.zero
-				first.AssemblyLinearVelocity = root.AssemblyLinearVelocity + away * 8 + Vector3.new(0, 6, 0)
-				first.AssemblyAngularVelocity = root.AssemblyAngularVelocity
-				pcall(function()
-					first:SetNetworkOwner(nil)
-				end)
+				local kind = (string.find(bone, "door", 1, true) and "door") or (bone == "bonnet" and "bonnet")
+					or (bone == "boot" and "boot") or "default"
+				Access.SpawnDebris(model, bone, kind, pieces, root.AssemblyLinearVelocity + away * 8 + Vector3.new(0, 6, 0),
+					root.AssemblyAngularVelocity, Custom.DebrisLifetime)
 			end
-			game:GetService("Debris"):AddItem(debris, Custom.DebrisLifetime)
 		end
 	end
 	model:SetAttribute("DoorRemoved_" .. bone, true)
